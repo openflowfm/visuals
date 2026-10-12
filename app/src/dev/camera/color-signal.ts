@@ -32,10 +32,10 @@ export class ColorSignal {
         const tone = this.palette[band * 3 + c];
         this.emission[p + c] = edge * tone;
         // Warm original shading plus spectral ink retains eyes, nose and mouth.
-        this.identity[p + c] = edge > 0.1 ? 180 + tone * 0.29 : source[p + c] * 0.65 + tone * shade * 0.35;
+        this.identity[p + c] = source[p + c] * 0.65 + tone * shade * 0.35;
       }
       this.emission[p + 3] = 255;
-      this.identity[p + 3] = Math.max(edge * 0.95, alpha * 0.58) * 255;
+      this.identity[p + 3] = alpha * 0.42 * 255;
     }
     return this.emission;
   }

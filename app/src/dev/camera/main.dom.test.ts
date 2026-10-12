@@ -25,6 +25,11 @@ class MaskWorker {
 }
 
 function outputResponse(url: string) {
+  if (url.includes('camera/presets'))
+    return Response.json([
+      ...['Chromatic vortex', 'Prism cult', 'Acid tide'].map((title, i) => ({ id: `camera:${i}`, title, authors: ['OpenFlow'], thumbnail: null })),
+      ...Array.from({ length: 120 }, (_, i) => ({ id: `pack:${i}`, title: `Library preset ${i}`, authors: ['Test author'], thumbnail: null })),
+    ]);
   return url.includes('camera/output') ? new Response(new Uint8Array(4 * 2 * 2), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2' } }) : new Response('null', { status: 200 });
 }
 
@@ -64,6 +69,7 @@ beforeEach(async () => {
     const id = this.id;
     const context = new Proxy(
       {
+        createLinearGradient: () => ({ addColorStop: vi.fn() }),
         getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }),
         putImageData: (image: ImageData) => {
           canvasEvents.push({ id, action: 'paint', first: image.data[0] });
@@ -293,4 +299,40 @@ test('raw comparison disables contour-only controls and returning to Contours re
   for (const control of controls) expect(control.disabled).toBe(true);
   document.getElementById('contour-mode')!.click();
   for (const control of controls) expect(control.disabled).toBe(false);
+});
+
+test('preset dock loads searchable catalog and sends native preset IDs without restarting the source', async () => {
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  const stops = requests.filter((r) => r.includes('camera/stop')).length;
+  document.getElementById('next-preset')!.click();
+  await waitFor(() => expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult'));
+  await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('camera:1'))).toBe(true));
+  expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(stops);
+  document.getElementById('browse-presets')!.click();
+  expect(document.getElementById('preset-browser')!.hidden).toBe(false);
+  const search = document.getElementById('preset-search') as HTMLInputElement;
+  search.value = 'acid';
+  search.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.preset-row')).toHaveLength(1);
+  expect(document.querySelector('.preset-row')!.textContent).toContain('Acid tide');
+});
+
+test('native dimensions resize the canvas and HD request is sent at startup', async () => {
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect((document.getElementById('output') as HTMLCanvasElement).width).toBe(2));
+  expect((document.getElementById('output') as HTMLCanvasElement).height).toBe(2);
+  expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('720p'))).toBe(true);
+});
+
+test('large catalog mounts only sixty rows and searching reaches later pages', async () => {
+  await waitFor(() => expect(document.getElementById('preset-count')!.textContent).toContain('123 presets'));
+  expect(document.querySelectorAll('.preset-row')).toHaveLength(60);
+  document.getElementById('preset-page-next')!.click();
+  expect(document.querySelectorAll('.preset-row')).toHaveLength(60);
+  const search = document.getElementById('preset-search') as HTMLInputElement;
+  search.value = 'Library preset 119';
+  search.dispatchEvent(new Event('input'));
+  expect(document.querySelectorAll('.preset-row')).toHaveLength(1);
+  expect(document.querySelector('.preset-row')!.textContent).toContain('119');
 });

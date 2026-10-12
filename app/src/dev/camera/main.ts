@@ -2,6 +2,9 @@ import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { Contours, rawFrameSize } from './contours';
 import { ColorSignal } from './color-signal';
+import { CameraAudio } from './audio-input';
+import { LatestSelection, stepPreset, type CameraPreset } from './preset-browser';
+import { traceContours, drawContourPaths, type ContourPath } from './curve-contours';
 import { PersonMask } from './person-mask';
 import demoPhotoUrl from './person-assets/astronaut.png?url';
 
@@ -9,7 +12,7 @@ const root = document.querySelector<HTMLDivElement>('#camera-app')!;
 root.innerHTML = `
 <header><a class="wordmark" href="#">open<span>flow</span></a><div class="edition">EXPERIMENT 001 <span>↗ LIVE CAMERA LAB</span></div><div class="local"><i></i> LOCAL SIGNAL</div></header>
 <main><div class="intro"><div><p class="eyebrow">YOUR FACE. THE FEEDBACK LOOP.</p><h1>Camera <em>possession.</em></h1></div><p class="lede">Become a beautiful signal problem.<br>Feed yourself into the MilkDrop machine.</p></div>
-<section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
+<section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="preset-dock"><button id="previous-preset" aria-label="Previous preset">←</button><button id="browse-presets" aria-expanded="false">Chromatic vortex ▴</button><button id="next-preset" aria-label="Next preset">→</button><button id="random-preset" aria-label="Random preset">⤨</button></div><section id="preset-browser" aria-label="Preset browser" hidden><div class="browser-head"><input id="preset-search" type="search" aria-label="Search presets" placeholder="Find a hallucination…"/><button id="close-presets" aria-label="Close preset browser">×</button></div><p id="preset-count"></p><div id="preset-list"></div><div class="browser-pages"><button id="preset-page-back">Previous 60</button><button id="preset-page-next">Next 60</button></div><p id="preset-error" role="status"></p></section><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
 <aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Chromatic vortex</b><span>Spiral into a spectral wormhole</span><i>01</i></button><button data-preset="1"><b>Prism cult</b><span>Sixfold stained-glass hallucination</span><i>02</i></button><button data-preset="2"><b>Acid tide</b><span>Liquid ribbons and chromatic rupture</span><i>03</i></button></div>
 <div class="section-title">02 <span>LOSE YOUR COMPOSURE</span></div>
 <label class="knob"><span>Recognition <output id="recognition-value">85%</output></span><input id="recognition" type="range" min="0" max="100" value="85"/><small>Pure hallucination → Keep me present</small></label>
@@ -17,9 +20,9 @@ root.innerHTML = `
 <label class="knob"><span>Fresh camera <output id="mix-value">9%</output></span><input id="mix" type="range" min="0" max="100" value="9"/><small>Sparse ink → Dense ink</small></label>
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.8×</output></span><input id="speed" type="range" min="10" max="300" value="80"/><small>Slow hypnosis → Full possession</small></label>
-<label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
-<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
-<footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
+<label class="knob"><span>Output resolution</span><select id="resolution" aria-label="Output resolution"><option value="720p" selected>720p · HD</option><option value="1080p">1080p · Full HD</option><option value="360p">360p · Faster</option></select></label><label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
+<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
+<section class="audio-tools" aria-label="Sound reaction"><button id="audio-toggle">Enable audio</button><select id="audio-device" aria-label="Audio input"><option value="">Default microphone / interface</option></select><label class="knob"><span>Sensitivity <output id="gain-value">1.0×</output></span><input id="gain" type="range" min="0" max="400" value="100"/></label><meter id="audio-meter" min="0" max="1" value="0" aria-label="Audio input level"></meter><span id="audio-status" role="status">Audio off</span></section><footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
 const ctx = output.getContext('2d')!;
@@ -37,8 +40,14 @@ identity.width = WIDTH;
 identity.height = HEIGHT;
 const identityContext = identity.getContext('2d')!;
 let identityAt = -Infinity;
+let identityPaths: ContourPath[] = [];
+const curveCanvas = document.createElement('canvas');
+curveCanvas.width = WIDTH;
+curveCanvas.height = HEIGHT;
+const curveContext = curveCanvas.getContext('2d', { willReadFrequently: true })!;
 function clearIdentity() {
   identityAt = -Infinity;
+  identityPaths = [];
   identityContext.clearRect(0, 0, WIDTH, HEIGHT);
 }
 const prepared = $<HTMLCanvasElement>('prepared');
@@ -60,7 +69,9 @@ try {
   token = tokenFrom(location.search, null);
 }
 const authors = ['Chromatic vortex', 'Prism cult', 'Acid tide'];
-let preset = 0;
+let presetId = 'camera:0';
+let presets: CameraPreset[] = authors.map((title, i) => ({ id: `camera:${i}`, title, authors: ['OpenFlow'], thumbnail: null }));
+const presetSelections = new LatestSelection();
 let mode: 'demo' | 'camera' | null = null;
 let stream: MediaStream | null = null;
 let generation = 0;
@@ -88,7 +99,7 @@ async function post(route: string, body?: BodyInit) {
   if (!r.ok) throw new Error(r.status === 403 ? 'Bridge token expired. Open the new launcher URL.' : `Engine: ${await r.text()}`);
 }
 function settings(load = false) {
-  const body = JSON.stringify({ preset: load ? preset : null, speed: value('speed') / 100, persistence: value('persistence') / 100 });
+  const body = JSON.stringify({ presetId: load ? presetId : undefined, resolution: $<HTMLSelectElement>('resolution').value, speed: value('speed') / 100, persistence: value('persistence') / 100 });
   settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));
   return settingsChain;
 }
@@ -135,9 +146,15 @@ async function capture(id: number) {
       const filterStarted = performance.now();
       const source = g.getImageData(0, 0, WIDTH, HEIGHT).data;
       let data: Uint8ClampedArray;
+      let paths: ContourPath[] = [];
       if (useContours) {
         const edges = contours.process(source, value('detail'), value('threshold'), mask ?? undefined);
-        data = colorSignal.prepare(edges, source, mask ? contours.foreground : null, value('color'), performance.now() / 1000);
+        paths = traceContours(edges, WIDTH, HEIGHT, value('smoothing'));
+        curveContext.fillStyle = '#000';
+        curveContext.fillRect(0, 0, WIDTH, HEIGHT);
+        drawContourPaths(curveContext, paths, { scaleX: 1, scaleY: 1, lineWidth: 1.05, strokeStyle: '#fff' });
+        const smoothEdges = curveContext.getImageData(0, 0, WIDTH, HEIGHT).data;
+        data = colorSignal.prepare(smoothEdges, source, mask ? contours.foreground : null, value('color'), performance.now() / 1000);
       } else data = mask ? contours.cutout(source, mask) : source;
       preparedContext.putImageData(new ImageData(new Uint8ClampedArray(data.buffer as ArrayBuffer), WIDTH, HEIGHT), 0, 0);
       preparationMs = performance.now() - filterStarted;
@@ -147,6 +164,7 @@ async function capture(id: number) {
       // happened while the request was in flight; never revive its old identity.
       if (id === generation && useContours && (!isolate || personMask?.current())) {
         identityContext.putImageData(new ImageData(colorSignal.identity, WIDTH, HEIGHT), 0, 0);
+        identityPaths = paths;
         identityAt = mask?.capturedAt ?? start;
       }
     } catch (e) {
@@ -178,12 +196,19 @@ async function paint(id: number) {
           if (performance.now() - identityAt <= 250 && useContours) {
             ctx.save();
             ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
+            ctx.imageSmoothingEnabled = true;
             ctx.drawImage(identity, 0, 0, width, height);
+            const spectrum = ctx.createLinearGradient(0, 0, width, height);
+            const saturation = value('color');
+            spectrum.addColorStop(0, `hsl(170 ${saturation}% 85%)`);
+            spectrum.addColorStop(0.5, `hsl(290 ${saturation}% 85%)`);
+            spectrum.addColorStop(1, `hsl(40 ${saturation}% 85%)`);
+            drawContourPaths(ctx, identityPaths, { scaleX: width / WIDTH, scaleY: height / HEIGHT, lineWidth: 0.85, strokeStyle: spectrum });
             ctx.restore();
           } else clearIdentity();
           frames++;
           if (performance.now() - rateAt >= 1000) {
-            $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / NATIVE OUTPUT`;
+            $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / ${width}×${height}`;
             $('input-cost').textContent = `${useContours ? 'CONTOURS' : 'RAW'} / ${preparationMs.toFixed(1)} MS`;
             frames = 0;
             rateAt = performance.now();
@@ -201,7 +226,8 @@ async function paint(id: number) {
     await new Promise((r) => setTimeout(r, Math.max(0, FRAME_MS - (performance.now() - start))));
   }
 }
-async function stop() {
+async function stop(releaseAudio = true) {
+  const audioStopped = releaseAudio ? audio.stop() : Promise.resolve();
   generation++;
   mode = null;
   personMask?.dispose();
@@ -226,10 +252,11 @@ async function stop() {
     await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {})]);
     await post('camera/stop').catch(() => {});
   });
+  await audioStopped;
 }
 async function start(next: 'demo' | 'camera') {
   const id = generation + 1;
-  await stop();
+  await stop(false);
   if (id !== generation) return;
   status(next === 'camera' ? 'Waiting for camera permission…' : 'Waking the engine…');
   $<HTMLButtonElement>('stop').disabled = false;
@@ -257,7 +284,7 @@ async function start(next: 'demo' | 'camera') {
     if ($<HTMLInputElement>('person-only').checked) preparePersonMask();
     $('welcome').hidden = true;
     $('signal').textContent = next === 'demo' ? '● PHOTO TEST SUBJECT' : '● CAMERA LIVE';
-    $('source-info').textContent = next === 'demo' ? 'Photo demo: Eileen Collins / NASA (public domain) · camera off.' : 'Camera on · contours prepared locally · no microphone';
+    $('source-info').textContent = next === 'demo' ? 'Photo demo: Eileen Collins / NASA (public domain) · camera off.' : 'Camera on · contours prepared locally';
     status('Inside the feedback loop.');
     rateAt = performance.now();
     frames = 0;
@@ -285,7 +312,7 @@ $('fullscreen').onclick = () => {
 $('rescue').onclick = () => {
   rescueUntil = performance.now() + 1000;
 };
-for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color']) {
+for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color', 'smoothing']) {
   $<HTMLInputElement>(id).oninput = () => {
     $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : id === 'threshold' ? `${value(id)}` : `${value(id)}%`;
   };
@@ -294,21 +321,166 @@ for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recogni
       if (mode) void settings().catch((e) => status(String(e)));
     };
 }
-for (const button of document.querySelectorAll<HTMLButtonElement>('[data-preset]')) {
-  button.onclick = () => {
-    preset = Number(button.dataset.preset);
-    document.querySelectorAll('[data-preset]').forEach((b) => b.classList.toggle('selected', b === button));
-    $('credits').textContent = `Preset: ${authors[preset]}. Camera-native OpenFlow preset.`;
-    if (mode) void settings(true).catch((e) => status(String(e)));
-  };
+let presetPage = 0;
+function filteredPresets() {
+  const query = $<HTMLInputElement>('preset-search').value.toLowerCase().trim();
+  return presets.filter((p) => `${p.title} ${p.authors.join(' ')}`.toLowerCase().includes(query));
 }
-$('credits').textContent = `Preset: ${authors[0]}. Camera-native OpenFlow preset.`;
+function renderPresets() {
+  const items = filteredPresets();
+  $('preset-count').textContent = `${items.length} presets · ${items.length ? presetPage + 1 : 0}–${Math.min(presetPage + 60, items.length)} · ← → to travel`;
+  $<HTMLButtonElement>('preset-page-back').disabled = presetPage === 0;
+  $<HTMLButtonElement>('preset-page-next').disabled = presetPage + 60 >= items.length;
+  const list = $('preset-list');
+  list.replaceChildren();
+  for (const item of items.slice(presetPage, presetPage + 60)) {
+    const button = document.createElement('button');
+    button.className = 'preset-row';
+    button.classList.toggle('selected', item.id === presetId);
+    button.setAttribute('aria-pressed', String(item.id === presetId));
+    if (item.thumbnail) {
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = '';
+      img.src = `${item.thumbnail}${item.thumbnail.includes('?') ? '&' : '?'}token=${encodeURIComponent(token ?? '')}`;
+      button.append(img);
+    }
+    const text = document.createElement('span');
+    const title = document.createElement('b');
+    title.textContent = item.title;
+    const credit = document.createElement('small');
+    credit.textContent = item.authors.join(' · ') || 'MilkDrop community';
+    text.append(title, credit);
+    button.append(text);
+    button.onclick = () => selectPreset(item);
+    list.append(button);
+  }
+}
+function selectPreset(item: CameraPreset) {
+  presetId = item.id;
+  const index = filteredPresets().findIndex((p) => p.id === item.id);
+  if (index >= 0 && (index < presetPage || index >= presetPage + 60)) presetPage = Math.floor(index / 60) * 60;
+  $('browse-presets').textContent = `${item.title} ▴`;
+  $('preset-error').textContent = '';
+  document.querySelectorAll<HTMLElement>('[data-preset]').forEach((b) => b.classList.toggle('selected', `camera:${b.dataset.preset}` === item.id));
+  renderPresets();
+  const body = JSON.stringify({ presetId: item.id });
+  void presetSelections.request(
+    () => {
+      settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));
+      return settingsChain;
+    },
+    () => {
+      $('credits').textContent = `Preset: ${item.title} · ${item.authors.join(', ') || 'MilkDrop community'}`;
+    },
+    (error) => {
+      $('preset-error').textContent = String(error);
+      status(String(error));
+    },
+  );
+}
+function browse(open: boolean) {
+  $('preset-browser').hidden = !open;
+  $('browse-presets').setAttribute('aria-expanded', String(open));
+  if (open) $<HTMLInputElement>('preset-search').focus();
+}
+$('browse-presets').onclick = () => browse(Boolean($('preset-browser').hidden));
+$('close-presets').onclick = () => {
+  browse(false);
+  $('browse-presets').focus();
+};
+$('preset-search').oninput = () => {
+  presetPage = 0;
+  renderPresets();
+};
+$('preset-page-back').onclick = () => {
+  presetPage = Math.max(0, presetPage - 60);
+  renderPresets();
+};
+$('preset-page-next').onclick = () => {
+  if (presetPage + 60 < filteredPresets().length) presetPage += 60;
+  renderPresets();
+};
+function travel(direction: number) {
+  const item = stepPreset(filteredPresets(), presetId, direction);
+  if (item) selectPreset(item);
+}
+$('previous-preset').onclick = () => travel(-1);
+$('next-preset').onclick = () => travel(1);
+$('random-preset').onclick = () => {
+  const items = filteredPresets().filter((p) => p.id !== presetId);
+  if (items.length) selectPreset(items[Math.floor(Math.random() * items.length)]);
+};
+addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    browse(false);
+    return;
+  }
+  if (event.target instanceof Element && event.target.closest('input,select,textarea,[contenteditable="true"]')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    travel(event.key === 'ArrowRight' ? 1 : -1);
+  }
+});
+for (const button of document.querySelectorAll<HTMLButtonElement>('[data-preset]'))
+  button.onclick = () => {
+    const item = presets.find((p) => p.id === `camera:${button.dataset.preset}`);
+    if (item) selectPreset(item);
+  };
+renderPresets();
+if (token)
+  void fetch(path('camera/presets'))
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Preset library unavailable (${response.status})`);
+      const result: CameraPreset[] = await response.json();
+      if (!Array.isArray(result) || !result.length) throw new Error('Preset library unavailable. Camera presets remain available.');
+      presets = result;
+      renderPresets();
+    })
+    .catch((error) => {
+      $('preset-error').textContent = String(error);
+    });
+$('resolution').onchange = () => {
+  void settings().catch((error) => status(String(error)));
+};
+$('credits').textContent = `Preset: ${authors[0]} · OpenFlow`;
+const audio = new CameraAudio(
+  post,
+  (message, active) => {
+    $('audio-status').textContent = message;
+    $('audio-toggle').textContent = active ? 'Disable audio' : 'Enable audio';
+  },
+  (level) => {
+    $<HTMLMeterElement>('audio-meter').value = level;
+  },
+  () => value('gain') / 100,
+);
+async function audioDevices() {
+  const select = $<HTMLSelectElement>('audio-device');
+  const selected = select.value;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  select.replaceChildren(new Option('Default microphone / interface', ''));
+  devices.filter((d) => d.kind === 'audioinput').forEach((d, i) => select.add(new Option(d.label || `Audio input ${i + 1}`, d.deviceId)));
+  select.value = selected;
+}
+$('audio-toggle').onclick = () => {
+  if (audio.active) void audio.stop();
+  else void audio.start($<HTMLSelectElement>('audio-device').value).then(() => audioDevices().catch(() => {}));
+};
+$('audio-device').onchange = () => {
+  if (audio.active) void audio.start($<HTMLSelectElement>('audio-device').value);
+};
+$('gain').oninput = () => {
+  $('gain-value').textContent = `${(value('gain') / 100).toFixed(1)}×`;
+};
 addEventListener('pagehide', () => {
+  void audio.stop();
   generation++;
   personMask?.dispose();
   stream?.getTracks().forEach((t) => t.stop());
   try {
     navigator.sendBeacon(path('camera/stop'));
+    navigator.sendBeacon(path('camera/audio/stop'));
   } catch {
     /* native source expires in two seconds */
   }
@@ -329,7 +501,7 @@ for (const [id, enabled] of [
       $(key).classList.toggle('selected', active);
       $(key).setAttribute('aria-pressed', String(active));
     }
-    for (const key of ['detail', 'threshold', 'color', 'recognition']) $<HTMLInputElement>(key).disabled = !enabled;
+    for (const key of ['detail', 'threshold', 'color', 'recognition', 'smoothing']) $<HTMLInputElement>(key).disabled = !enabled;
   };
 }
 

@@ -94,3 +94,30 @@ on stop, mode, mirror or isolation changes and after 250 ms without a fresh mask
 Both products use the same 320×180 source; only Canvas scaling/compositing runs at
 output resolution. The presets are original camera-specific .milk files, with no
 changes to the ordinary OpenFlow render path.
+
+## Live browser, curves, HD and sound (revision 4)
+
+The floating preset dock opens a searchable thumbnail browser for the installed
+native catalog plus the three camera presets. Previous/next and random work within
+the search results; arrow keys travel when focus is outside a form control. Preset
+loads are serialized and superseded pending choices are skipped. Errors remain in
+the browser. Cycling keeps the camera and microphone alive.
+
+The default output is native 1280×720. Choose 1920×1080 for full HD or 640×360 for
+throughput. Returned dimensions control the canvas buffers; these are actual native
+render sizes, not a CSS upscale. Preparation stays at 320×180: filtered edges become
+bounded, smoothed paths once per frame, rasterized for colorful feedback and drawn
+again as curves at the actual output resolution. The recognition plate retains
+restrained facial shading without the former bright raster outline underneath.
+**Curve smoothing** trades detail for flowing strokes. This is traced geometry,
+not semantic facial reconstruction; features absent from the source cannot return.
+
+**Enable audio** explicitly requests a microphone or audio interface input. Choose
+an input after permission reveals device labels, and adjust Sensitivity while
+watching the input meter. Browser audio is never connected to speakers. Mono
+1024-sample Float32 little-endian snapshots, at the actual context sample rate,
+reach the native analyzer at at most ~30 Hz with one request in flight. The demo is
+silent until audio is enabled. Disable audio, Stop, input disconnection and page
+exit release the browser tracks/context and reset native sound after draining a
+pending upload. Source preparation changes preserve audio. Physical-device
+permission and hardware routing still require the user's test.
