@@ -1,6 +1,6 @@
 import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
-import { TemporalContours } from './temporal-contours';
+import { TemporalContours, ContourMotion } from './temporal-contours';
 import { Contours, rawFrameSize } from './contours';
 import { contourPacket } from './contour-packet';
 import { ColorSignal } from './color-signal';
@@ -22,13 +22,13 @@ root.innerHTML = `
 <section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div class="stage-metrics" id="performance-details" hidden><p id="sustained-rate">Waiting for native frame IDs…</p><p id="timings"></p><p id="video-resources">Resource diagnostics inactive</p><p id="video-capability" data-codec="">Checking local H.264 decoder…</p></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="preset-dock"><button id="previous-preset" aria-label="Previous preset">←</button><button id="browse-presets" aria-expanded="false">Chromatic vortex ▴</button><button id="next-preset" aria-label="Next preset">→</button><button id="random-preset" aria-label="Random preset">⤨</button></div><section id="preset-browser" aria-label="Preset browser" hidden><div class="browser-head"><input id="preset-search" type="search" aria-label="Search presets" placeholder="Find a hallucination…"/><button id="close-presets" aria-label="Close preset browser">×</button></div><p id="preset-count"></p><div id="preset-list"></div><div class="browser-pages"><button id="preset-page-back">Previous 60</button><button id="preset-page-next">Next 60</button></div><p id="preset-error" role="status"></p></section><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
 <aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Chromatic vortex</b><span>Spiral into a spectral wormhole</span><i>01</i></button><button data-preset="1"><b>Prism cult</b><span>Sixfold stained-glass hallucination</span><i>02</i></button><button data-preset="2"><b>Acid tide</b><span>Liquid ribbons and chromatic rupture</span><i>03</i></button></div>
 <div class="section-title">02 <span>LOSE YOUR COMPOSURE</span></div>
-<label class="knob"><span>Camera / outline opacity <output id="recognition-value">35%</output></span><input id="recognition" type="range" min="0" max="100" value="35"/><small>Fade the recognizable foreground in or out</small></label>
+<label class="knob"><span>Camera opacity <output id="camera-opacity-value">0%</output></span><input id="camera-opacity" type="range" min="0" max="100" value="0"/><small>Fade the actual camera image in or out</small></label><label class="knob"><span>Outline opacity <output id="recognition-value">65%</output></span><input id="recognition" type="range" min="0" max="100" value="65"/><small>Keep recognizable edges without the camera image</small></label>
 <label class="knob"><span>Color <output id="color-value">100%</output></span><input id="color" type="range" min="0" max="100" value="100"/><small>Silver → Full spectrum</small></label>
 <label class="knob"><span><span id="feed-label">Edge feed</span> <output id="mix-value">30%</output></span><input id="mix" type="range" min="0" max="100" value="30"/><small>Sparse ink → Dense ink</small></label>
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.4×</output></span><input id="speed" type="range" min="10" max="300" value="40"/><small>Slow hypnosis → Full possession</small></label>
 <label class="knob"><span>Output resolution</span><select id="resolution" aria-label="Output resolution"><option value="720p" selected>720p · HD</option><option value="1080p">1080p · Full HD</option><option value="360p">360p · Faster</option></select></label><label class="knob"><span>Output transport</span><select id="output-transport" aria-label="Output transport"><option value="auto" selected>Auto · hardware H.264</option><option value="raw">Raw RGBA · comparison</option></select><small id="transport-status">Checking local decoder…</small></label><label class="mirror"><input id="show-timings" type="checkbox"/> Show timing breakdown</label><label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
-<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge steadiness <output id="steadiness-value">65%</output></span><input id="steadiness" type="range" min="0" max="100" value="65"/><small>Immediate → Calm small edge jitter</small></label><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
+<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge steadiness <output id="steadiness-value">85%</output></span><input id="steadiness" type="range" min="0" max="100" value="85"/><small>Immediate → 250 ms edge settling</small></label><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
 <section class="audio-tools" aria-label="Sound reaction"><button id="audio-toggle">Enable audio</button><select id="audio-device" aria-label="Audio input"><option value="">Default microphone / interface</option></select><label class="knob"><span>Sensitivity <output id="gain-value">1.0×</output></span><input id="gain" type="range" min="0" max="400" value="100"/></label><meter id="audio-meter" min="0" max="1" value="0" aria-label="Audio input level"></meter><span id="audio-status" role="status">Audio off</span></section><footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
@@ -41,6 +41,7 @@ input.width = WIDTH;
 input.height = HEIGHT;
 const contours = new Contours(WIDTH, HEIGHT);
 const temporalContours = new TemporalContours(WIDTH, HEIGHT);
+const contourMotion = new ContourMotion(WIDTH, HEIGHT);
 const colorSignal = new ColorSignal(WIDTH, HEIGHT);
 const identity = document.createElement('canvas');
 identity.id = 'identity-source';
@@ -48,14 +49,13 @@ identity.width = WIDTH;
 identity.height = HEIGHT;
 const identityContext = identity.getContext('2d')!;
 let identityAt = -Infinity;
-let identityPaths: ContourPath[] = [];
 const curveCanvas = document.createElement('canvas');
 curveCanvas.width = WIDTH;
 curveCanvas.height = HEIGHT;
 const curveContext = curveCanvas.getContext('2d', { willReadFrequently: true })!;
 function clearIdentity() {
   identityAt = -Infinity;
-  identityPaths = [];
+  contourMotion.reset();
   identityContext.clearRect(0, 0, WIDTH, HEIGHT);
 }
 const prepared = $<HTMLCanvasElement>('prepared');
@@ -216,7 +216,7 @@ async function capture(id: number) {
       // happened while the request was in flight; never revive its old identity.
       if (id === generation && useContours && (!isolate || personMask?.current())) {
         identityContext.putImageData(new ImageData(colorSignal.identity, WIDTH, HEIGHT), 0, 0);
-        identityPaths = paths;
+        contourMotion.retarget(paths, performance.now());
         identityAt = mask?.capturedAt ?? start;
       }
     } catch (e) {
@@ -344,9 +344,13 @@ async function paint(id: number) {
             } else ctx.putImageData(image!, 0, 0);
             if (performance.now() - identityAt <= 250 && useContours) {
               ctx.save();
+              const cameraOpacity = value('camera-opacity') / 100;
+              if (cameraOpacity > 0) {
+                ctx.globalAlpha = cameraOpacity;
+                ctx.imageSmoothingEnabled = true;
+                ctx.drawImage(identity, 0, 0, width, height);
+              }
               ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
-              ctx.imageSmoothingEnabled = true;
-              ctx.drawImage(identity, 0, 0, width, height);
               const saturation = value('color');
               const key = `${width}:${height}:${saturation}`;
               if (!spectrum || spectrumKey !== key) {
@@ -356,7 +360,7 @@ async function paint(id: number) {
                 spectrum.addColorStop(1, `hsl(40 ${saturation}% 85%)`);
                 spectrumKey = key;
               }
-              drawContourPaths(ctx, identityPaths, { scaleX: width / WIDTH, scaleY: height / HEIGHT, lineWidth: 0.85, strokeStyle: spectrum });
+              drawContourPaths(ctx, contourMotion.sample(performance.now()), { scaleX: width / WIDTH, scaleY: height / HEIGHT, lineWidth: 0.85, strokeStyle: spectrum });
               ctx.restore();
             } else clearIdentity();
             meter.record(performance.now(), r.headers.get('X-Frame-Sequence'));
@@ -507,7 +511,7 @@ $('fullscreen').onclick = () => {
 $('rescue').onclick = () => {
   rescueUntil = performance.now() + 1000;
 };
-for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color', 'smoothing', 'steadiness']) {
+for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'camera-opacity', 'color', 'smoothing', 'steadiness']) {
   $<HTMLInputElement>(id).oninput = () => {
     $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : id === 'threshold' ? `${value(id)}` : `${value(id)}%`;
   };
@@ -716,7 +720,7 @@ for (const [id, enabled] of [
       $(key).classList.toggle('selected', active);
       $(key).setAttribute('aria-pressed', String(active));
     }
-    for (const key of ['detail', 'threshold', 'color', 'recognition', 'smoothing', 'steadiness']) $<HTMLInputElement>(key).disabled = !enabled;
+    for (const key of ['detail', 'threshold', 'color', 'recognition', 'camera-opacity', 'smoothing', 'steadiness']) $<HTMLInputElement>(key).disabled = !enabled;
   };
 }
 
