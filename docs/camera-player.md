@@ -17,8 +17,8 @@ are serialized so late permission grants or native responses cannot revive an ol
 source. **Appearance** groups image/outline opacity and color; **Motion** groups
 edge feed, steadiness and curve smoothing. The header uses the shared camera SVG
 icon, and the panel uses the standard Settings surface and section spacing. Its
-sliders use the same glass-track and capsule-knob tokens as the preset inspector,
-with 44px gesture targets. The sheet retains the app’s neutral opaque backing
+sliders use Zen’s shared Slider and parameter gestures, grouped with its standard
+Group control. The sheet retains the app’s neutral opaque backing
 because WebKit backdrop filtering cannot blur the separate native Metal surface.
 
 The defaults are camera image 0%, recognizable outline 65%, native edge feed 30%,
@@ -28,8 +28,10 @@ feed. **Bring my outline back** raises only outline opacity. Steadiness settles
 small motion over about 220 ms; fast movement releases the filter. Curve smoothing
 rounds individual contours. Both filters run at capture resolution, never full HD.
 
-The App-mounted provider owns a persistent controller; the sheet only changes its
-state. It captures 320×180 at no more than 30 submissions per second, with a centered aspect-preserving fit and transparent padding for 4:3 or portrait
+The app creates its capture controller once and injects it into `VisualsApp` from
+`@satoramoto/zen/visuals`. Zen owns the persistent provider and camera sheet; the
+app retains capture, segmentation worker/model assets and binary IPC. The sheet
+only changes controller state. It captures 320×180 at no more than 30 submissions per second, with a centered aspect-preserving fit and transparent padding for 4:3 or portrait
 cameras. Padding boundaries are excluded from edge extraction. There is exactly
 one acknowledgement in flight and no frame backlog. Decoded frame callbacks (or a decoded-frame counter fallback) must
 advance to submit again, so stalled video cannot refresh native expiry. Callback age also reduces packet
