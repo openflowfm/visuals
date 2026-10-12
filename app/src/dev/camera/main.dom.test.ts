@@ -313,7 +313,7 @@ test('preset dock loads searchable catalog and sends native preset IDs without r
   await waitFor(() => expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult'));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('camera:1'))).toBe(true));
   const selectedRequest = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('camera:1'));
-  expect(JSON.parse(String(selectedRequest?.[1]?.body))).toMatchObject({ presetId: 'camera:1', speed: 0.8, persistence: 0.65, resolution: '720p' });
+  expect(JSON.parse(String(selectedRequest?.[1]?.body))).toMatchObject({ presetId: 'camera:1', speed: 0.4, persistence: 0.65, resolution: '720p' });
   expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(stops);
   document.getElementById('browse-presets')!.click();
   expect(document.getElementById('preset-browser')!.hidden).toBe(false);
@@ -624,7 +624,7 @@ test('contours upload native wave geometry while Raw camera retains RGBA transpo
   document.getElementById('demo')!.click();
   await waitFor(() => expect(requests.some((r) => r.includes('camera/contours'))).toBe(true));
   const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('camera/contours'));
-  expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ width: 320, height: 180, mix: 0.09, paths: [] });
+  expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ width: 320, height: 180, mix: 0.3, paths: [] });
   document.getElementById('raw-mode')!.click();
   await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=320&h=180'))).toBe(true));
   expect((document.getElementById('steadiness') as HTMLInputElement).disabled).toBe(true);

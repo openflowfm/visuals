@@ -41,7 +41,7 @@ authenticated loopback dev bridge; there is no remote upload or recording.
 - **Chromatic vortex**, **Prism cult**, and **Acid tide** are camera-specific
   presets: a spinning RGB-split wormhole, sixfold prismatic symmetry, and liquid
   chromatic ribbons. All motion and color separation run in native MilkDrop shaders.
-- **Fresh camera** is the new image's blend per preset step. Low values give the
+- **Edge feed** (Camera feed in raw mode) is the new image's blend per preset step. Low values give the
   feedback more room to deform. Zero allows existing imagery to evolve alone.
 - **Afterimage** uses the engine's existing brightness-preserving trails effect.
 - **Speed** changes the preset clock, and therefore also the camera-injection rate.
@@ -85,7 +85,7 @@ Following satoramoto/web's Tree Museum strategy, one prepared source drives both
 native feedback and a crisp foreground. Colored contours are the actual RGB bytes
 uploaded to MilkDrop, not a tint on the returned picture. **Color** sets their
 saturation (zero returns silver contours). A gently traveling palette varies with
-vertical position and subject luminance. **Recognition** independently mixes a
+vertical position and subject luminance. **Clean outline** independently mixes a
 bright contour and lightly posterized facial-shading plate above the wild native
 output. Zero exposes the native loop alone; **Bring my face back** briefly restores
 full foreground strength as well as fresh input. Raw comparison omits this plate.
@@ -207,5 +207,12 @@ normalized palette colors per vertex. Serialization independently enforces the
 512-path / 8,192-point limit, dropping whole excess paths rather than truncating a
 closed loop. Vertex colors come from the palette, never from black/antialiased edge
 pixels. The prepared thumbnail remains a raster view of the same geometry; the
-Recognition overlay uses the same stabilized paths. Set Recognition to zero to
+Clean outline overlay uses the same stabilized paths. Set Clean outline to zero to
 inspect only the native engine. Raw camera comparison retains the RGBA frame route.
+
+
+The default balance now exposes the native contour-fed effect: **Clean outline 0%**,
+**Edge feed 30%**, and **Speed 0.4×**. Clean outline adds an undistorted foreground
+above the feedback; increase it or use **Bring my face back** when you want clearer
+recognition. Edge steadiness remains 65%. These are presentation defaults only;
+the native engine and temporal stabilization algorithms are unchanged.
