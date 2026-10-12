@@ -19,7 +19,8 @@
   font-weight: 600;
 }
 .camera-panel .camera-status,
-.camera-panel .camera-note {
+.camera-panel .camera-note,
+.camera-panel .camera-note p {
   color: var(--set-caption);
   font-size: 11px;
   line-height: 1.5;
