@@ -373,3 +373,26 @@ test('late rejected older choice does not restore over the newest selected prese
   expect(document.getElementById('browse-presets')!.textContent).toContain('Acid tide');
   expect(document.getElementById('preset-error')!.textContent).toBe('');
 });
+
+test('starting while a preset selection is pending reloads the accepted new preset', async () => {
+  let acceptSelection!: () => void;
+  let settingsCount = 0;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/settings') && ++settingsCount === 1) {
+      expect(JSON.parse(String(init?.body)).presetId).toBe('camera:1');
+      await new Promise<void>((resolve) => (acceptSelection = resolve));
+    }
+    return outputResponse(String(url));
+  });
+  document.querySelector<HTMLButtonElement>('[data-preset="1"]')!.click();
+  await waitFor(() => expect(acceptSelection).toBeDefined());
+  document.getElementById('demo')!.click();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(settingsCount).toBe(1);
+  acceptSelection();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  const settingsRequests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/settings'));
+  expect(settingsRequests.map(([, init]) => JSON.parse(String(init?.body)).presetId)).toEqual(['camera:1', 'camera:1']);
+  expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult');
+});

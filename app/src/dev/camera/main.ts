@@ -100,13 +100,18 @@ async function post(route: string, body?: BodyInit) {
   if (!r.ok) throw new Error(r.status === 403 ? 'Bridge token expired. Open the new launcher URL.' : `Engine: ${await r.text()}`);
 }
 function settings(load = false) {
-  const body = JSON.stringify({
-    presetId: load ? acceptedPresetId : undefined,
-    resolution: $<HTMLSelectElement>('resolution').value,
-    speed: value('speed') / 100,
-    persistence: value('persistence') / 100,
-  });
-  settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));
+  settingsChain = settingsChain
+    .catch(() => {})
+    .then(() => {
+      // Resolve the accepted preset only after prior native selections have settled.
+      const body = JSON.stringify({
+        presetId: load ? acceptedPresetId : undefined,
+        resolution: $<HTMLSelectElement>('resolution').value,
+        speed: value('speed') / 100,
+        persistence: value('persistence') / 100,
+      });
+      return post('camera/settings', body);
+    });
   return settingsChain;
 }
 function drawDemo(t: number) {
