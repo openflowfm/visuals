@@ -67,7 +67,13 @@ impl Sink {
 pub fn open_input(device: &cpal::Device, channels: (usize, usize), ring: Ring) -> Result<Input, String> {
     open_input_sink(device, channels, Sink::ring(ring))
 }
-pub fn open_input_sink(device: &cpal::Device, (left, right): (usize, usize), sink: Sink) -> Result<Input, String> {
+pub fn open_input_sink(device: &cpal::Device, channels: (usize, usize), sink: Sink) -> Result<Input, String> {
+    open_input_sink_with_progress(device, channels, sink, |_| Ok(()))
+}
+/// Progress checks let an owning application retire an acquisition before starting
+/// capture after a slow hardware call returns. No callback runs on the audio thread.
+pub fn open_input_sink_with_progress(device: &cpal::Device, (left, right): (usize, usize), sink: Sink, mut progress: impl FnMut(&'static str) -> Result<(), String>) -> Result<Input, String> {
+    progress("reading the input format")?;
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = config.channels() as usize;
     if channels == 0 {
@@ -103,6 +109,7 @@ pub fn open_input_sink(device: &cpal::Device, (left, right): (usize, usize), sin
             build::<$t>(device, &config.into(), sink, channels, l, r)?
         };
     }
+    progress("building the Core Audio input stream")?;
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => open!(f32),
         cpal::SampleFormat::F64 => open!(f64),
@@ -116,7 +123,9 @@ pub fn open_input_sink(device: &cpal::Device, (left, right): (usize, usize), sin
         cpal::SampleFormat::U64 => open!(u64),
         other => return Err(format!("unsupported input format: {other}")),
     };
+    progress("starting the Core Audio input stream")?;
     stream.play().map_err(|e| e.to_string())?;
+    progress("finishing the audio connection")?;
     Ok(Input { stream, rate, channels, left: l, right: r })
 }
 

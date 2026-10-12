@@ -7,6 +7,8 @@ use crate::tap::{self, Permission, Process, Target};
 use crate::{bench, App};
 use cpal::traits::{DeviceTrait, HostTrait};
 use engine::live::{peaks, Sink};
+#[path = "listen_connect.rs"]
+mod connect;
 use crate::audio::{Lane, LaneStatus, Status};
 use std::sync::atomic::Ordering;
 pub use engine::live::{ring, Ring};
@@ -151,6 +153,16 @@ enum Stream {
     Tap(#[allow(dead_code)] tap::Tap, Vec<u32>, Option<i32>),
     #[cfg(test)]
     Fake,
+    #[cfg(test)]
+    FakeTracked(#[allow(dead_code)] DropNotice),
+}
+#[cfg(test)]
+struct DropNotice(std::sync::mpsc::Sender<()>);
+#[cfg(test)]
+impl Drop for DropNotice {
+    fn drop(&mut self) {
+        let _ = self.0.send(());
+    }
 }
 
 /// What is being listened to. Dropping it stops listening.
@@ -295,20 +307,26 @@ impl World for Mac {
 
     fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
         physical_audio_allowed()?;
-        match source {
-            None => listen(None, None, channels, ring),
-            Some(SourceId::Device { name, size, uid }) => listen_device(Some(name), Some(*size), uid.as_deref(), channels, ring),
-            Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], None, channels, ring),
-            Some(SourceId::App { bundle }) => {
-                let objects = objects_of(bundle);
-                if objects.is_empty() {
-                    return Err(format!("{} isn't running", app_name(bundle, None)));
+        let source = source.cloned();
+        connect::run(move |attempt| {
+            attempt.stage("finding the audio source")?;
+            let opened = match source.as_ref() {
+                None => listen_device(None, None, None, channels, ring, &attempt),
+                Some(SourceId::Device { name, size, uid }) => listen_device(Some(name), Some(*size), uid.as_deref(), channels, ring, &attempt),
+                Some(SourceId::System) => tapped(SourceId::System, Target::Everything, EVERYTHING.into(), vec![], None, channels, ring),
+                Some(SourceId::App { bundle }) => {
+                    let objects = objects_of(bundle);
+                    if objects.is_empty() {
+                        return Err(format!("{} isn't running", app_name(bundle, None)));
+                    }
+                    // Named by the same process as in `audio_sources`, so the picker finds it.
+                    let pid = pid_of(&tap::processes(), bundle, std::process::id() as i32);
+                    tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, pid, channels, ring)
                 }
-                // Named by the same process as in `audio_sources`, so the picker finds it.
-                let pid = pid_of(&tap::processes(), bundle, std::process::id() as i32);
-                tapped(SourceId::App { bundle: bundle.clone() }, Target::Processes(objects.clone()), app_name(bundle, pid), objects, pid, channels, ring)
-            }
-        }
+            }?;
+            attempt.stage("returning the audio connection")?;
+            Ok(opened)
+        })
     }
 
     fn gone(&self, source: &SourceId) -> bool {
@@ -492,10 +510,7 @@ fn physical_audio_allowed() -> Result<(), String> {
 /// `right` (from 0) into `ring`.
 /// `size`, when given, picks between inputs that share a name — macOS calls
 /// every aggregate device "Aggregate Device" — by their channel count.
-pub fn listen(input: Option<&str>, size: Option<usize>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
-    listen_device(input, size, None, channels, ring)
-}
-fn listen_device(input: Option<&str>, size: Option<usize>, uid: Option<&str>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
+fn listen_device(input: Option<&str>, size: Option<usize>, uid: Option<&str>, channels: (usize, usize), ring: Sink, attempt: &connect::Attempt) -> Result<Listening, String> {
     physical_audio_allowed()?;
     let host = cpal::default_host();
     let device = if let Some(uid) = uid {
@@ -511,7 +526,7 @@ fn listen_device(input: Option<&str>, size: Option<usize>, uid: Option<&str>, ch
             None => host.default_input_device().ok_or("no system input")?,
         }
     };
-    let open = engine::live::open_input_sink(&device, channels, ring)?;
+    let open = engine::live::open_input_sink_with_progress(&device, channels, ring, |stage| attempt.stage(stage))?;
     let name = name_of(&device);
     Ok(Listening {
         stream: Stream::Input(open.stream),
@@ -596,6 +611,75 @@ mod tests {
         choose_lane_with(&world, &app, Lane::Mic, None, None, None).unwrap();
         follow_mic(&world, &app);
         assert!(app.audio.mic.lock().unwrap().is_none());
+    }
+    #[test]
+    fn timed_out_microphone_transaction_preserves_main_drops_late_stream_and_can_retry() {
+        struct Blocked {
+            connector: connect::Connector,
+            release: std::sync::Arc<Mutex<Option<std::sync::mpsc::Receiver<()>>>>,
+            dropped: std::sync::mpsc::Sender<()>,
+        }
+        impl World for Blocked {
+            fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+                let source = source.unwrap().clone();
+                let release = self.release.clone();
+                let dropped = self.dropped.clone();
+                self.connector.run(std::time::Duration::from_millis(20), move |attempt| {
+                    attempt.stage("building the Core Audio input stream")?;
+                    if let Some(wait) = release.lock().unwrap().take() {
+                        wait.recv().unwrap();
+                    }
+                    Ok(Listening { stream: Stream::FakeTracked(DropNotice(dropped)), source, name: "fixture".into(), rate: 48000.0, channels: 1, left: 0, right: 0 })
+                })
+            }
+            fn gone(&self, _: &SourceId) -> bool {
+                false
+            }
+            fn processes(&self) -> Vec<Process> {
+                vec![]
+            }
+            fn taps_allowed(&self) -> bool {
+                false
+            }
+        }
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        let ready = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+        choose_lane_transaction(&ready, &app, Lane::Main, Some(device("main")), None, None, |_, _| {}).unwrap();
+        let (release, wait) = std::sync::mpsc::channel();
+        let (dropped, was_dropped) = std::sync::mpsc::channel();
+        let world = Blocked { connector: Default::default(), release: std::sync::Arc::new(Mutex::new(Some(wait))), dropped };
+        let error = choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |_, _| panic!("failed open must not save")).err().unwrap();
+        assert!(error.contains("timed out"));
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, device("main"));
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        assert!(app.audio.preferences.lock().unwrap().mic.is_none());
+        assert!(choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |_, _| {}).is_err());
+        release.send(()).unwrap();
+        was_dropped.recv_timeout(std::time::Duration::from_secs(1)).expect("retired stream closes on worker");
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        let stopped = std::time::Instant::now();
+        while world.connector.pending() {
+            assert!(stopped.elapsed() < std::time::Duration::from_secs(1));
+            std::thread::yield_now();
+        }
+        let status = choose_lane_transaction(&world, &app, Lane::Mic, Some(device("mic")), None, None, |prefs, _| assert!(prefs.mic.is_some())).unwrap();
+        assert!(status.main.enabled && status.mic.enabled);
+        assert_eq!(status.main.source, Some(device("main")));
+    }
+    #[test]
+    fn microphone_command_completes_its_full_transaction() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = std::sync::Arc::new(app());
+        let worker = app.clone();
+        let (done, completed) = std::sync::mpsc::channel();
+        let task = std::thread::spawn(move || {
+            let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+            let reply = choose_lane_transaction(&world, &worker, Lane::Mic, Some(device("mic")), None, None, |preferences, _| assert!(preferences.mic.is_some()));
+            done.send(reply.map(|status| status.mic.enabled)).unwrap();
+        });
+        assert_eq!(completed.recv_timeout(std::time::Duration::from_secs(2)).expect("command must return after opening"), Ok(true));
+        task.join().unwrap();
     }
     #[test]
     fn device_identity_ignores_changed_labels_but_distinguishes_identical_names() {
@@ -908,12 +992,27 @@ fn choose_lane_with(world: &dyn World, app: &App, lane: Lane, source: Option<Sou
     Ok(())
 }
 pub fn choose_lane(app: &App, lane: Lane, source: Option<SourceId>, left: Option<usize>, right: Option<usize>) -> Result<Status, String> {
+    choose_lane_transaction(&Mac, app, lane, source, left, right, |preferences, wanted| {
+        crate::settings::save_json("audio-lanes.json", preferences);
+        if let Some(saved) = wanted {
+            crate::settings::save_json(SAVED, saved);
+        }
+    })
+}
+fn choose_lane_transaction(
+    world: &dyn World,
+    app: &App,
+    lane: Lane,
+    source: Option<SourceId>,
+    left: Option<usize>,
+    right: Option<usize>,
+    persist: impl FnOnce(&crate::audio::Preferences, Option<&Saved>),
+) -> Result<Status, String> {
     let _operation = app.audio.operation.lock().unwrap();
-    choose_lane_with(&Mac, app, lane, source, left, right)?;
-    crate::settings::save_json("audio-lanes.json", &*app.audio.preferences.lock().unwrap());
-    if let Some(saved) = WANTED.lock().unwrap().as_ref() {
-        crate::settings::save_json(SAVED, saved);
-    }
+    choose_lane_with(world, app, lane, source, left, right)?;
+    let preferences = app.audio.preferences.lock().unwrap().clone();
+    let wanted = WANTED.lock().unwrap().clone();
+    persist(&preferences, wanted.as_ref());
     Ok(snapshot(app))
 }
 

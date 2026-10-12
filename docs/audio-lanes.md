@@ -27,3 +27,21 @@ both lanes, including their polling and reconnect paths.
 
 Validation uses synthetic callback buffers and fake devices; physical device,
 macOS permission, and simultaneous live-input acceptance require a user session.
+
+## Connection stalls
+
+A native acquisition has a 20-second deadline across source lookup, input-format
+query, Core Audio stream construction and stream start. On expiry the command
+returns an error naming its last phase, releases the routing transaction, and
+leaves the previous main/microphone choices running. A late stream is disposed on
+the acquisition worker; it cannot replace the selected lane. Cancellation is
+checked between native stages, including before starting a newly built stream.
+
+Only one hardware acquisition may be outstanding. Core Audio calls themselves
+cannot be forcibly interrupted: if a driver or permission call remains blocked,
+retries report that pending native connection instead of creating more workers.
+Finish any macOS permission prompt, then retry; restarting the app is the recovery
+if the native call never returns. Standard error includes each connection phase
+(`audio connection: ...`) for diagnosis. This bounds the hang and preserves the
+working source; it does not establish which driver/permission call caused the
+reported live-device stall. Physical-device reproduction remains unverified.
