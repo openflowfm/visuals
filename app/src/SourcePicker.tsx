@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Popup } from '@openflow/widgets/chrome/Popup.tsx';
 import { Meter } from '@openflow/widgets/music/Meter.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import * as api from './api.ts';
@@ -112,6 +113,8 @@ export function SourcePicker({ onError, channels: where = 'advanced', width = 18
   const [sources, setSources] = useState<api.Source[]>([]);
   const [status, setStatus] = useState<AudioStatus>({ main: OFF, mic: OFF });
   const [problem, setProblem] = useState<string | null>(null);
+  const [mixerOpen, setMixerOpen] = useState(false);
+  const mixerButton = useRef<HTMLButtonElement>(null);
   const [pending, setPending] = useState<AudioLane | null>(null);
   const busy = useRef(false);
   const alive = useRef(false);
@@ -270,19 +273,38 @@ export function SourcePicker({ onError, channels: where = 'advanced', width = 18
       ) : (
         <>
           {picker('main')}
-          <details className="audio-advanced">
-            <summary aria-label="Audio mixer: main and microphone inputs" title="Mix a microphone with the main source">
+          <span className="audio-advanced">
+            <button
+              type="button"
+              ref={mixerButton}
+              className="audio-mixer-toggle"
+              aria-expanded={mixerOpen}
+              aria-label="Audio mixer: main and microphone inputs"
+              title="Mix a microphone with the main source"
+              onClick={() => setMixerOpen((open) => !open)}
+            >
               Mixer{status.mic.enabled ? ' + mic' : ''}
-            </summary>
-            <span className="audio-advanced-body">
-              <span className="audio-lane">
-                <span className="audio-lane-name">Main channels</span>
-                {channelControls('main')}
-                {notices('main')}
-              </span>
-              {mic}
-            </span>
-          </details>
+            </button>
+            {mixerOpen && (
+              <Popup
+                anchor={mixerButton}
+                role="group"
+                label="Audio mixer"
+                className="audio-advanced-body"
+                onDismiss={(how) => {
+                  setMixerOpen(false);
+                  if (how === 'escape') mixerButton.current?.focus();
+                }}
+              >
+                <span className="audio-lane">
+                  <span className="audio-lane-name">Main channels</span>
+                  {channelControls('main')}
+                  {notices('main')}
+                </span>
+                {mic}
+              </Popup>
+            )}
+          </span>
           <Levels />
         </>
       )}

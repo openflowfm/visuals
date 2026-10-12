@@ -49,9 +49,8 @@ describe('the source picker', () => {
   it('names every control for VoiceOver: the source, Advanced, both channels and both meters', () => {
     const html = renderToStaticMarkup(createElement(SourcePicker, { onError: () => {} }));
     expect(html).toMatch(/role="combobox"[^>]*aria-label="listen to"/);
-    expect(html).toMatch(/<summary[^>]*aria-label="Audio mixer: main and microphone inputs"/);
-    expect(html).toContain('aria-label="left channel"');
-    expect(html).toContain('aria-label="right channel"');
+    expect(html).toMatch(/<button[^>]*aria-label="Audio mixer: main and microphone inputs"/);
+    expect(html).toContain('aria-expanded="false"');
     expect(html).toContain('aria-label="left level"');
     expect(html).toContain('aria-label="right level"');
   });

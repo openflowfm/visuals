@@ -87,3 +87,27 @@ export const QuickAdd: Story = {
     await waitFor(() => expect(canvasElement.querySelectorAll('.lib-grid .tile[data-added]').length).toBeGreaterThan(0));
   },
 };
+
+/** The transport is at the window bottom inside the clipped main column. */
+export const BottomAudioMixer: Story = {
+  globals: { viewport: { value: 'home900', isRotated: false } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const transport = await canvas.findByRole('region', { name: 'transport' });
+    await waitFor(() => expect(within(transport).getByRole('combobox', { name: 'listen to' })).toHaveTextContent('Ableton Live 12'));
+    await userEvent.click(within(transport).getByRole('button', { name: 'Audio mixer: main and microphone inputs' }));
+    const mixer = within(transport).getByRole('group', { name: 'Audio mixer' });
+    await expect(mixer).toBeVisible();
+    const box = mixer.getBoundingClientRect();
+    await expect(box.top).toBeGreaterThanOrEqual(0);
+    await expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+    await expect(box.left).toBeGreaterThanOrEqual(0);
+    await expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+    await expect(mixer.matches(':popover-open')).toBe(true);
+    const mic = within(mixer).getByRole('combobox', { name: 'microphone input' });
+    await waitFor(() => expect(mic).toBeEnabled());
+    mic.focus();
+    await userEvent.keyboard('{End}');
+    await waitFor(() => expect(mic).toHaveTextContent('MacBook Pro Microphone'));
+  },
+};

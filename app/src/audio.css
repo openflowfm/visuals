@@ -3,23 +3,20 @@
   position: relative;
   display: inline-block;
 }
-.audio-advanced > summary {
+.audio-mixer-toggle {
+  border: 0;
+  background: none;
+  font: inherit;
   cursor: pointer;
   list-style: none;
   padding: 2px 4px;
   color: var(--caption);
   font-size: var(--text-label);
 }
-.audio-advanced > summary::-webkit-details-marker {
-  display: none;
-}
-.audio-advanced[open] > summary {
+.audio-mixer-toggle[aria-expanded='true'] {
   color: var(--fg);
 }
 .audio-advanced-body {
-  position: absolute;
-  top: 100%;
-  right: 0;
   z-index: 20;
   display: inline-flex;
   gap: 4px;
