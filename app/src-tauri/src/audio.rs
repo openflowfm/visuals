@@ -70,12 +70,18 @@ impl Port {
     }
     fn push(&mut self, frames: &[[f32; 2]], now: Instant) {
         for frame in frames {
-            if self.samples.len() == 16384 {
+            if self.samples.len() >= (self.rate * 0.05).clamp(2.0, 16384.0) as usize {
                 self.samples.pop_front();
             }
             self.samples.push_back(frame.map(clean));
         }
         self.updated = now;
+    }
+    fn skip(&mut self, output_frames: u64) {
+        let position = self.phase + output_frames as f64 * self.rate / RATE as f64;
+        let count = (position as usize).min(self.samples.len());
+        self.samples.drain(..count);
+        self.phase = if self.samples.is_empty() { 0.0 } else { position.fract() };
     }
     fn sample(&mut self, now: Instant) -> [f32; 2] {
         if now.saturating_duration_since(self.updated) > Duration::from_millis(100) {
@@ -128,7 +134,9 @@ impl Runtime {
                 while let Some(mixer) = weak.upgrade() {
                     let now = Instant::now();
                     let due = (start.elapsed().as_secs_f64() * RATE as f64) as u64;
-                    let count = due.saturating_sub(made).min(WINDOW as u64) as usize;
+                    let elapsed = due.saturating_sub(made);
+                    let count = elapsed.min(WINDOW as u64) as usize;
+                    let skipped = elapsed.saturating_sub(count as u64);
                     made = due;
                     {
                         let ports = mixer.ports.lock().unwrap();
@@ -136,6 +144,12 @@ impl Runtime {
                             if ports.iter().any(Option::is_some) {
                                 let mut a = ports[0].as_ref().and_then(|p| p.try_lock().ok());
                                 let mut b = ports[1].as_ref().and_then(|p| p.try_lock().ok());
+                                if let Some(a) = a.as_mut() {
+                                    a.skip(skipped);
+                                }
+                                if let Some(b) = b.as_mut() {
+                                    b.skip(skipped);
+                                }
                                 let mut block = [[0.0; 2]; WINDOW];
                                 for value in &mut block[..count] {
                                     *value = mix(a.as_mut().map_or([0.0; 2], |p| p.sample(now)), b.as_mut().map_or([0.0; 2], |p| p.sample(now)));
@@ -234,7 +248,19 @@ mod tests {
         drop(hold);
         assert!(port.lock().unwrap().samples.is_empty());
         sink.write(&[[0.2; 2]; 20000]);
-        assert_eq!(port.lock().unwrap().samples.len(), 16384);
+        assert_eq!(port.lock().unwrap().samples.len(), 2400);
+    }
+    #[test]
+    fn consumer_stall_drops_old_time_while_producer_continues() {
+        let now = Instant::now();
+        let mut p = Port::new();
+        p.push(&[[0.1; 2]; 4800], now);
+        p.push(&[[0.8; 2]; 1024], now + Duration::from_millis(100));
+        assert!(p.samples.len() <= 2400);
+        p.skip(4800 - 1024);
+        assert!(p.samples.is_empty());
+        p.push(&[[0.9; 2]; 256], now + Duration::from_millis(104));
+        assert_eq!(p.sample(now + Duration::from_millis(104)), [0.9; 2]);
     }
     #[test]
     fn off_cannot_be_overwritten_by_a_previous_worker_snapshot() {
