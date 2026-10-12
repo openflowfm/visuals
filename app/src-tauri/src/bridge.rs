@@ -25,6 +25,7 @@
 //! page drives the app.
 
 mod camera;
+mod video;
 
 use crate::{bench, catalog, App};
 use std::collections::{HashMap, HashSet};
@@ -67,7 +68,7 @@ pub fn start(app: &AppHandle) -> Result<(), String> {
         let _ = window.navigate("about:blank".parse().expect("a URL"));
     }
     eprintln!("visual[flow] dev bridge on http://{addr} (token {token})");
-    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()), order: Order::default() });
+    let bridge = Arc::new(Bridge { app: app.clone(), token, clients: Mutex::new(Vec::new()), relayed: Mutex::new(HashSet::new()), order: Order::default(), camera_video: video::Video::default() });
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let bridge = bridge.clone();
@@ -98,6 +99,7 @@ struct Bridge {
     relayed: Mutex<HashSet<String>>,
     /// Commands handed to the app in the order the page sent them.
     order: Order,
+    camera_video: video::Video,
 }
 
 /// Each page's commands, handed on in the order it numbered them (`seq` within
@@ -249,6 +251,7 @@ impl Bridge {
             ("GET", "/__bridge/camera/presets") => self.camera_presets(&mut stream),
             ("POST", "/__bridge/camera/audio") => self.camera_audio(&mut stream, &request),
             ("POST", "/__bridge/camera/audio/stop") => self.camera_audio_stop(&mut stream),
+            ("GET", "/__bridge/camera/video") => self.camera_video(&mut stream, &request),
             ("GET", "/__bridge/camera/output") => self.camera_output(&mut stream),
             ("POST", "/__bridge/camera/frame") => self.camera_frame(&mut stream, &request),
             ("POST", "/__bridge/camera/settings") => self.camera_settings(&mut stream, &request.body),

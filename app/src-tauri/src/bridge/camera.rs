@@ -167,6 +167,7 @@ impl Bridge {
     }
 
     pub(super) fn camera_stop(&self, stream: &mut TcpStream) {
+        self.camera_video.stop();
         match self.app.state::<App>().ask(bench::Cmd::CameraStop) {
             Ok(()) => respond(stream, "200 OK", "application/json", b"null"),
             Err(e) => respond(stream, "503 Service Unavailable", "text/plain", e.as_bytes()),
