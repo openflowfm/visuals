@@ -121,3 +121,14 @@ silent until audio is enabled. Disable audio, Stop, input disconnection and page
 exit release the browser tracks/context and reset native sound after draining a
 pending upload. Source preparation changes preserve audio. Physical-device
 permission and hardware routing still require the user's test.
+
+Output requests now target 60 Hz deadlines with a single request in flight, rather
+than sharing the preparation loop's 30 Hz timer. Camera acquisition asks for up to
+60 Hz, while CPU segmentation/contour preparation remains independently bounded to
+30 Hz (person inference remains decimated). The stage reports completed **output**
+frames, and the prepared thumbnail reports accepted **input** uploads separately.
+No duplicate redraws are counted as native frames. **Show timing breakdown** reveals
+mean header/fetch wait, response-body transfer and composition time, plus preparation
+and upload time, over each reporting interval. This exposes transport/render costs
+without assuming the browser is the bottleneck. A requested 60 Hz camera or uncapped
+output loop is not evidence of achieved 60 FPS; measure each resolution/preset.

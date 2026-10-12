@@ -633,3 +633,18 @@ select {
   font-size: 10px;
   padding: 6px;
 }
+.stage-metrics {
+  position: absolute;
+  z-index: 3;
+  left: 23px;
+  right: 23px;
+  top: 40px;
+  color: #ccdcbf;
+  font:
+    10px ui-monospace,
+    monospace;
+  background: #10150bc9;
+  padding: 8px;
+  line-height: 1.5;
+  pointer-events: none;
+}

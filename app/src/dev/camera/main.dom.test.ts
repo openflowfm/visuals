@@ -119,6 +119,7 @@ test('a permission grant arriving after Stop is released without sending camera 
   document.getElementById('camera')!.click();
   await waitFor(() => expect(getUserMedia).toHaveBeenCalledOnce());
   expect(getUserMedia.mock.calls[0][0].audio).toBe(false);
+  expect(getUserMedia.mock.calls[0][0].video.frameRate).toEqual({ ideal: 60, max: 60 });
   document.getElementById('stop')!.click();
   grant({ getTracks: () => [{ stop: stopped }] } as unknown as MediaStream);
   await waitFor(() => expect(stopped).toHaveBeenCalledOnce());
@@ -395,4 +396,27 @@ test('starting while a preset selection is pending reloads the accepted new pres
   const settingsRequests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/settings'));
   expect(settingsRequests.map(([, init]) => JSON.parse(String(init?.body)).presetId)).toEqual(['camera:1', 'camera:1']);
   expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult');
+});
+
+test('slow output cannot create parallel requests and stop rejects its late frame', async () => {
+  let release!: () => void;
+  let outputCalls = 0;
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/output')) {
+      outputCalls++;
+      await new Promise<void>((resolve) => (release = resolve));
+    }
+    return outputResponse(String(url));
+  });
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(outputCalls).toBe(1));
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  expect(outputCalls).toBe(1);
+  document.getElementById('stop')!.click();
+  const before = canvasEvents.length;
+  release();
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  expect(canvasEvents.slice(before).some((e) => e.id === 'output' && e.action === 'paint')).toBe(false);
+  expect(outputCalls).toBe(1);
 });
