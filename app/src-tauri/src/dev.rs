@@ -157,6 +157,40 @@ pub fn send_fx(handle: &AppHandle) {
 /// (`VISUALS_CAPTURE_OUTPUT`) show to PNGs, after `VISUALS_CAPTURE_AFTER` seconds
 /// (8 by default). In headless mode the app then quits.
 pub fn capture(handle: &AppHandle) {
+    #[cfg(debug_assertions)]
+    if headless() && std::env::var("VISUALS_SHEET").as_deref() == Ok("camera") {
+        if let Some(window) = handle.get_webview_window("main") {
+            // Bounded fixture-only retry: React may mount after native setup.
+            let _ = window.eval("{ let n = 0; const timer = setInterval(() => { window.dispatchEvent(new CustomEvent('vf-sheet', { detail: 'camera' })); if (++n >= 20 || document.querySelector('[role=dialog]')) clearInterval(timer); }, 250); }");
+            if let Ok(name) = std::env::var("VISUALS_CAMERA_WORKER_SMOKE") {
+                if name.ends_with(".js") && name.len() < 180 && name.bytes().all(|c| c.is_ascii_alphanumeric() || b"-_.".contains(&c)) {
+                    let script = r#"setTimeout(() => {
+                        const status = document.createElement('pre');
+                        status.style.cssText = 'position:fixed;bottom:8px;left:8px;z-index:999999;background:#111;color:#9ff;padding:12px;max-width:95vw;white-space:pre-wrap;font:14px monospace';
+                        document.body.appendChild(status); status.textContent = 'Camera worker smoke: starting';
+                        let worker;
+                        const done = text => { status.textContent = 'Camera worker smoke: ' + text; worker?.terminate(); };
+                        const timeout = setTimeout(() => done('TIMEOUT'), 20000);
+                        try {
+                            worker = new Worker('/assets/' + WORKER_NAME, { type: 'module' });
+                            worker.onerror = event => { clearTimeout(timeout); done('ERROR ' + event.message); };
+                            worker.onmessage = async ({ data }) => {
+                                if (data.type === 'ready') {
+                                    const canvas = new OffscreenCanvas(256, 144);
+                                    const context = canvas.getContext('2d'); context.fillStyle = '#888'; context.fillRect(0, 0, 256, 144);
+                                    const image = await createImageBitmap(canvas);
+                                    worker.postMessage({ image, timestamp: performance.now() }, [image]);
+                                } else if (data.type === 'mask') {
+                                    clearTimeout(timeout); done('PASS ' + data.mask.width + 'x' + data.mask.height + ', ' + data.mask.data.length + ' values, ' + data.mask.inferenceMs.toFixed(1) + 'ms');
+                                } else if (data.type === 'error') { clearTimeout(timeout); done('ERROR ' + data.error); }
+                            };
+                        } catch (error) { clearTimeout(timeout); done('ERROR ' + error); }
+                    }, 1000);"#;
+                    let _ = window.eval(&script.replace("WORKER_NAME", &serde_json::to_string(&name).unwrap()));
+                }
+            }
+        }
+    }
     let window = std::env::var_os("VISUALS_CAPTURE").map(PathBuf::from);
     let output = std::env::var_os("VISUALS_CAPTURE_OUTPUT").map(PathBuf::from);
     if window.is_none() && output.is_none() {

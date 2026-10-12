@@ -25,6 +25,8 @@
 
 mod blur;
 mod camera;
+mod foreground;
+pub use foreground::CameraLayers;
 mod drawing;
 mod gpu;
 mod output;
@@ -59,6 +61,7 @@ pub struct Loaded {
 
 pub struct Renderer {
     camera: Option<camera::Camera>,
+    foreground: Option<foreground::Foreground>,
     contours: Option<crate::contours::Contours>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -253,6 +256,7 @@ impl Renderer {
             .collect();
         let mut renderer = Self {
             camera: None,
+            foreground: None,
             contours: None,
             feedback: [Target::mipped(&device, full, "feedback a"), Target::mipped(&device, full, "feedback b")],
             current: 0,
@@ -834,14 +838,12 @@ impl Renderer {
             self.masters.insert(format, quad(&self.device, "master", &self.master_shader, "fs", format));
         }
         self.queue.write_buffer(&self.master_uniform, 0, bytemuck::cast_slice(&crate::fx::uniforms(&self.master)));
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        self.composite_camera(&mut encoder);
+        let (picture, outgoing) = self.presented_sources();
         let pipeline = &self.masters[&format];
         let texture = wgpu::BindingResource::TextureView;
-        let group = bind(
-            &self.device,
-            pipeline,
-            &[texture(&self.comp.view), texture(&self.outgoing.view), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()],
-        );
-        let mut encoder = self.device.create_command_encoder(&Default::default());
+        let group = bind(&self.device, pipeline, &[texture(picture), texture(outgoing), wgpu::BindingResource::Sampler(&self.samplers.linear_clamp), self.master_uniform.as_entire_binding()]);
         {
             // As the size asked for: at a scale below 1 the picture's own
             // size is that, rounded, and would leave a sliver of a bar.

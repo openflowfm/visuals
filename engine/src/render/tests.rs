@@ -898,3 +898,113 @@ fn disabled_contours_leave_ordinary_render_exactly_unchanged() {
     play(&mut other, &mut Audio::default(), 9, 1.0 / 60.0);
     assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&other, &other.comp));
 }
+
+fn person_layers(camera: f32, outline: f32) -> CameraLayers {
+    let mut contours = contour_fixture();
+    contours.mix = 0.0;
+    let rgba = (0..H).flat_map(|y| (0..W).flat_map(move |_| if y < H / 2 { [255, 0, 0, 255] } else { [0, 0, 255, 255] })).collect();
+    CameraLayers { contours, rgba, camera_opacity: camera, outline_opacity: outline, outline_width: 1.0, interpolation_ms: 65.0, source_epoch: 0 }
+}
+#[test]
+fn person_foreground_has_independent_opacity_orientation_and_obeys_master_without_feedback() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { panic!("camera GPU test needs a GPU") };
+    let mut audio = Audio::default();
+    r.render(&mut audio, 1.0 / 60.0);
+    let original = r.read_back();
+    let original_presented = presented(&mut r, Master::default());
+    r.set_camera_layers(person_layers(1.0, 0.0)).unwrap();
+    let photo = presented(&mut r, Master::default());
+    let bottom = ((H - 1) * W * 4) as usize;
+    assert!(photo[0] > 240 && photo[2] < 15, "photo top red {:?}", &photo[..4]);
+    assert!(photo[bottom + 2] > 240 && photo[bottom] < 15);
+    assert_eq!(r.read_back(), original, "presentation never contaminates comp/feedback");
+    assert!(presented(&mut r, Master { black: 1.0, ..Default::default() }).chunks(4).all(|p| p[..3] == [0, 0, 0]));
+    let faded = presented(&mut r, Master { fade: 1.0, ..Default::default() });
+    assert!(faded[0] > 240, "camera survives outgoing preset transition");
+    r.set_camera_layers(person_layers(0.0, 1.0)).unwrap();
+    let edges = presented(&mut r, Master::default());
+    let at = |x, y| ((y * W + x) * 4) as usize;
+    let top = at(12, 6);
+    let low = at(48, 29);
+    assert!(edges[top] > 100 && edges[top + 2] < 15, "red upper outline {:?}", &edges[top..top + 4]);
+    assert!(edges[low + 2] > 100 && edges[low] < 15, "blue lower outline {:?}", &edges[low..low + 4]);
+    assert_eq!(&edges[at(32, 18)..at(32, 18) + 3], &[0, 0, 0]);
+    r.expire_camera_layers();
+    assert!(r.contours.as_ref().unwrap().paths.is_empty());
+    assert!(r.foreground.is_none());
+    assert_eq!(presented(&mut r, Master::default()), original_presented);
+    r.clear_camera_layers();
+    assert!(r.contours.is_none());
+    assert_eq!(r.read_back(), original);
+}
+#[test]
+fn ending_person_camera_restores_ordinary_renderer_exactly() {
+    let Some(mut a) = renderer(W, H, SPIRAL) else { panic!("GPU required") };
+    let Some(mut b) = renderer(W, H, SPIRAL) else { panic!("GPU required") };
+    b.set_camera_layers(person_layers(1.0, 1.0)).unwrap();
+    b.clear_camera_layers();
+    play(&mut a, &mut Audio::default(), 12, 1.0 / 60.0);
+    play(&mut b, &mut Audio::default(), 12, 1.0 / 60.0);
+    assert_eq!(presented(&mut a, Master::default()), presented(&mut b, Master::default()));
+}
+
+#[test]
+#[ignore = "manual 1080p GPU performance fixture, no camera device or server"]
+fn person_camera_1080p_performance() {
+    use crate::contours::{Contours, Path, Point};
+    for points in [0usize, 2048, 4096, 8192] {
+        let Some(mut r) = renderer(1920, 1080, SPIRAL) else { panic!("GPU required") };
+        let mut audio = Audio::default();
+        let output = Target::new(r.device(), (1920, 1080), "performance output");
+        let mut costs = vec![];
+        let mut uploads = vec![];
+        for frame in 0..150 {
+            let started = std::time::Instant::now();
+            if points > 0 && frame % 2 == 0 {
+                let paths = (0..points / 64)
+                    .map(|j| Path {
+                        closed: true,
+                        points: (0..64)
+                            .map(|i| {
+                                let angle = i as f32 / 64.0 * std::f32::consts::TAU;
+                                Point { x: 160.0 + (30.0 + j as f32) * angle.cos() + (frame as f32 * 0.1).sin(), y: 90.0 + (20.0 + j as f32 * 0.25) * angle.sin(), color: Some([0.2, 0.8, 1.0]) }
+                            })
+                            .collect(),
+                    })
+                    .collect();
+                let upload = std::time::Instant::now();
+                r.set_camera_layers(CameraLayers {
+                    contours: Contours { width: 320, height: 180, mix: 0.3, color: None, paths },
+                    rgba: vec![120; 320 * 180 * 4],
+                    camera_opacity: 0.35,
+                    outline_opacity: 0.65,
+                    outline_width: 0.85,
+                    interpolation_ms: 65.0,
+                    source_epoch: 0,
+                })
+                .unwrap();
+                if frame >= 30 {
+                    uploads.push(upload.elapsed().as_secs_f64() * 1000.0);
+                }
+            }
+            r.advance_camera(1.0 / 60.0);
+            audio.update(&tone(), &tone());
+            r.render(&mut audio, 1.0 / 60.0);
+            r.present(&output.view, FORMAT, (1920, 1080));
+            r.device.poll(wgpu::PollType::wait_indefinitely()).unwrap();
+            if frame >= 30 {
+                costs.push(started.elapsed().as_secs_f64() * 1000.0);
+            }
+        }
+        costs.sort_by(f64::total_cmp);
+        let mean = costs.iter().sum::<f64>() / costs.len() as f64;
+        eprintln!(
+            "camera1080 points={points} frames={} mean_ms={mean:.3} p95_ms={:.3} max_ms={:.3} throughput_fps={:.1} upload_mean_ms={:.3}",
+            costs.len(),
+            costs[costs.len() * 95 / 100],
+            costs.last().unwrap(),
+            1000.0 / mean,
+            uploads.iter().sum::<f64>() / uploads.len().max(1) as f64
+        );
+    }
+}

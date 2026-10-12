@@ -38,6 +38,9 @@ pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
 }
 
 pub enum Cmd {
+    PersonBegin(Sender<String>),
+    PersonFrame(crate::camera::Packet, Sender<Result<u32, String>>),
+    PersonEnd(String, Sender<()>),
     #[cfg(feature = "dev-bridge")]
     CameraFrame(u32, u32, Vec<u8>, f32, Sender<Result<(), String>>),
     #[cfg(feature = "dev-bridge")]
@@ -299,6 +302,7 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
     let now = Instant::now();
     let bench = Loop {
         renderer,
+        person: crate::camera::Session::default(),
         #[cfg(feature = "dev-bridge")]
         camera: None,
         #[cfg(feature = "dev-bridge")]
@@ -344,6 +348,7 @@ struct Output {
 /// refresh and presents it to the bench and the output.
 struct Loop {
     renderer: Renderer,
+    person: crate::camera::Session,
     #[cfg(feature = "dev-bridge")]
     camera: Option<Instant>,
     #[cfg(feature = "dev-bridge")]
@@ -489,6 +494,37 @@ impl Loop {
 
     fn command(&mut self, cmd: Cmd) {
         match cmd {
+            Cmd::PersonBegin(reply) => {
+                self.renderer.clear_camera_layers();
+                let _ = reply.send(self.person.begin());
+            }
+            Cmd::PersonFrame(packet, reply) => {
+                let result = self.person.accepts(&packet).and_then(|()| {
+                    let m = &packet.meta;
+                    let layers = engine::render::CameraLayers {
+                        contours: engine::contours::Contours { width: m.width, height: m.height, mix: m.feed_mix, color: None, paths: m.paths.clone() },
+                        rgba: packet.rgba.clone(),
+                        camera_opacity: m.camera_opacity,
+                        outline_opacity: m.outline_opacity,
+                        outline_width: m.outline_width,
+                        interpolation_ms: m.interpolation_ms,
+                        source_epoch: m.source_epoch,
+                    };
+                    self.renderer.set_camera_layers(layers).map_err(str::to_owned)?;
+                    self.person.accepted(&packet);
+                    if self.person.expired(Instant::now()) {
+                        self.renderer.expire_camera_layers();
+                    }
+                    Ok(packet.meta.sequence)
+                });
+                let _ = reply.send(result);
+            }
+            Cmd::PersonEnd(token, reply) => {
+                if self.person.end(&token) {
+                    self.renderer.clear_camera_layers();
+                }
+                let _ = reply.send(());
+            }
             #[cfg(feature = "dev-bridge")]
             Cmd::CameraSnapshot(reply) => {
                 let picture = if self.loaded && self.bench_shown {
@@ -664,6 +700,9 @@ impl Loop {
         if self.camera.is_some_and(|last| last.elapsed() > Duration::from_secs(2)) {
             self.stop_camera();
         }
+        if self.person.expired(Instant::now()) {
+            self.renderer.expire_camera_layers();
+        }
         let unpaced = !self.refresh.is_zero() && self.refresh < Duration::from_millis(4);
         if unpaced {
             std::thread::sleep(UNPACED.saturating_sub(self.last.elapsed()));
@@ -678,6 +717,7 @@ impl Loop {
         let frozen = speed < STILL;
         // A stall (a slow load, the machine asleep) moves the preset on at most a
         // quarter second; otherwise whole refreshes, evened out (`Pacer`).
+        self.renderer.advance_camera(now.duration_since(self.last).as_secs_f32());
         let elapsed = self.pacer.tick(now.duration_since(self.last).as_secs_f64()).min(0.25);
         self.last = now;
         {

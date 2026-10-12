@@ -1,7 +1,7 @@
 use super::FORMAT;
 
 pub(super) struct Target {
-    texture: wgpu::Texture,
+    pub(super) texture: wgpu::Texture,
     /// What shaders sample: every mip level.
     pub(super) view: wgpu::TextureView,
     /// What is drawn into: level 0 alone (the same as `view` without mips).

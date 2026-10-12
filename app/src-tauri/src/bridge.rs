@@ -229,6 +229,8 @@ fn respond(stream: &mut TcpStream, status: &str, kind: &str, body: &[u8]) {
 struct Call {
     cmd: String,
     #[serde(default)]
+    raw: Option<Vec<u8>>,
+    #[serde(default)]
     args: serde_json::Value,
     /// The page load that sent it, and its number there; without them it isn't ordered.
     #[serde(default)]
@@ -290,7 +292,7 @@ impl Bridge {
             callback: CallbackFn(0),
             error: CallbackFn(1),
             url: ORIGIN.parse().expect("a URL"),
-            body: InvokeBody::Json(args),
+            body: call.raw.map(InvokeBody::Raw).unwrap_or(InvokeBody::Json(args)),
             headers: Default::default(),
             invoke_key: self.app.invoke_key().to_string(),
         };

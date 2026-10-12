@@ -48,9 +48,12 @@ impl Contours {
     /// stabilized by the source; native refreshes crossfade rather than invent
     /// correspondence between unrelated path ordinals.
     pub(crate) fn draw(&self, size: &Size, bass: f64, list: &mut DrawList) {
+        self.draw_width(size, bass, list, None);
+    }
+    pub(crate) fn draw_width(&self, size: &Size, bass: f64, list: &mut DrawList, width: Option<f32>) {
         let first = list.vertices.len() as u32;
         let scale = size.texsize_y as f32 / 720.0;
-        let core = 0.65 * scale.max(0.5);
+        let core = width.map_or(0.65 * scale.max(0.5), |w| w * size.texsize_y as f32 / self.height as f32 * 0.5);
         let offsets = [-(core + 1.0), -core, core, core + 1.0];
         let alpha = [0.0, 1.0, 1.0, 0.0];
         let emission = (self.mix * (0.85 + 0.15 * bass.clamp(0.0, 2.0) as f32)).min(1.0);
