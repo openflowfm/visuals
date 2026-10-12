@@ -43,6 +43,12 @@ pub enum Cmd {
     #[cfg(feature = "dev-bridge")]
     CameraSettings(f64, f32),
     #[cfg(feature = "dev-bridge")]
+    CameraResize(u32, u32),
+    #[cfg(feature = "dev-bridge")]
+    CameraAudio(Vec<f32>, f32, Sender<()>),
+    #[cfg(feature = "dev-bridge")]
+    CameraAudioStop(Sender<()>),
+    #[cfg(feature = "dev-bridge")]
     CameraStop(Sender<()>),
     /// Load a preset with this seed; its file, when it has one (the editor's has none),
     /// is what [`on_drawing`] names.
@@ -222,6 +228,8 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
         #[cfg(feature = "dev-bridge")]
         camera: None,
         #[cfg(feature = "dev-bridge")]
+        camera_audio: None,
+        #[cfg(feature = "dev-bridge")]
         camera_settings: (1.0, 0.0),
         adapter,
         surface,
@@ -260,6 +268,8 @@ struct Loop {
     renderer: Renderer,
     #[cfg(feature = "dev-bridge")]
     camera: Option<Instant>,
+    #[cfg(feature = "dev-bridge")]
+    camera_audio: Option<(Instant, Vec<f32>)>,
     #[cfg(feature = "dev-bridge")]
     camera_settings: (f64, f32),
     adapter: wgpu::Adapter,
@@ -406,6 +416,23 @@ impl Loop {
                 let _ = reply.send(result);
             }
             #[cfg(feature = "dev-bridge")]
+            Cmd::CameraAudio(samples, rate, reply) => {
+                self.audio.set_sample_rate(rate);
+                self.camera_audio = Some((Instant::now(), samples));
+                let _ = reply.send(());
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraAudioStop(reply) => {
+                self.camera_audio = None;
+                self.audio = Audio::default();
+                let _ = reply.send(());
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraResize(w, h) => {
+                self.renderer.resize(w, h);
+                self.command(Cmd::Resize(w, h));
+            }
+            #[cfg(feature = "dev-bridge")]
             Cmd::CameraSettings(speed, persistence) => self.camera_settings = (speed, persistence),
             #[cfg(feature = "dev-bridge")]
             Cmd::CameraStop(reply) => {
@@ -521,6 +548,8 @@ impl Loop {
     #[cfg(feature = "dev-bridge")]
     fn stop_camera(&mut self) {
         self.camera = None;
+        self.camera_audio = None;
+        self.audio = Audio::default();
         self.renderer.clear_camera();
         self.renderer.set_trails(0.0);
         self.renderer.clear();
@@ -552,6 +581,13 @@ impl Loop {
                 let ring = self.ring.lock().unwrap();
                 // Sensitivity: a gain on what the presets hear.
                 (ring.0.iter().map(|s| s * gain).collect(), ring.1.iter().map(|s| s * gain).collect())
+            };
+            #[cfg(feature = "dev-bridge")]
+            let (l, r) = if let Some((at, samples)) = &self.camera_audio {
+                let samples = camera_audio_window(*at, samples, now).to_vec();
+                (samples.clone(), samples)
+            } else {
+                (l, r)
             };
             self.audio.update(&l, &r);
         }
@@ -1051,5 +1087,32 @@ mod tests {
         let mut c = Content(vec![Bench, Frost, Other]);
         c.bench();
         assert_eq!(c.0, [Frost, Bench, Other]);
+    }
+}
+
+#[cfg(feature = "dev-bridge")]
+fn camera_audio_window(at: Instant, samples: &[f32], now: Instant) -> &[f32] {
+    if now.saturating_duration_since(at) <= Duration::from_millis(250) { samples } else { &[] }
+}
+
+#[cfg(all(test, feature = "dev-bridge"))]
+mod camera_audio_tests {
+    use super::*;
+    #[test]
+    fn real_fft_hears_pcm_and_expired_windows_are_silent() {
+        let now = Instant::now();
+        let pcm: Vec<f32> = (0..1024).map(|i| (i as f32 * std::f32::consts::TAU * 180.0 / 48000.0).sin() * 0.7).collect();
+        let mut audio = Audio::new(48000.0);
+        let fresh = camera_audio_window(now, &pcm, now);
+        audio.update(fresh, fresh);
+        audio.update_levels(60.0, 1);
+        assert!(audio.bass() > 0.0);
+        assert!(audio.freq.iter().any(|v| *v > 0.0));
+        let stale = camera_audio_window(now, &pcm, now + Duration::from_millis(251));
+        assert!(stale.is_empty());
+        audio.update(stale, stale);
+        assert!(audio.freq.iter().all(|v| *v == 0.0));
+        let stopped = Audio::default();
+        assert!(stopped.freq.iter().all(|v| *v == 0.0));
     }
 }

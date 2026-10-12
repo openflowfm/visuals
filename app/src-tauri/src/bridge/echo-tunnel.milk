@@ -23,12 +23,12 @@ sy=1
 ob_a=0
 ib_a=0
 mv_a=0
-per_frame_1=zoom=1.035; rot=0.027+0.012*sin(time*0.63);
+per_frame_1=zoom=1.035+0.018*min(bass,2); rot=0.027+0.012*min(mid,2)+0.012*sin(time*0.63);
 per_pixel_1=zoom=zoom+0.022*sin(rad*9-time*1.7); rot=rot+0.018*sin(rad*12+time);
 comp_1=`shader_body
 comp_2=`{
 comp_3=`float2 p = uv - 0.5;
-comp_4=`float2 shift = p * (0.009 + 0.006*sin(time));
+comp_4=`float2 shift = p * (0.009 + 0.006*sin(time) + 0.004*min(treb,2));
 comp_5=`float3 a = tex2D(sampler_main, uv + shift).xyz;
 comp_6=`float3 b = tex2D(sampler_main, uv).xyz;
 comp_7=`float3 c = tex2D(sampler_main, uv - shift).xyz;
