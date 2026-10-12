@@ -2,7 +2,7 @@
 
 ## Running state
 
-Resumed at Ryan's request. Coordinator implementation head: `70d434b687f6e68a1bfc67ba90918bcc92677105`, branch `codex/camera-coordinator`.
+Resumed at Ryan's request. Coordinator implementation head: `be1e7a98521b4a51d4698fdd9e9535120b2c7dc9`, branch `codex/camera-coordinator`.
 Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`.
 Unified launcher is running on 4286/6116 (session 11148); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
 
@@ -21,6 +21,12 @@ Latest requested features: compact preset overlay for fast cycling; smooth, almo
 - Native 360p, 720p, 1080p renderer AND output resizing; 720p default. Returned dimensions are authoritative.
 - Explicit Enable audio, microphone/interface selector, sensitivity, input meter. Browser mono PCM snapshots feed native engine FFT; no speaker monitoring. Stop drains requests and releases tracks/context. No automatic microphone permission request on startup.
 - Preset request serialization, rejection rollback to the last accepted preset, and startup ordering fixes.
+
+## Feed balance follow-up
+
+Ryan still felt contours were separate from the effect. Fresh loads retained the old 85% clean overlay and 9% native input, obscuring the waveform change. Defaults now use Clean outline 0%, Edge feed 30%, Speed 0.4x; temporal stabilization is unchanged. Labels explicitly distinguish the undistorted foreground overlay from edge input (Camera feed in raw mode). Source `78950e2f` → integrated `be1e7a98`; 83 tests and all required UI checks passed. Root reviewed the narrow change and verified fresh defaults in the browser. No native changes or server restart needed.
+
+Visual checks with the moving photo fixture: Chromatic and Acid visibly stretch the contours into trails with no foreground overlay. With clean outline and edge feed both zero, Prism's effect faded away; restoring edge feed rebuilt it, confirming causal source input. Physical webcam feel remains for Ryan to judge. Preview remains running on the same token/session; the single completed balance worktree was cleaned up after integration, branch retained.
 
 ## Native contour waveform and temporal steadiness follow-up
 
