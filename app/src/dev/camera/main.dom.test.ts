@@ -71,7 +71,7 @@ beforeEach(async () => {
       {
         createLinearGradient: () => ({ addColorStop: vi.fn() }),
         drawImage: (source: object) => {
-          canvasEvents.push({ id, action: 'displayWidth' in source ? 'decoded' : 'draw' });
+          canvasEvents.push({ id, action: 'displayWidth' in source ? 'decoded' : source instanceof HTMLCanvasElement && source.id === 'identity-source' ? 'camera-overlay' : 'draw' });
         },
         getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }),
         putImageData: (image: ImageData) => {
@@ -628,4 +628,30 @@ test('contours upload native wave geometry while Raw camera retains RGBA transpo
   document.getElementById('raw-mode')!.click();
   await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=320&h=180'))).toBe(true));
   expect((document.getElementById('steadiness') as HTMLInputElement).disabled).toBe(true);
+});
+
+test('camera and outline opacities are independent and Rescue never restores the photo or changes feed', async () => {
+  const camera = document.getElementById('camera-opacity') as HTMLInputElement;
+  const outline = document.getElementById('recognition') as HTMLInputElement;
+  expect(camera.value).toBe('0');
+  expect(outline.value).toBe('65');
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(canvasEvents.some((e) => e.id === 'identity-source' && e.action === 'paint')).toBe(true));
+  document.getElementById('rescue')!.click();
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  expect(canvasEvents.some((e) => e.action === 'camera-overlay')).toBe(false);
+  const uploads = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/contours'));
+  expect(uploads.every(([, init]) => JSON.parse(String(init?.body)).mix === 0.3)).toBe(true);
+  outline.value = '0';
+  outline.dispatchEvent(new Event('input'));
+  camera.value = '50';
+  camera.dispatchEvent(new Event('input'));
+  await waitFor(() => expect(canvasEvents.some((e) => e.action === 'camera-overlay')).toBe(true));
+  expect(outline.value).toBe('0');
+  camera.value = '0';
+  camera.dispatchEvent(new Event('input'));
+  const since = canvasEvents.length;
+  await new Promise((resolve) => setTimeout(resolve, 70));
+  expect(canvasEvents.slice(since).some((e) => e.action === 'camera-overlay')).toBe(false);
+  expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
 });

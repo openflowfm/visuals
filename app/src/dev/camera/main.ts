@@ -186,7 +186,7 @@ async function capture(id: number) {
         await new Promise((r) => setTimeout(r, PREPARATION_MS));
         continue;
       }
-      const mix = performance.now() < rescueUntil ? 0.8 : value('mix') / 100;
+      const mix = value('mix') / 100;
       const filterStarted = performance.now();
       const source = g.getImageData(0, 0, WIDTH, HEIGHT).data;
       let data: Uint8ClampedArray;

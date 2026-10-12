@@ -85,10 +85,12 @@ Following satoramoto/web's Tree Museum strategy, one prepared source drives both
 native feedback and a crisp foreground. Colored contours are the actual RGB bytes
 uploaded to MilkDrop, not a tint on the returned picture. **Color** sets their
 saturation (zero returns silver contours). A gently traveling palette varies with
-vertical position and subject luminance. **Camera / outline opacity** independently mixes a
-bright contour and lightly posterized facial-shading plate above the wild native
-output. Zero exposes the native loop alone; **Bring my face back** briefly restores
-full foreground strength as well as fresh input. Raw comparison omits this plate.
+vertical position and subject luminance. **Camera opacity** mixes the lightly
+posterized camera image above the native output; **Outline opacity** independently
+adds recognizable edges. Camera opacity defaults to zero and skips the camera-image
+draw entirely. Set both to zero to expose the native loop alone. **Bring my face
+back** briefly boosts only the outline, without restoring the camera image or
+changing Edge feed. Raw comparison omits these foreground layers.
 The foreground is committed only after its matching upload succeeds. It is cleared
 on stop, mode, mirror or isolation changes and after 250 ms without a fresh mask.
 Both products use the same 320×180 source; only Canvas scaling/compositing runs at
@@ -190,34 +192,38 @@ measurements and a sustained soak against the preceding diagnostics-only revisio
 ## Temporal edge steadiness
 
 **Curve smoothing** rounds each frame spatially; **Edge steadiness** additionally
-calms small frame-to-frame motion. Stabilization projects each current vertex onto
-nearby, similarly oriented prior segments using a bounded spatial grid, independent
-of path order or topology. A time-based response eases subpixel/one-pixel shimmer,
-relaxes near a 2.25-input-pixel movement limit, and immediately follows larger moves.
-Disappearing edges are never retained as trails. Gaps over 150 ms and stale-mask,
-Stop, source, mirror and mode resets discard history. The same stabilized paths
-are rasterized for the prepared view and used in the foreground. Work remains at
-320×180 and the geometry budget is 512 paths / 8,192 points; the output loop remains
-independent. A default of 65% favors stability while retaining motion response.
+calms motion between frames. Stabilization projects current vertices onto nearby,
+similarly oriented prior segments through a bounded spatial grid, independent of
+path order or topology. The default 85% uses a 220 ms settling time constant for
+small motion. Matching extends to six input pixels, with faster response between
+three and six pixels and immediate response beyond the matching radius. This
+intentionally trades some motion latency for calmer two-to-three-pixel jitter.
 
-Contour mode now sends those paths as colored native waveform geometry through
+The native feed and prepared view receive the stabilized geometry. The foreground
+interpolates matched geometry at output cadence over 50–85 ms, retargeting from its
+currently displayed positions. It does not blend whole images or pair unrelated
+paths by index. Removed edges disappear immediately; new unmatched edges appear
+immediately. Gaps over 150 ms and stale-mask, Stop, source, mirror and mode resets
+discard history. Interpolation does not extend the source's 250 ms freshness limit.
+Work stays at 320×180 with at most 512 paths / 8,192 points; output remains independent.
+
+Contour mode sends paths as colored native waveform geometry through
 `POST /__bridge/camera/contours`, rather than uploading an opaque raster image.
 The payload contains source dimensions, mix and whole open/closed paths with
 normalized palette colors per vertex. Serialization independently enforces the
 512-path / 8,192-point limit, dropping whole excess paths rather than truncating a
 closed loop. Vertex colors come from the palette, never from black/antialiased edge
-pixels. The prepared thumbnail remains a raster view of the same geometry; the
-Camera / outline opacity overlay uses the same stabilized paths. Set Camera / outline opacity to zero to
-inspect only the native engine. Raw camera comparison retains the RGBA frame route.
+pixels. Raw camera comparison retains the RGBA frame route.
 
+The default balance is **Camera opacity 0%**, **Outline opacity 65%**,
+**Edge feed 30%**, and **Speed 0.4×**: recognizable edges shedding native trails
+without the camera image. Both foreground opacities are independent of native feed.
 
-The default balance keeps a recognizable outline shedding strong native trails:
-**Camera / outline opacity 35%**,
-**Edge feed 30%**, and **Speed 0.4×**. Camera / outline opacity adds an undistorted foreground
-above the feedback; increase it or use **Bring my face back** when you want clearer
-recognition. Edge steadiness remains 65%. These are presentation defaults only;
-the native engine and temporal stabilization algorithms are unchanged.
-
-Camera / outline opacity is the existing recognizable foreground fade, independent
-of Edge feed. It fades the camera shading and clean outline together; no additional
-slider or native rendering behavior is introduced.
+Synthetic validation at 30 Hz reduced stationary alternating ±2/±3-input-pixel
+jitter RMS by 92.4%/92.1% at the default steadiness. A local Node benchmark of
+stabilization plus display retargeting measured median/p95 1.17/1.82 ms at 2,000
+points and 4.74/7.96 ms at 8,000 points. Display sampling alone measured median
+0.035/0.139 ms respectively. These are synthetic CPU measurements, excluding edge
+extraction, masking, native rendering and canvas drawing; they do not establish
+physical-webcam appearance or browser frame rate. Regression tests cover midpoint
+interpolation, reordered paths, resets, removal, independent opacity and Rescue.
