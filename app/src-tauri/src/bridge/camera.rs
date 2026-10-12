@@ -59,9 +59,9 @@ fn audio_samples(request: &Request) -> Result<(Vec<f32>, f32), &'static str> {
 
 /// The timing includes waiting for the render thread, GPU readback, and packing.
 /// Socket transfer is measured by the caller: it cannot appear in prior headers.
-fn output_header(w: u32, h: u32, bytes: usize, snapshot_ms: f64) -> String {
+fn output_header(w: u32, h: u32, bytes: usize, snapshot_ms: f64, sequence: u64) -> String {
     format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {bytes}\r\nCache-Control: no-store\r\nX-Bridge: 1\r\nX-Frame-Width: {w}\r\nX-Frame-Height: {h}\r\nX-Snapshot-Ms: {snapshot_ms:.3}\r\nServer-Timing: snapshot;dur={snapshot_ms:.3}\r\nConnection: close\r\n\r\n"
+        "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: {bytes}\r\nCache-Control: no-store\r\nX-Bridge: 1\r\nX-Frame-Width: {w}\r\nX-Frame-Height: {h}\r\nX-Frame-Sequence: {sequence}\r\nX-Snapshot-Ms: {snapshot_ms:.3}\r\nServer-Timing: snapshot;dur={snapshot_ms:.3}\r\nConnection: close\r\n\r\n"
     )
 }
 
@@ -108,10 +108,10 @@ impl Bridge {
 
     pub(super) fn camera_output(&self, stream: &mut TcpStream) {
         let start = std::time::Instant::now();
-        let picture = self.app.state::<App>().ask(|reply| bench::Cmd::Snapshot(false, reply)).ok().flatten();
+        let picture = self.app.state::<App>().ask(bench::Cmd::CameraSnapshot).ok().flatten();
         match picture {
-            Some((w, h, rgba)) if w > 0 && h > 0 => {
-                let head = output_header(w, h, rgba.len(), start.elapsed().as_secs_f64() * 1000.0);
+            Some(((w, h, rgba), sequence)) if w > 0 && h > 0 => {
+                let head = output_header(w, h, rgba.len(), start.elapsed().as_secs_f64() * 1000.0, sequence);
                 let _ = stream.write_all(head.as_bytes()).and_then(|_| stream.write_all(&rgba));
             }
             _ => respond(stream, "204 No Content", "application/octet-stream", b""),
@@ -209,12 +209,13 @@ mod tests {
     }
     #[test]
     fn raw_output_describes_the_packed_frame_and_readback_cost() {
-        let head = output_header(640, 360, 640 * 360 * 4, 2.125);
+        let head = output_header(640, 360, 640 * 360 * 4, 2.125, 42);
         for field in [
             "Content-Type: application/octet-stream",
             "Content-Length: 921600",
             "X-Frame-Width: 640",
             "X-Frame-Height: 360",
+            "X-Frame-Sequence: 42",
             "X-Snapshot-Ms: 2.125",
             "Server-Timing: snapshot;dur=2.125",
             "Cache-Control: no-store",
