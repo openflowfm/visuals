@@ -501,3 +501,111 @@ test('unavailable encoded service visibly falls back to raw output', async () =>
   expect(document.getElementById('transport-status')!.textContent).toContain('Raw fallback · video 503');
   expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
 });
+
+test('Stop during overlapped encoded fetch aborts prefetch and closes late decoded output', async () => {
+  let callbacks!: VideoDecoderInit;
+  const decoderClosed = vi.fn();
+  const frameClosed = vi.fn();
+  vi.stubGlobal(
+    'EncodedVideoChunk',
+    class {
+      constructor(public options: EncodedVideoChunkInit) {}
+    },
+  );
+  vi.stubGlobal(
+    'VideoDecoder',
+    class {
+      static isConfigSupported = async () => ({ supported: true });
+      state = 'configured';
+      constructor(init: VideoDecoderInit) {
+        callbacks = init;
+      }
+      configure() {}
+      decode() {}
+      close() {
+        this.state = 'closed';
+        decoderClosed();
+      }
+    },
+  );
+  let videoCalls = 0,
+    aborted = false;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/video?')) {
+      if (++videoCalls === 1)
+        return new Response(new Uint8Array(5), { headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2', 'X-Frame-Sequence': '1', 'X-Frame-Timestamp': '16667', 'X-Video-Codec': 'avc1.640028' } });
+      return await new Promise<Response>((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () => {
+          aborted = true;
+          reject(new Error('Aborted'));
+        }),
+      );
+    }
+    return outputResponse(String(url));
+  });
+  vi.resetModules();
+  await import('./main');
+  await waitFor(() => expect(document.getElementById('video-capability')!.textContent).toContain('supported'));
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(videoCalls).toBe(2));
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  expect(videoCalls).toBe(2);
+  document.getElementById('stop')!.click();
+  await waitFor(() => expect(aborted).toBe(true));
+  expect(decoderClosed).toHaveBeenCalledOnce();
+  callbacks.output({ displayWidth: 2, displayHeight: 2, close: frameClosed } as unknown as VideoFrame);
+  expect(frameClosed).toHaveBeenCalledOnce();
+  expect(videoCalls).toBe(2);
+});
+
+test('decode failure cancels prefetched packet before raw fallback continues', async () => {
+  let callbacks!: VideoDecoderInit;
+  vi.stubGlobal(
+    'EncodedVideoChunk',
+    class {
+      constructor(public options: EncodedVideoChunkInit) {}
+    },
+  );
+  vi.stubGlobal(
+    'VideoDecoder',
+    class {
+      static isConfigSupported = async () => ({ supported: true });
+      state = 'configured';
+      constructor(init: VideoDecoderInit) {
+        callbacks = init;
+      }
+      configure() {}
+      decode() {}
+      close() {
+        this.state = 'closed';
+      }
+    },
+  );
+  let videoCalls = 0,
+    aborted = false;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/video?')) {
+      if (++videoCalls === 1)
+        return new Response(new Uint8Array(5), { headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2', 'X-Frame-Sequence': '1', 'X-Frame-Timestamp': '16667', 'X-Video-Codec': 'avc1.640028' } });
+      return await new Promise<Response>((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () => {
+          aborted = true;
+          reject(new Error('Aborted'));
+        }),
+      );
+    }
+    return outputResponse(String(url));
+  });
+  vi.resetModules();
+  await import('./main');
+  await waitFor(() => expect(document.getElementById('video-capability')!.textContent).toContain('supported'));
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(videoCalls).toBe(2));
+  callbacks.error(new DOMException('Decode rejected'));
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/output'))).toBe(true));
+  expect(aborted).toBe(true);
+  expect(videoCalls).toBe(2);
+  expect(document.getElementById('transport-status')!.textContent).toContain('Raw fallback');
+});

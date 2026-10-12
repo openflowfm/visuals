@@ -2,6 +2,7 @@ import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { Contours, rawFrameSize } from './contours';
 import { ColorSignal } from './color-signal';
+import { VideoPackets } from './video-packets';
 import { H264Decoder } from './h264-decoder';
 import { videoCapability } from './video-capability';
 import { OutputMeter } from './output-meter';
@@ -68,6 +69,12 @@ let spectrum: CanvasGradient | null = null;
 let spectrumKey = '';
 let supportedVideoCodec: string | null = null;
 let outputDecoder: H264Decoder | null = null;
+let encodedPackets: VideoPackets | null = null;
+function drainVideoPackets() {
+  const packets = encodedPackets;
+  encodedPackets = null;
+  return packets?.dispose() ?? Promise.resolve();
+}
 let videoFailed = false;
 const g = input.getContext('2d', { willReadFrequently: true })!;
 const demoPhoto = new Image();
@@ -212,6 +219,7 @@ async function paint(id: number) {
   const meter = new OutputMeter(performance.now());
   let measuredSize = '';
   let afterSequence = '0';
+  let packetWaitTotal = 0;
   let decodeTotal = 0,
     encodeTotal = 0,
     encodeCount = 0;
@@ -233,20 +241,34 @@ async function paint(id: number) {
           outputDecoder.dispose();
           outputDecoder = null;
         }
-        const r = await fetch(path(encoded ? `camera/video?after=${afterSequence}` : 'camera/output'), { cache: 'no-store' });
+        let r: Response, buffer: ArrayBuffer, fetchMs: number, bodyMs: number;
+        if (encoded) {
+          encodedPackets ??= new VideoPackets((after) => path(`camera/video?after=${after}`));
+          const packet = await encodedPackets.take(afterSequence);
+          r = packet.response;
+          buffer = packet.buffer;
+          fetchMs = packet.fetchMs;
+          bodyMs = packet.bodyMs;
+        } else {
+          await drainVideoPackets();
+          r = await fetch(path('camera/output'), { cache: 'no-store' });
+          const headersAt = performance.now();
+          buffer = await r.arrayBuffer();
+          fetchMs = headersAt - start;
+          bodyMs = performance.now() - headersAt;
+        }
+        const packetWaitMs = performance.now() - start;
         if (id !== generation) return;
         if (encoded && r.status === 204) return;
         if (encoded && r.status !== 200) {
           videoFailed = true;
           outputDecoder?.dispose();
           outputDecoder = null;
-          $('transport-status').textContent = `Raw fallback · video ${r.status}: ${await r.text()}`;
+          await drainVideoPackets();
+          $('transport-status').textContent = `Raw fallback · video ${r.status}: ${new TextDecoder().decode(buffer)}`;
           return;
         }
         if (r.status !== 200) throw new Error(`Output unavailable (${r.status})`);
-        const headersAt = performance.now();
-        const buffer = await r.arrayBuffer();
-        const bodyAt = performance.now();
         const [width, height] = rawFrameSize(r.headers, encoded ? Number(r.headers.get('X-Frame-Width')) * Number(r.headers.get('X-Frame-Height')) * 4 : buffer.byteLength);
         if (id !== generation) return;
         let decoded: VideoFrame | null = null;
@@ -258,6 +280,9 @@ async function paint(id: number) {
             const timestampHeader = r.headers.get('X-Frame-Timestamp');
             const timestamp = timestampHeader === null ? NaN : Number(timestampHeader);
             if (!Number.isSafeInteger(timestamp) || timestamp < 0 || !buffer.byteLength) throw new Error('Invalid encoded frame metadata');
+            const sequence = r.headers.get('X-Frame-Sequence');
+            if (!sequence || !/^\d+$/.test(sequence)) throw new Error('Invalid encoded frame sequence');
+            if ($<HTMLSelectElement>('output-transport').value === 'auto') encodedPackets?.prefetch(sequence);
             decoded = await outputDecoder.decode(buffer, r.headers.get('X-Video-Codec') ?? supportedVideoCodec!, width, height, timestamp);
             if (decoded.displayWidth !== width || decoded.displayHeight !== height) throw new Error('Decoded frame dimensions do not match native output');
             decodingMs = performance.now() - decodingAt;
@@ -265,6 +290,7 @@ async function paint(id: number) {
             decoded?.close();
             outputDecoder?.dispose();
             outputDecoder = null;
+            await drainVideoPackets();
             if (id === generation) {
               videoFailed = true;
               $('transport-status').textContent = `Raw fallback · ${String(error)}`;
@@ -327,8 +353,9 @@ async function paint(id: number) {
             } else if (!videoFailed) $('transport-status').textContent = 'Raw RGBA · direct comparison';
             frames++;
             decodeTotal += decodingMs;
-            fetchTotal += headersAt - start;
-            bodyTotal += bodyAt - headersAt;
+            fetchTotal += fetchMs;
+            bodyTotal += bodyMs;
+            packetWaitTotal += packetWaitMs;
             composeTotal += performance.now() - composingAt;
             if (performance.now() - rateAt >= 1000) {
               const recent = meter.snapshot(performance.now(), 1000);
@@ -339,8 +366,8 @@ async function paint(id: number) {
                 : 'Native frame IDs unavailable · throughput is not render FPS';
               $('input-cost').textContent = `${((captureFrames * 1000) / (performance.now() - rateAt)).toFixed(0)} INPUT FPS · ${preparationMs.toFixed(1)} MS`;
               $('timings').textContent =
-                `Encode ${encodeCount ? (encodeTotal / encodeCount).toFixed(1) + ' ms' : '—'} · decode ${(decodeTotal / frames).toFixed(1)} ms | Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
-              snapshotTotal = snapshotCount = encodeTotal = encodeCount = decodeTotal = 0;
+                `Encode ${encodeCount ? (encodeTotal / encodeCount).toFixed(1) + ' ms' : '—'} · decode ${(decodeTotal / frames).toFixed(1)} ms | Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: packet wait ${(packetWaitTotal / frames).toFixed(1)} ms · fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
+              snapshotTotal = snapshotCount = encodeTotal = encodeCount = decodeTotal = packetWaitTotal = 0;
               frames = captureFrames = 0;
               preparationTotal = uploadTotal = fetchTotal = bodyTotal = composeTotal = 0;
               rateAt = performance.now();
@@ -361,6 +388,7 @@ async function paint(id: number) {
   }
 }
 async function stop(releaseAudio = true) {
+  const videoDrained = drainVideoPackets();
   outputDecoder?.dispose();
   outputDecoder = null;
   const audioStopped = releaseAudio ? audio.stop() : Promise.resolve();
@@ -386,7 +414,7 @@ async function stop(releaseAudio = true) {
   const lastFrame = posting;
   const lastOutput = reading;
   await ordered(async () => {
-    await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {})]);
+    await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {}), videoDrained]);
     await post('camera/stop').catch(() => {});
   });
   await audioStopped;
@@ -628,6 +656,7 @@ $('gain').oninput = () => {
   $('gain-value').textContent = `${(value('gain') / 100).toFixed(1)}×`;
 };
 addEventListener('pagehide', () => {
+  void drainVideoPackets();
   outputDecoder?.dispose();
   outputDecoder = null;
   void audio.stop();
@@ -681,6 +710,9 @@ function preparePersonMask() {
  * Old uploads finish before native reset; old output responses fail the generation
  * check. Camera tracks stay live while a matching new mask is acquired. */
 async function resetPreparation() {
+  const videoDrained = drainVideoPackets();
+  outputDecoder?.dispose();
+  outputDecoder = null;
   personMask?.dispose();
   personMask = null;
   preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
@@ -695,7 +727,7 @@ async function resetPreparation() {
   status('Clearing the previous source…');
   try {
     await ordered(async () => {
-      await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {})]);
+      await Promise.all([lastFrame.catch(() => {}), lastOutput.catch(() => {}), videoDrained]);
       await post('camera/stop');
       if (id === generation && mode) await settings();
     });

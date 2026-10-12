@@ -160,3 +160,11 @@ Browser hardware preference is not proof of its chosen decoder implementation.
 Measure the ten-second distinct-frame rate for each resolution/preset. This transport
 does not change the 320×180 contour preparation budget or request camera/microphone
 permission automatically.
+
+Encoded transport overlaps one prefetched packet with the current decode. The slot
+holds at most one request or completed packet; there is still only one decoder job.
+Each next request asks for a sequence newer than the packet being decoded, so it
+cannot flood the independent-frame producer. Stop, source reset, raw comparison
+and decode fallback abort and drain that slot. The timing display distinguishes
+critical-path **packet wait** from total fetch time: fetch now overlaps decoding,
+so adding those two service times does not give the presentation interval.
