@@ -100,7 +100,7 @@ export const levels = () => invoke<[number, number]>('levels');
 export const stats = () => invoke<Stats>('stats');
 
 /** `listen::SourceId`: an app's sound (a running DAW…), everything the Mac plays, or an input device. */
-export type SourceId = { kind: 'app'; bundle: string } | { kind: 'system' } | { kind: 'device'; name: string; size: number };
+export type SourceId = { kind: 'app'; bundle: string } | { kind: 'system' } | { kind: 'device'; name: string; size: number; uid?: string };
 
 /** `listen::Source`: something to listen to, as the source picker names it. */
 export interface Source {

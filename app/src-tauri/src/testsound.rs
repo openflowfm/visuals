@@ -46,11 +46,22 @@ pub fn test_sound(on: bool, handle: AppHandle) -> Result<(), String> {
         }
         let app = handle.state::<App>();
         // Closing the input stops it writing into the ring, so the two never mix.
-        let rate = app.listening.lock().unwrap().take().map_or(DEFAULT_RATE, |l| l.rate);
+        let _operation = app.audio.operation.lock().unwrap();
+        app.audio.pause(true);
+        app.listening.lock().unwrap().take();
+        app.audio.mic.lock().unwrap().take();
+        app.audio.clear(crate::audio::Lane::Main, &app.ring);
+        app.audio.clear(crate::audio::Lane::Mic, &app.ring);
+        let rate = DEFAULT_RATE;
         app.send(bench::Cmd::SampleRate(rate));
+        drop(_operation);
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
-        let thread = std::thread::Builder::new().name("test sound".into()).spawn(move || play(handle, rate, flag)).map_err(|e| e.to_string())?;
+        let player_handle = handle.clone();
+        let thread = std::thread::Builder::new().name("test sound".into()).spawn(move || play(player_handle, rate, flag)).map_err(|e| {
+            app.audio.pause(false);
+            e.to_string()
+        })?;
         *playing = Some(Playing { stop, thread });
     } else if let Some(p) = playing.take() {
         p.stop.store(true, Ordering::Relaxed);
@@ -98,6 +109,7 @@ fn play(handle: AppHandle, rate: f32, stop: Arc<AtomicBool>) -> bool {
 
 /// Silence the ring and listen again to what was chosen before.
 fn finish(app: &App) {
+    app.audio.pause(false);
     {
         let mut ring = app.ring.lock().unwrap();
         let (left, right) = &mut *ring;

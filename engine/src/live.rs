@@ -39,31 +39,83 @@ pub struct Input {
 
 /// Open `device` and write its channels `left` and `right` (from 0) into `ring`.
 /// The ring is the caller's, so it can outlive a switch to another input.
-pub fn open_input(device: &cpal::Device, (left, right): (usize, usize), ring: Ring) -> Result<Input, String> {
+/// A nonblocking callback destination shared by device and process-tap inputs.
+#[derive(Clone)]
+pub struct Sink(Arc<dyn Fn(&[[f32; 2]]) + Send + Sync>);
+impl Sink {
+    pub fn new(write: impl Fn(&[[f32; 2]]) + Send + Sync + 'static) -> Self {
+        Self(Arc::new(write))
+    }
+    pub fn write(&self, frames: &[[f32; 2]]) {
+        (self.0)(frames);
+    }
+    pub fn ring(ring: Ring) -> Self {
+        Self::new(move |frames| {
+            if let Ok(mut ring) = ring.try_lock() {
+                for &[l, r] in frames {
+                    ring.0.push_back(l);
+                    ring.1.push_back(r);
+                }
+                while ring.0.len() > WINDOW {
+                    ring.0.pop_front();
+                    ring.1.pop_front();
+                }
+            }
+        })
+    }
+}
+pub fn open_input(device: &cpal::Device, channels: (usize, usize), ring: Ring) -> Result<Input, String> {
+    open_input_sink(device, channels, Sink::ring(ring))
+}
+pub fn open_input_sink(device: &cpal::Device, (left, right): (usize, usize), sink: Sink) -> Result<Input, String> {
     let config = device.default_input_config().map_err(|e| e.to_string())?;
     let channels = config.channels() as usize;
+    if channels == 0 {
+        return Err("input has no channels".into());
+    }
     let rate = config.sample_rate() as f32;
     let (l, r) = (left.min(channels - 1), right.min(channels - 1));
-    let stream = device
-        .build_input_stream(
-            config.into(),
-            move |data: &[f32], _| {
-                // Never wait on the render thread from the audio thread.
-                if let Ok(mut ring) = ring.try_lock() {
-                    for frame in data.chunks_exact(channels) {
-                        ring.0.push_back(frame[l]);
-                        ring.1.push_back(frame[r]);
+    fn build<T: cpal::SizedSample>(device: &cpal::Device, config: &cpal::StreamConfig, sink: Sink, channels: usize, l: usize, r: usize) -> Result<cpal::Stream, String>
+    where
+        f32: cpal::FromSample<T>,
+    {
+        device
+            .build_input_stream(
+                config.clone(),
+                move |data: &[T], _| {
+                    let mut block = [[0.0; 2]; 256];
+                    for chunk in data.chunks(channels * 256) {
+                        let mut count = 0;
+                        for frame in chunk.chunks_exact(channels) {
+                            block[count] = [frame[l].to_sample::<f32>(), frame[r].to_sample::<f32>()];
+                            count += 1;
+                        }
+                        sink.write(&block[..count]);
                     }
-                    while ring.0.len() > WINDOW {
-                        ring.0.pop_front();
-                        ring.1.pop_front();
-                    }
-                }
-            },
-            |e| eprintln!("audio input stopped: {e}"),
-            None,
-        )
-        .map_err(|e| e.to_string())?;
+                },
+                |e| eprintln!("audio input stopped: {e}"),
+                None,
+            )
+            .map_err(|e| e.to_string())
+    }
+    macro_rules! open {
+        ($t:ty) => {
+            build::<$t>(device, &config.into(), sink, channels, l, r)?
+        };
+    }
+    let stream = match config.sample_format() {
+        cpal::SampleFormat::F32 => open!(f32),
+        cpal::SampleFormat::F64 => open!(f64),
+        cpal::SampleFormat::I8 => open!(i8),
+        cpal::SampleFormat::I16 => open!(i16),
+        cpal::SampleFormat::I32 => open!(i32),
+        cpal::SampleFormat::I64 => open!(i64),
+        cpal::SampleFormat::U8 => open!(u8),
+        cpal::SampleFormat::U16 => open!(u16),
+        cpal::SampleFormat::U32 => open!(u32),
+        cpal::SampleFormat::U64 => open!(u64),
+        other => return Err(format!("unsupported input format: {other}")),
+    };
     stream.play().map_err(|e| e.to_string())?;
     Ok(Input { stream, rate, channels, left: l, right: r })
 }
