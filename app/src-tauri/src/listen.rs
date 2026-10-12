@@ -254,6 +254,11 @@ fn choose(world: &dyn World, app: &App, source: Option<SourceId>, left: Option<u
 
 /// Where sound comes from: this Mac, or a stand-in in tests.
 trait World: Sync {
+    /// A fixture world can forbid acquisition before any source lookup or open.
+    fn acquisition_allowed(&self) -> bool {
+        true
+    }
+
     /// Open `source` (the system input when `None`) on channels `left` and
     /// `right` (from 0), writing into `ring`.
     fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String>;
@@ -266,7 +271,12 @@ trait World: Sync {
 struct Mac;
 
 impl World for Mac {
+    fn acquisition_allowed(&self) -> bool {
+        !crate::dev::camera_capture_fixture()
+    }
+
     fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+        physical_audio_allowed()?;
         match source {
             None => listen(None, None, channels, ring),
             Some(SourceId::Device { name, size }) => listen(Some(name), Some(*size), channels, ring),
@@ -301,6 +311,7 @@ impl World for Mac {
 }
 
 fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, main: Option<i32>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+    physical_audio_allowed()?;
     if !tap::supported() {
         return Err("listening to apps needs macOS 14.4 or later".into());
     }
@@ -321,6 +332,9 @@ fn tapped(source: SourceId, target: Target, name: String, objects: Vec<u32>, mai
 /// closes, so a switch that fails leaves the bench hearing what it heard.
 /// Returns what is heard and its source.
 fn listen_on(world: &dyn World, app: &App, slot: &mut Option<Listening>, source: Option<&SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(Choice, SourceId), String> {
+    if !world.acquisition_allowed() {
+        return Err("Audio acquisition is disabled for the headless Camera UI fixture".into());
+    }
     let channels = (left.unwrap_or(1).max(1) - 1, right.unwrap_or(2).max(1) - 1);
     let l = world.open(source, channels, app.ring.clone())?;
     app.send(bench::Cmd::SampleRate(l.rate));
@@ -361,6 +375,9 @@ pub fn resume(app: &App) {
 }
 
 fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bool) {
+    if !world.acquisition_allowed() {
+        return;
+    }
     let mut slot = app.listening.lock().unwrap();
     *WANTED.lock().unwrap() = saved.clone();
     let Some(s) = saved else {
@@ -385,6 +402,9 @@ fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bo
 /// and nothing chosen, the system's default input opens once `first_run` says
 /// the welcome is over (it was skipped without picking a source).
 fn follow(world: &dyn World, app: &App, first_run: impl Fn() -> bool) {
+    if !world.acquisition_allowed() {
+        return;
+    }
     let mut slot = app.listening.lock().unwrap();
     let wanted = WANTED.lock().unwrap().clone();
     if slot.is_none() && wanted.is_none() && !first_run() {
@@ -431,11 +451,18 @@ pub fn levels(app: State<App>) -> (f32, f32) {
     peaks(&app.ring)
 }
 
+/// Last boundary before Core Audio device/tap acquisition. Keep this even when
+/// callers already use the World guard: direct low-level callers must be safe.
+fn physical_audio_allowed() -> Result<(), String> {
+    if crate::dev::camera_capture_fixture() { Err("Audio acquisition is disabled for the headless Camera UI fixture".into()) } else { Ok(()) }
+}
+
 /// Open `input` (the system input when `None`) and write channels `left` and
 /// `right` (from 0) into `ring`.
 /// `size`, when given, picks between inputs that share a name — macOS calls
 /// every aggregate device "Aggregate Device" — by their channel count.
 pub fn listen(input: Option<&str>, size: Option<usize>, channels: (usize, usize), ring: Ring) -> Result<Listening, String> {
+    physical_audio_allowed()?;
     let host = cpal::default_host();
     let device = match input {
         Some(want) => {
@@ -535,6 +562,45 @@ mod tests {
 
     fn app() -> App {
         App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() }
+    }
+
+    #[test]
+    fn blocked_fixture_cannot_open_audio_on_resume_poll_or_explicit_choice() {
+        struct Blocked;
+        impl World for Blocked {
+            fn acquisition_allowed(&self) -> bool {
+                false
+            }
+            fn open(&self, _: Option<&SourceId>, _: (usize, usize), _: Ring) -> Result<Listening, String> {
+                panic!("fixture tried to open audio")
+            }
+            fn gone(&self, _: &SourceId) -> bool {
+                panic!("fixture inspected a physical source")
+            }
+            fn processes(&self) -> Vec<Process> {
+                panic!("fixture inspected physical processes")
+            }
+            fn taps_allowed(&self) -> bool {
+                panic!("fixture inspected tap permission")
+            }
+        }
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        *WANTED.lock().unwrap() = None;
+        let app = app();
+        let world = Blocked;
+        resume_with(&world, &app, None, false);
+        for _ in 0..10 {
+            follow(&world, &app, || false);
+        }
+        for source in [None, Some(SourceId::Device { name: "fixture mic".into(), size: 2 }), Some(SourceId::System), Some(SourceId::App { bundle: "fixture.app".into() })] {
+            assert!(choose(&world, &app, source.clone(), None, None).is_err());
+            if let Some(source) = source {
+                resume_with(&world, &app, Some(Saved { source, left: 1, right: 2 }), false);
+            }
+        }
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(WANTED.lock().unwrap().is_none());
+        assert_eq!(peaks(&app.ring), (0.0, 0.0));
     }
 
     #[test]

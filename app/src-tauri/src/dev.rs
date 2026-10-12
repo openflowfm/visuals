@@ -25,6 +25,19 @@ pub fn headless() -> bool {
     flag_from(std::env::var("VISUALS_HEADLESS").ok())
 }
 
+/// Camera-sheet QA must never acquire physical audio, including from UI polls.
+pub(crate) fn camera_capture_fixture() -> bool {
+    camera_capture_fixture_from(cfg!(debug_assertions), headless(), std::env::var("VISUALS_SHEET").ok().as_deref())
+}
+
+fn camera_capture_fixture_from(debug: bool, headless: bool, sheet: Option<&str>) -> bool {
+    debug && headless && sheet == Some("camera")
+}
+
+fn capture_ui_only() -> bool {
+    cfg!(debug_assertions) && headless() && flag_from(std::env::var("VISUALS_CAPTURE_UI_ONLY").ok())
+}
+
 fn flag_from(value: Option<String>) -> bool {
     value.is_some_and(|v| !v.is_empty() && v != "0")
 }
@@ -158,7 +171,7 @@ pub fn send_fx(handle: &AppHandle) {
 /// (8 by default). In headless mode the app then quits.
 pub fn capture(handle: &AppHandle) {
     #[cfg(debug_assertions)]
-    if headless() && std::env::var("VISUALS_SHEET").as_deref() == Ok("camera") {
+    if camera_capture_fixture() {
         if let Some(window) = handle.get_webview_window("main") {
             // Bounded fixture-only retry: React may mount after native setup.
             let _ = window.eval("{ let n = 0; const timer = setInterval(() => { window.dispatchEvent(new CustomEvent('vf-sheet', { detail: 'camera' })); if (++n >= 20 || document.querySelector('[role=dialog]')) clearInterval(timer); }, 250); }");
@@ -203,7 +216,7 @@ pub fn capture(handle: &AppHandle) {
         // Headless, the Metal layers show black to the window server, so the
         // pictures they were given are read from the GPU and pasted in.
         let snapshot = |output: bool, wanted: bool| -> Option<bench::Picture> {
-            if !(wanted && headless()) {
+            if !(wanted && headless()) || capture_ui_only() {
                 return None;
             }
             handle.state::<crate::App>().ask(|reply| bench::Cmd::Snapshot(output, reply)).ok().flatten()
@@ -341,6 +354,14 @@ pub fn frost(window: &tauri::WebviewWindow) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn camera_fixture_audio_guard_is_only_debug_headless_camera_sheet() {
+        assert!(super::camera_capture_fixture_from(true, true, Some("camera")));
+        assert!(!super::camera_capture_fixture_from(false, true, Some("camera")));
+        assert!(!super::camera_capture_fixture_from(true, false, Some("camera")));
+        assert!(!super::camera_capture_fixture_from(true, true, Some("settings")));
+        assert!(!super::camera_capture_fixture_from(true, true, None));
+    }
     use super::*;
 
     #[test]
