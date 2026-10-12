@@ -32,7 +32,7 @@
   },
   "dependencies": {
     "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#ef99d1b2331c8ee11ecabdaa5c7328e5fed2ef97",
-    "@satoramoto/zen": "file:/Users/ryan/Code/satoramoto/zen/.claude/worktrees/os-materials",
+    "@satoramoto/zen": "git+https://github.com/satoramoto/zen.git#f906542197a858b2d9a3624e8f2699c8eb4283a8",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
@@ -70,6 +70,7 @@
     }
   },
   "allowScripts": {
+    "@satoramoto/zen@0.1.0": true,
     "fsevents@2.3.3": true,
     "esbuild@0.28.2": true
   }
