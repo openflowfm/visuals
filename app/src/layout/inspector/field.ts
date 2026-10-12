@@ -99,6 +99,22 @@ export function tunedPath(dots: readonly Dot[]): string {
   return d;
 }
 
+/**
+ * The presets marked together (several picked), as one path: a small ring
+ * round each one's dot, so a pick of hundreds still draws as one node. Keys
+ * with no dot (not drawn yet) are left out; each ring once, however often its
+ * key is given.
+ */
+export function marksPath(dots: readonly Dot[], keys: readonly string[], r = 3.6): string {
+  const want = new Set(keys);
+  let d = '';
+  for (const { row, x, y } of dots) {
+    if (!want.delete(row.key)) continue;
+    d += `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+  }
+  return d;
+}
+
 /** The dots as one path per band: each dot a zero-length segment that a round cap draws as a disc. */
 export function bandPaths(dots: readonly Dot[]): { band: number; d: string }[] {
   const parts: string[][] = Array.from({ length: BANDS + 1 }, () => []);

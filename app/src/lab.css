@@ -1,0 +1,426 @@
+/* The lab page's own look (`VITE_LAB=1` only): the editor still runs on the
+   suite's widgets, as the whole page did before zen. The app people get loads
+   none of this (main.tsx loads zen's CSS and main.css, which declares the face). */
+* {
+  box-sizing: border-box;
+}
+
+/* The suite's type tokens, pointed at it. `html:root` outranks type.css's
+   `:root`, whatever order the stylesheets land in. Numbers no longer get a
+   monospace: each rule that sets one takes tabular figures
+   (`font-variant-numeric: tabular-nums`, Instrument Sans's `tnum`) instead, so
+   columns of counts still line up. Recursive stays only as `--code`, for what
+   really is code: the lab editor's equations and shader text. */
+html:root {
+  --sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --mono: var(--sans);
+  --sans-axes: normal;
+  --mono-axes: normal;
+  --code: 'Recursive Variable', ui-monospace, Menlo, monospace;
+  --code-axes: 'MONO' 1, 'CASL' 0.38;
+  /* Instrument Sans's space is narrow (0.2em) and its middle dot hugs nothing,
+     so a line joined with " · " reads cramped: lines that carry one widen
+     their spaces by this much. */
+  --sep-space: 0.1em;
+}
+/* The widgets' readouts were all in the monospace: they keep their columns. */
+.vf-root .wdg {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Transparent all the way down: the bench is a native view under the page, and
+   shows through wherever nothing here paints. Every panel paints itself — which
+   is why the theme root, which paints --bg elsewhere in the suite, doesn't here. */
+html,
+body,
+#root,
+.vf-root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+body {
+  color: var(--ui);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-lead);
+}
+
+.outside {
+  margin: 0;
+  padding: 24px;
+  background: var(--bg);
+  color: var(--ui);
+  height: 100%;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr) 380px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+/* Every view's header (`Header` in views.tsx): the mark, the view switch, the
+   view's own. Drawn as mix[flow] draws its own: a rail, 22px controls centred in
+   it, groups 8px apart. */
+.vf-header {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: calc(var(--ctl-h) + 13px);
+  padding: 6px 10px;
+  background: var(--rail);
+  border-bottom: 1px solid var(--bd);
+  white-space: nowrap;
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-control);
+}
+/* A spacer that takes a flex row's free room, pushing what follows to the end. */
+.vf-fill {
+  flex: 1;
+}
+.vf-header > :not(.vf-fill) {
+  flex: none;
+}
+.vf-header .wdg {
+  --wdg-field-height: var(--ctl-h);
+}
+.vf-transport .wdg-button-body {
+  min-width: 26px;
+  justify-content: center;
+}
+
+/* The wordmark: mix[flow]'s shape (the name, its bracketed half in the primary
+   tone), set in Instrument Sans a touch heavier and tighter than the text
+   around it, as the font study drew it; a monospace mark read as the one robot
+   word in the window. */
+.vf-mark {
+  display: inline-flex;
+  align-items: center;
+  height: var(--ctl-h);
+  padding: 0 4px;
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-size: var(--text-lead);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+.vf-mark span {
+  color: var(--primary);
+}
+
+/* The preset playing: the folder as a caption, then the name. */
+.vf-now {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  height: var(--ctl-h);
+  line-height: var(--ctl-h);
+  padding-left: 8px;
+  border-left: 1px solid var(--bd);
+  overflow: hidden;
+}
+.vf-header > .vf-now {
+  flex: 0 1 auto;
+}
+.vf-now > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vf-now i {
+  flex: 0 2 auto;
+  font-style: normal;
+  color: var(--caption);
+  font-size: var(--text-label);
+}
+.vf-now span {
+  flex: 0 1 auto;
+  color: var(--fg);
+  font-size: var(--text-lead);
+}
+.vf-now.quiet {
+  color: var(--caption);
+}
+
+/* A failure in a few plain words, dismissible; the app's own words are its tooltip.
+   Every view's banner (`NoticeBanner`); live.css and link.css place their own. */
+.vf-notice {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  color: var(--red);
+}
+.vf-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+/* In the header: a small outlined chip on one line. */
+.vf-header > .vf-notice {
+  flex: 0 1 auto;
+  display: inline-flex;
+  gap: 2px;
+  height: var(--ctl-h);
+  padding-left: 8px;
+  border: 1px solid color-mix(in srgb, var(--red) 40%, transparent);
+  border-radius: var(--radius);
+}
+.vf-header > .vf-notice > .vf-notice-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vf-header > .vf-notice .wdg-button-body {
+  color: var(--red);
+}
+
+.vf-warning {
+  color: var(--amber);
+  font-size: var(--text-control);
+}
+
+/* The frame rate: numbers in a dev build, a warning in a release when it drops. */
+.vf-stats,
+.vf-header .stats {
+  color: var(--detail);
+  font-family: var(--sans);
+  font-variation-settings: var(--sans-axes);
+  font-variant-numeric: tabular-nums;
+  word-spacing: var(--sep-space);
+  font-size: var(--text-label);
+  min-width: 120px;
+  text-align: right;
+}
+.vf-stats[data-slow] {
+  color: var(--amber);
+}
+
+/* The hint strip, across the bottom of the window. */
+.vf-footer {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  background: var(--rail);
+}
+.vf-footer > .wdg-hint {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Plain form controls still in other views (live, playlists, the inspector).
+   `:where` keeps them below any widget's own class. */
+:where(button, select, input, textarea) {
+  font: inherit;
+  font-variation-settings: inherit;
+  color: var(--fg);
+  background: var(--surface-control);
+  border: 1px solid var(--bd3);
+  border-radius: var(--radius);
+}
+:where(button) {
+  padding: 2px 8px;
+  cursor: pointer;
+}
+:where(button):hover {
+  border-color: var(--focus);
+}
+:where(select) {
+  max-width: 240px;
+  padding: 2px 4px;
+}
+
+.audio-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.vf-meters {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  margin-left: 2px;
+}
+.vf-meters .wdg-meter {
+  --wdg-fill: var(--green);
+}
+.vf-meters .wdg-meter-body {
+  border: 1px solid var(--bd3);
+}
+
+/* A narrow window (decision 63, down to 560px): the header gives way instead of
+   cutting off its end (the gear). The preset's name already shrinks; below 760
+   the source picker shrinks with it, to 72px, its notes to nothing (their
+   titles keep the words), and the frame rate's plain numbers go (its warning
+   stays, shrinking too). The picker's parts join the header's own row, so each
+   keeps its own smallest size; a negative margin keeps their 4px spacing.
+   Below 640 the wordmark goes: the title bar names the app. */
+@media (max-width: 759px) {
+  .vf-header > .audio-input {
+    display: contents;
+  }
+  .vf-header .audio-input > * {
+    flex: none;
+  }
+  .vf-header .audio-input > * + * {
+    margin-left: -4px;
+  }
+  .vf-header .audio-input > .vf-meters {
+    margin-left: -2px;
+  }
+  .vf-header .audio-input .wdg-select {
+    flex: 0 1 180px;
+    min-width: 72px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .vf-header .audio-input .wdg-select-body {
+    justify-self: stretch;
+    width: auto;
+    min-width: 0;
+  }
+  .vf-header .audio-input .audio-note {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .vf-header .audio-input > .vf-warning {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .vf-header > .vf-stats:not([data-slow]) {
+    display: none;
+  }
+  .vf-header > .vf-stats {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+@media (max-width: 639px) {
+  .vf-header > .vf-mark {
+    display: none;
+  }
+}
+
+/* The editor's library column (Lab.tsx). */
+.library {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--panel);
+  border-right: 1px solid var(--bd3);
+}
+
+main {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The hole. Nothing behind the bench may paint — a background on the row would
+   show through it instead of the picture — so the bars beside a 16:9 picture in
+   a wider row are the bench's own shadow, clipped to the row. It is a hole only
+   once the bench draws: until then it paints a loading surface, below. */
+.bench-row {
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  border-bottom: 1px solid var(--bd3);
+}
+.bench {
+  aspect-ratio: 16 / 9;
+  height: min(40vh, calc((100vw - 700px) * 9 / 16));
+  background: transparent;
+  /* Letterbox black: the picture's own, not an interface colour. */
+  box-shadow: 0 0 0 100vmax #000;
+}
+
+/* Until the bench has drawn (`Preview`), its box and the bars around it are the
+   page's own surface, saying so, instead of a hole onto whatever is under the
+   window. The editor's bench and live mode's preview alike. */
+.bench[data-loading],
+.live-preview[data-loading] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel);
+  box-shadow: 0 0 0 100vmax var(--bg);
+}
+.bench-loading {
+  color: var(--caption);
+  font-size: var(--text-body);
+  user-select: none;
+}
+
+.graph {
+  position: relative;
+  min-height: 0;
+  background: var(--bg);
+}
+.graph > * {
+  position: absolute;
+  inset: 0;
+}
+
+.side {
+  overflow: auto;
+  background: var(--panel);
+  border-left: 1px solid var(--bd3);
+}
+
+.problem {
+  color: var(--red);
+  margin: 0;
+  white-space: pre-wrap;
+}
+.problem b {
+  font-weight: var(--weight-strong);
+}
+.quiet {
+  color: var(--caption);
+}
+
+/* A sheet (Settings, More effects) is a panel over any view. */
+.vf-sheet {
+  position: fixed;
+  top: calc(var(--ctl-h) + 21px);
+  right: 12px;
+  z-index: 30;
+  width: min(380px, calc(100vw - 24px));
+  max-height: calc(100vh - var(--ctl-h) - 42px);
+  overflow: auto;
+  padding: 12px 14px;
+  background: var(--panel);
+  color: var(--ui);
+  border: 1px solid var(--bd);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.45);
+}
+.vf-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.vf-sheet-head h2 {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: var(--weight-strong);
+  color: var(--fg);
+}
+.vf-sheet p {
+  color: var(--caption);
+  font-size: var(--text-body);
+}

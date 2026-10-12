@@ -6,21 +6,24 @@ use tauri::State;
 use tauri::Manager;
 
 /// The page's hole for the bench, in CSS pixels from the window's top left.
+/// `radius` is the hole's corner radius (Home's hero's `--lay-hero-radius`),
+/// which the view is rounded to; left out, it is square, as every other hole
+/// is (`bench::corner_radius`).
 #[tauri::command]
-pub fn place_bench(x: f64, y: f64, width: f64, height: f64, handle: tauri::AppHandle) -> Result<(), String> {
+pub fn place_bench(x: f64, y: f64, width: f64, height: f64, radius: Option<f64>, handle: tauri::AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         let inner = handle.clone();
         handle
             .run_on_main_thread(move || {
-                if let Some((w, h)) = bench::view::place(x, y, width, height) {
+                if let Some((w, h)) = bench::view::place(x, y, width, height, radius.unwrap_or(0.0)) {
                     inner.state::<App>().send(bench::Cmd::Resize(w, h));
                 }
             })
             .map_err(|e| e.to_string())?;
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (x, y, width, height, handle);
+    let _ = (x, y, width, height, radius, handle);
     Ok(())
 }
 
@@ -28,13 +31,14 @@ pub fn place_bench(x: f64, y: f64, width: f64, height: f64, handle: tauri::AppHa
 /// `width`×`height` (`bench::hover`), in place of the one hovered before; no
 /// path stops. Returns the hover's ticket, which its pictures carry (0 for none).
 #[tauri::command]
-pub async fn hover_preview(path: Option<String>, width: u32, height: u32, app: State<'_, App>) -> Result<u32, String> {
+pub async fn hover_preview(path: Option<String>, width: u32, height: u32, app: State<'_, App>, handle: tauri::AppHandle) -> Result<u32, String> {
     let Some(path) = path else {
         bench::hover::stop();
         return Ok(0);
     };
-    let text = engine::preset::decode(&crate::library::read_preset(std::path::Path::new(&path))?);
-    Ok(bench::hover::show(engine::preset::parse(&text), (width, height), &app.ring))
+    let file = std::path::Path::new(&path);
+    let text = engine::preset::decode(&crate::library::read_preset(file)?);
+    Ok(bench::hover::show_tuned(engine::preset::parse(&text), (width, height), &app.ring, bench::hover::tuning(&handle, file)))
 }
 
 /// The hover's latest picture as raw bytes: a 16-byte header (ticket, count,

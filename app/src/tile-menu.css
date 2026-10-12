@@ -1,0 +1,66 @@
+/* A tile's context menu (TileMenu.tsx): the popover's glass panel as a menu
+   (popover.css), hung at the pointer rather than under a button, so it is fixed
+   to the window. Each action leads with its glyph; "Add to playlist" opens its
+   playlists in place, under it, indented. */
+.vf-pop-panel.tile-menu {
+  position: fixed;
+  right: auto;
+  z-index: 120;
+  min-width: 200px;
+}
+.tile-menu [role^='menuitem'] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 10px;
+  text-align: left;
+  color: var(--ui);
+  font: inherit;
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.tile-menu [role^='menuitem']:hover:not(:disabled),
+.tile-menu [role^='menuitem']:focus-visible {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+.tile-menu [role^='menuitem']:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}
+.tile-menu [role^='menuitem']:disabled {
+  color: var(--caption);
+  cursor: default;
+}
+.tile-menu [role='menuitem'][data-danger] {
+  color: var(--red);
+}
+.tile-menu-more {
+  margin-left: auto;
+  transition: transform 120ms ease;
+}
+.tile-menu [aria-expanded='true'] .tile-menu-more {
+  transform: rotate(90deg);
+}
+.tile-menu-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding-left: 24px;
+}
+.tile-menu-rule {
+  height: 1px;
+  margin: 4px 10px;
+  background: var(--line, rgba(255, 255, 255, 0.08));
+}
+
+/* The tile a menu is open on: the selection's ring, so it's clear what the menu acts on. */
+.home .tile[data-menu] .tile-pic {
+  outline: 2px solid var(--fg);
+  outline-offset: 2px;
+}

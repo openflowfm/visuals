@@ -135,10 +135,22 @@ fn update() -> Motion {
     update_with(None)
 }
 
-/// Whether motion is reduced now (macOS's setting read afresh).
+/// What [`reduced_motion`] answers: the motion, and beside it macOS's Reduce
+/// transparency, which the page reads to make Home's inspector opaque
+/// (WKWebView doesn't answer `prefers-reduced-transparency` itself).
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct Access {
+    #[serde(flatten)]
+    pub motion: Motion,
+    /// macOS's Settings › Accessibility › Display › Reduce transparency is on.
+    pub transparency: bool,
+}
+
+/// Whether motion is reduced now (macOS's setting read afresh), and whether
+/// macOS asks for less transparency.
 #[tauri::command]
-pub fn reduced_motion() -> Motion {
-    update()
+pub fn reduced_motion() -> Access {
+    Access { motion: update(), transparency: system_reduces_transparency() }
 }
 
 /// Reduce motion (`true`), don't (`false`), or (`None`) follow macOS again;
@@ -215,6 +227,27 @@ pub fn system_reduces_motion() -> bool {
 
 #[cfg(not(target_os = "macos"))]
 pub fn system_reduces_motion() -> bool {
+    false
+}
+
+/// macOS's Settings › Accessibility › Display › Reduce transparency.
+#[cfg(target_os = "macos")]
+pub fn system_reduces_transparency() -> bool {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    objc2::rc::autoreleasepool(|_| {
+        let Some(class) = AnyClass::get(c"NSWorkspace") else { return false };
+        // SAFETY: as in `system_reduces_motion`: the shared instance (or nil), and a BOOL property safe from any thread.
+        let workspace: *mut AnyObject = unsafe { msg_send![class, sharedWorkspace] };
+        if workspace.is_null() {
+            return false;
+        }
+        unsafe { msg_send![workspace, accessibilityDisplayShouldReduceTransparency] }
+    })
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn system_reduces_transparency() -> bool {
     false
 }
 
@@ -302,6 +335,19 @@ mod tests {
     #[test]
     fn the_page_reads_motion_as_it_expects() {
         assert_eq!(serde_json::to_string(&resolve(None, false)).unwrap(), r#"{"reduced":false,"system":true}"#);
+    }
+
+    #[test]
+    fn the_page_reads_transparency_beside_the_motion() {
+        let access = Access { motion: resolve(Some(true), false), transparency: true };
+        assert_eq!(serde_json::to_string(&access).unwrap(), r#"{"reduced":true,"system":false,"transparency":true}"#);
+    }
+
+    #[test]
+    fn macos_transparency_setting_reads_without_failing() {
+        let here = system_reduces_transparency();
+        let there = std::thread::spawn(system_reduces_transparency).join().unwrap();
+        assert_eq!(here, there);
     }
 
     #[test]

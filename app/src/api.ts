@@ -82,7 +82,8 @@ export interface Opened {
 }
 export const open = (path: string) => invoke<Opened>('open', { path });
 export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
-export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
+/** `radius`: the hole's corners in CSS pixels, which the native view is rounded to (left out: square; never at the window's edge). */
+export const placeBench = (r: { x: number; y: number; width: number; height: number; radius?: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
 /** `size` (the input's channel count) tells apart inputs that share a name. */
 export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) => invoke<string>('listen_to', { name, size, left, right });
@@ -293,6 +294,11 @@ export interface Motion {
   reduced: boolean;
   /** No choice made in the app: macOS's "Reduce motion" decides. */
   system: boolean;
+  /**
+   * macOS's Reduce transparency is on (`access::Access`, only from `reduced_motion`);
+   * `reduced_motion_set` answers the motion alone, so it is missing there.
+   */
+  transparency?: boolean;
 }
 export const reducedMotion = () => invoke<Motion>('reduced_motion');
 /** Reduce motion (true), don't (false), or follow macOS (null). */
