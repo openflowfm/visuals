@@ -561,7 +561,7 @@ mod tests {
     static WANTS: Mutex<()> = Mutex::new(());
 
     fn app() -> App {
-        App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), library: Default::default(), seed: Default::default() }
+        App { bench: Mutex::new(None), ring: ring(), listening: Mutex::new(None), audio: Default::default(), library: Default::default(), seed: Default::default() }
     }
 
     #[test]
