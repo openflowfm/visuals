@@ -41,6 +41,8 @@ pub enum Cmd {
     #[cfg(feature = "dev-bridge")]
     CameraFrame(u32, u32, Vec<u8>, f32, Sender<Result<(), String>>),
     #[cfg(feature = "dev-bridge")]
+    CameraContours(engine::contours::Contours, Sender<Result<(), String>>),
+    #[cfg(feature = "dev-bridge")]
     CameraSettings(f64, f32),
     #[cfg(feature = "dev-bridge")]
     CameraResize(u32, u32),
@@ -499,6 +501,14 @@ impl Loop {
                     None
                 };
                 let _ = reply.send(picture);
+            }
+            #[cfg(feature = "dev-bridge")]
+            Cmd::CameraContours(contours, reply) => {
+                let result = self.renderer.set_contours(contours).map_err(str::to_owned);
+                if result.is_ok() {
+                    self.camera = Some(Instant::now());
+                }
+                let _ = reply.send(result);
             }
             #[cfg(feature = "dev-bridge")]
             Cmd::CameraFrame(w, h, rgba, mix, reply) => {

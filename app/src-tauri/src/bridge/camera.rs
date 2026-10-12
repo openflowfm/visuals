@@ -76,6 +76,20 @@ fn dimensions(request: &Request) -> Result<(u32, u32, f32), &'static str> {
 }
 
 impl Bridge {
+    pub(super) fn camera_contours(&self, stream: &mut TcpStream, body: &[u8]) {
+        let contours: engine::contours::Contours = match serde_json::from_slice(body) {
+            Ok(value) => value,
+            Err(error) => return respond(stream, "400 Bad Request", "text/plain", error.to_string().as_bytes()),
+        };
+        if let Err(error) = contours.validate() {
+            return respond(stream, "400 Bad Request", "text/plain", error.as_bytes());
+        }
+        match self.app.state::<App>().ask(|reply| bench::Cmd::CameraContours(contours, reply)).and_then(|r| r) {
+            Ok(()) => respond(stream, "200 OK", "application/json", b"null"),
+            Err(error) => respond(stream, "503 Service Unavailable", "text/plain", error.as_bytes()),
+        }
+    }
+
     pub(super) fn camera_presets(&self, stream: &mut TcpStream) {
         let mut presets: Vec<serde_json::Value> = ["Chromatic vortex", "Prism cult", "Acid tide"]
             .iter()

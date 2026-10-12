@@ -17,6 +17,8 @@ impl Renderer {
         if width == 0 || height == 0 || width > 1920 || height > 1080 || rgba.len() != width as usize * height as usize * 4 || !mix.is_finite() || !(0.0..=1.0).contains(&mix) {
             return Err("camera expects RGBA8 up to 1920x1080 and a finite mix in 0..=1");
         }
+        self.clear_contour_commands();
+        self.contours = None;
         if self.camera.as_ref().is_none_or(|c| c.texture.width() != width || c.texture.height() != height) {
             let texture = self.device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("camera input"),
@@ -54,9 +56,35 @@ impl Renderer {
         Ok(())
     }
 
+    /// Replace the basic waveform with additive contour strokes. Custom waves
+    /// and shapes keep their usual preset behavior. An empty set keeps this mode
+    /// active without emitting geometry; raw camera input switches it off.
+    pub fn set_contours(&mut self, contours: crate::contours::Contours) -> Result<(), &'static str> {
+        contours.validate()?;
+        self.camera = None;
+        if self.contours.is_none() {
+            for list in [&mut self.shown_list, &mut self.draw_list, &mut self.between_list] {
+                list.cmds.retain(|cmd| cmd.source != crate::draw::Source::Basic);
+            }
+        }
+        if contours.paths.is_empty() {
+            self.clear_contour_commands();
+        }
+        self.contours = Some(contours);
+        Ok(())
+    }
+
+    fn clear_contour_commands(&mut self) {
+        for list in [&mut self.shown_list, &mut self.draw_list, &mut self.between_list] {
+            list.cmds.retain(|cmd| cmd.source != crate::draw::Source::External);
+        }
+    }
+
     /// Release the external source. Its existing trails remain until `clear`.
     pub fn clear_camera(&mut self) {
+        self.clear_contour_commands();
         self.camera = None;
+        self.contours = None;
     }
 
     pub(super) fn inject_camera(&self, encoder: &mut wgpu::CommandEncoder, into: &wgpu::TextureView, fraction: f32) {

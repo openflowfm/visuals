@@ -59,6 +59,7 @@ pub struct Loaded {
 
 pub struct Renderer {
     camera: Option<camera::Camera>,
+    contours: Option<crate::contours::Contours>,
     device: wgpu::Device,
     queue: wgpu::Queue,
     /// What presets read: the size they draw at and the mesh.
@@ -252,6 +253,7 @@ impl Renderer {
             .collect();
         let mut renderer = Self {
             camera: None,
+            contours: None,
             feedback: [Target::mipped(&device, full, "feedback a"), Target::mipped(&device, full, "feedback b")],
             current: 0,
             comp: Target::new(&device, full, "comp"),

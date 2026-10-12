@@ -253,6 +253,7 @@ impl Bridge {
             ("POST", "/__bridge/camera/audio/stop") => self.camera_audio_stop(&mut stream),
             ("GET", "/__bridge/camera/video") => self.camera_video(&mut stream, &request),
             ("GET", "/__bridge/camera/output") => self.camera_output(&mut stream),
+            ("POST", "/__bridge/camera/contours") => self.camera_contours(&mut stream, &request.body),
             ("POST", "/__bridge/camera/frame") => self.camera_frame(&mut stream, &request),
             ("POST", "/__bridge/camera/settings") => self.camera_settings(&mut stream, &request.body),
             ("POST", "/__bridge/camera/stop") => self.camera_stop(&mut stream),

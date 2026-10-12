@@ -11,7 +11,7 @@ fn preview_of(source: crate::draw::Source) -> Option<usize> {
     match source {
         Source::Wave(i) => Some(4 + i),
         Source::Shape(i) => Some(8 + i),
-        Source::Basic => Some(12),
+        Source::Basic | Source::External => Some(12),
         Source::Motion => Some(13),
         Source::Border(_) => Some(14),
         Source::Darken => None,
@@ -71,7 +71,7 @@ impl Renderer {
         // The drawing in the feedback becomes the one the refreshes before this step start from.
         std::mem::swap(&mut self.shown_list, &mut self.draw_list);
         let mut list = std::mem::take(&mut self.draw_list);
-        crate::draw::frame(self.runner.as_mut().unwrap(), audio, &self.uvs, &globals, &size, &mut list);
+        crate::draw::frame_with_contours(self.runner.as_mut().unwrap(), audio, &self.uvs, &globals, &size, &mut list, self.contours.as_ref());
         if self.hide != crate::draw::Hide::default() {
             let hide = self.hide;
             list.cmds.retain(|c| hide.keeps(c.source));

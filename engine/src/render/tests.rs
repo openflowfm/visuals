@@ -841,3 +841,60 @@ fn camera_fractional_refresh_approaches_the_next_feedback_step() {
     let fed = read_target(&r, &r.feedback[r.current]);
     assert!(fed[0] < 15 && fed[2] > 240);
 }
+
+fn contour_fixture() -> crate::contours::Contours {
+    use crate::contours::{Contours, Path, Point};
+    let path = |x0, y, x1, color| Path { closed: false, points: vec![Point { x: x0, y, color: Some(color) }, Point { x: x1, y, color: Some(color) }] };
+    Contours { width: 64, height: 36, mix: 0.8, color: None, paths: vec![path(6.0, 6.0, 20.0, [1.0, 0.0, 0.0]), path(42.0, 29.0, 57.0, [0.0, 0.0, 1.0])] }
+}
+
+#[test]
+fn contours_are_native_additive_wave_geometry_with_safe_topology_and_lifecycle() {
+    let Some(mut r) = renderer(W, H, "[preset00]\nfDecay=1\nfWaveAlpha=0\nzoom=1\nwarp=0\n") else { return };
+    let mut audio = Audio::default();
+    // A nonblack backing catches any accidental full-screen attenuation.
+    r.set_camera_frame(1, 1, &[30, 30, 30, 255], 1.0).unwrap();
+    r.render(&mut audio, 1.0 / 30.0);
+    r.set_contours(contour_fixture()).unwrap();
+    assert!(r.camera.is_none());
+    r.render(&mut audio, 1.0 / 30.0);
+    let pixels = presented(&mut r, Master::default());
+    let at = |x, y| ((y * W + x) * 4) as usize;
+    let top = at(12, 6);
+    let bottom = at(48, 29);
+    let room = at(32, 18);
+    assert!(pixels[top] > 100 && pixels[top + 2] < 80, "red top stroke: {:?}", &pixels[top..top + 4]);
+    assert!(pixels[bottom + 2] > 100 && pixels[bottom] < 80, "blue bottom stroke: {:?}", &pixels[bottom..bottom + 4]);
+    assert!((55..=65).contains(&pixels[room]), "room unaffected/no false connecting segment: {:?}", &pixels[room..room + 4]);
+    assert!(r.draw_list.cmds.iter().any(|c| c.source == crate::draw::Source::External));
+    assert!(!r.draw_list.cmds.iter().any(|c| c.source == crate::draw::Source::Basic));
+    // Whole snapshots fade; unrelated equal-size paths never morph across the room.
+    let mut changed = contour_fixture();
+    for path in &mut changed.paths {
+        for p in &mut path.points {
+            p.x = 64.0 - p.x;
+        }
+    }
+    r.set_contours(changed).unwrap();
+    r.render(&mut audio, 1.0 / 60.0);
+    assert!(r.between_list.cmds.iter().filter(|c| c.source == crate::draw::Source::External).count() >= 2);
+    r.clear_camera();
+    assert!(r.contours.is_none());
+    assert!(r.draw_list.cmds.iter().all(|c| c.source != crate::draw::Source::External));
+    r.render(&mut audio, 1.0 / 30.0);
+    assert!(presented(&mut r, Master::default())[top] > 60, "contour emission was in recursive feedback");
+    r.set_contours(contour_fixture()).unwrap();
+    r.set_camera_frame(1, 1, &[0, 0, 0, 255], 0.2).unwrap();
+    assert!(r.contours.is_none());
+}
+
+#[test]
+fn disabled_contours_leave_ordinary_render_exactly_unchanged() {
+    let Some(mut ordinary) = renderer(W, H, SPIRAL) else { return };
+    let Some(mut other) = renderer(W, H, SPIRAL) else { return };
+    other.set_contours(contour_fixture()).unwrap();
+    other.clear_camera();
+    play(&mut ordinary, &mut Audio::default(), 9, 1.0 / 60.0);
+    play(&mut other, &mut Audio::default(), 9, 1.0 / 60.0);
+    assert_eq!(read_target(&ordinary, &ordinary.comp), read_target(&other, &other.comp));
+}
