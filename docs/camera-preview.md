@@ -85,7 +85,7 @@ Following satoramoto/web's Tree Museum strategy, one prepared source drives both
 native feedback and a crisp foreground. Colored contours are the actual RGB bytes
 uploaded to MilkDrop, not a tint on the returned picture. **Color** sets their
 saturation (zero returns silver contours). A gently traveling palette varies with
-vertical position and subject luminance. **Clean outline** independently mixes a
+vertical position and subject luminance. **Camera / outline opacity** independently mixes a
 bright contour and lightly posterized facial-shading plate above the wild native
 output. Zero exposes the native loop alone; **Bring my face back** briefly restores
 full foreground strength as well as fresh input. Raw comparison omits this plate.
@@ -207,12 +207,17 @@ normalized palette colors per vertex. Serialization independently enforces the
 512-path / 8,192-point limit, dropping whole excess paths rather than truncating a
 closed loop. Vertex colors come from the palette, never from black/antialiased edge
 pixels. The prepared thumbnail remains a raster view of the same geometry; the
-Clean outline overlay uses the same stabilized paths. Set Clean outline to zero to
+Camera / outline opacity overlay uses the same stabilized paths. Set Camera / outline opacity to zero to
 inspect only the native engine. Raw camera comparison retains the RGBA frame route.
 
 
-The default balance now exposes the native contour-fed effect: **Clean outline 0%**,
-**Edge feed 30%**, and **Speed 0.4×**. Clean outline adds an undistorted foreground
+The default balance keeps a recognizable outline shedding strong native trails:
+**Camera / outline opacity 35%**,
+**Edge feed 30%**, and **Speed 0.4×**. Camera / outline opacity adds an undistorted foreground
 above the feedback; increase it or use **Bring my face back** when you want clearer
 recognition. Edge steadiness remains 65%. These are presentation defaults only;
 the native engine and temporal stabilization algorithms are unchanged.
+
+Camera / outline opacity is the existing recognizable foreground fade, independent
+of Edge feed. It fades the camera shading and clean outline together; no additional
+slider or native rendering behavior is introduced.
