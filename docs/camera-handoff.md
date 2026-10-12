@@ -47,18 +47,48 @@ Guides: [player](camera-player.md), [native evidence](camera-native-app.md),
 
 ## Camera controls follow-up
 
-The panel now groups controls into Source, Appearance and Motion, with a frosted
-surface and slim glass slider tracks/handles. Camera and outline opacity remain
+The panel groups controls into Source, Appearance and Motion using the app’s
+standard Settings surface and section spacing. The header uses the shared camera
+SVG, and sliders reuse the preset inspector’s glass-track and capsule-knob tokens. Camera and outline opacity remain
 independent. The selector uses an exact device ID when a camera is chosen; active
 switches release the old stream and serialize native session transitions. Late
 permission grants cannot revive a canceled source. Selecting while off never
 starts capture. A missing selected camera is shown as unavailable, without silently
 switching to another device.
 
-The glass material uses layered tints/reflections and CSS backdrop filtering for
-page content. WebKit cannot blur the native Metal surface behind it.
+The prior bespoke blue/lavender panel has been removed. Settings keeps its normal
+neutral backing; WebKit cannot blur the native Metal surface behind it.
+
+## Main audio plus microphone
+
+Use **Mixer** beside the main audio selector, or the Audio section in Settings,
+to add a microphone/interface. Each source has its own channels and Off choice.
+The native mixer resamples independent bounded inputs to 48 kHz and sums them
+for analysis, with finite-value sanitizing/clipping and stale-input silence.
+It never routes microphone audio to speakers. Existing selections migrate to
+Main; Microphone starts Off. A disconnected mic waits for that exact device.
+Ryan clarified the reported failure was the selected source not changing. The
+selector now matches source identities, protects against stale polls, reports
+pending/errors and uses the existing top-layer popup so Home’s bottom bar does
+not clip the mixer. See [audio-lanes.md](audio-lanes.md).
 
 ## Verification
+
+Design/audio follow-up: 17 Camera/Home/Stage/icon stories passed before audio
+integration; final combined audio checks passed 42 targeted unit tests and 22
+stories, including Home’s bottom Mixer placement and simultaneous source selection.
+Typecheck, formatting, normal/lab UI builds and production page isolation passed.
+Native: 322 app tests (5 ignored) at the implementation checkpoint, then all 8
+affected mixer tests after the reviewed latency fix; 155 engine library tests
+(1 ignored), 33 bin tests, lab/dev-bridge build and Rust formatting passed.
+Reviews are clear after fixing bottom-popup clipping and persistent mixer backlog.
+Physical source selection, macOS permissions and live combined input remain
+unverified on user hardware; tests use synthetic buffers and fake devices. The
+normal debug app bundle and page/binary production-isolation checks passed. A
+final own-window WebKit capture at `outputs/camera-standard-panel.png` verifies
+the standard Camera surface, grouping and aligned sliders. The guarded capture
+exited with zero audio peaks; dev ports 4286/6116 remain closed.
+
 
 The camera-controls follow-up passed 57 camera tests, typecheck, formatting,
 normal/lab UI builds and the production isolation guard. Both updated Chromium

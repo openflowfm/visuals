@@ -15,10 +15,11 @@ old capture first; the chosen device is requested exactly, with no silent fallba
 A missing selected device remains visible as unavailable. Native session changes
 are serialized so late permission grants or native responses cannot revive an old
 source. **Appearance** groups image/outline opacity and color; **Motion** groups
-edge feed, steadiness and curve smoothing. The sheet and sliders have scoped glass
-materials with 44px gesture targets. CSS backdrop blur affects page content, not
-the separate native Metal surface; layered tint/reflection gives that backing its
-frosted appearance. Reduced-transparency preferences use an opaque material.
+edge feed, steadiness and curve smoothing. The header uses the shared camera SVG
+icon, and the panel uses the standard Settings surface and section spacing. Its
+sliders use the same glass-track and capsule-knob tokens as the preset inspector,
+with 44px gesture targets. The sheet retains the app’s neutral opaque backing
+because WebKit backdrop filtering cannot blur the separate native Metal surface.
 
 The defaults are camera image 0%, recognizable outline 65%, native edge feed 30%,
 edge steadiness 85%, and person-only isolation. Camera opacity shows original RGB

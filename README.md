@@ -64,6 +64,11 @@ any other running music app, **everything on this Mac**, or a mic or interface. 
 once for permission to hear other apps (System Settings › Privacy & Security › Screen &
 System Audio Recording).
 
+Use **Mixer** beside the audio selector, or Audio in Settings, to add a microphone
+or interface alongside the main source. Each has its own channel pair and Off
+choice. Both drive the visuals; the app does not play either input through your
+speakers. [Main audio and microphone](docs/audio-lanes.md) describes the routing.
+
 [`docs/connect-your-daw.md`](docs/connect-your-daw.md) is the full guide: each DAW, the
 permission, Link, BlackHole for older macOS, and what to do when the meter doesn't move.
 
