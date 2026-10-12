@@ -1,5 +1,6 @@
 import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
+import { TemporalContours } from './temporal-contours';
 import { Contours, rawFrameSize } from './contours';
 import { ColorSignal } from './color-signal';
 import { closeVideoFrame, videoResourceSummary } from './video-resources';
@@ -26,7 +27,7 @@ root.innerHTML = `
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.8×</output></span><input id="speed" type="range" min="10" max="300" value="80"/><small>Slow hypnosis → Full possession</small></label>
 <label class="knob"><span>Output resolution</span><select id="resolution" aria-label="Output resolution"><option value="720p" selected>720p · HD</option><option value="1080p">1080p · Full HD</option><option value="360p">360p · Faster</option></select></label><label class="knob"><span>Output transport</span><select id="output-transport" aria-label="Output transport"><option value="auto" selected>Auto · hardware H.264</option><option value="raw">Raw RGBA · comparison</option></select><small id="transport-status">Checking local decoder…</small></label><label class="mirror"><input id="show-timings" type="checkbox"/> Show timing breakdown</label><label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
-<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
+<section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge steadiness <output id="steadiness-value">65%</output></span><input id="steadiness" type="range" min="0" max="100" value="65"/><small>Immediate → Calm small edge jitter</small></label><label class="knob"><span>Curve smoothing <output id="smoothing-value">65%</output></span><input id="smoothing" type="range" min="0" max="100" value="65"/><small>Traced strokes → Flowing curves</small></label><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
 <section class="audio-tools" aria-label="Sound reaction"><button id="audio-toggle">Enable audio</button><select id="audio-device" aria-label="Audio input"><option value="">Default microphone / interface</option></select><label class="knob"><span>Sensitivity <output id="gain-value">1.0×</output></span><input id="gain" type="range" min="0" max="400" value="100"/></label><meter id="audio-meter" min="0" max="1" value="0" aria-label="Audio input level"></meter><span id="audio-status" role="status">Audio off</span></section><footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
@@ -38,6 +39,7 @@ const WIDTH = 320,
 input.width = WIDTH;
 input.height = HEIGHT;
 const contours = new Contours(WIDTH, HEIGHT);
+const temporalContours = new TemporalContours(WIDTH, HEIGHT);
 const colorSignal = new ColorSignal(WIDTH, HEIGHT);
 const identity = document.createElement('canvas');
 identity.id = 'identity-source';
@@ -178,6 +180,7 @@ async function capture(id: number) {
       if (isolate && mask) $('mask-status').textContent = 'Person mask active · background removed locally.';
       if (isolate && !mask) {
         clearIdentity();
+        temporalContours.reset();
         if (personMask?.status === 'ready') $('mask-status').textContent = 'Waiting for a fresh person mask…';
         await new Promise((r) => setTimeout(r, PREPARATION_MS));
         continue;
@@ -189,7 +192,7 @@ async function capture(id: number) {
       let paths: ContourPath[] = [];
       if (useContours) {
         const edges = contours.process(source, value('detail'), value('threshold'), mask ?? undefined);
-        paths = traceContours(edges, WIDTH, HEIGHT, value('smoothing'));
+        paths = temporalContours.update(traceContours(edges, WIDTH, HEIGHT, value('smoothing')), performance.now(), value('steadiness'));
         curveContext.fillStyle = '#000';
         curveContext.fillRect(0, 0, WIDTH, HEIGHT);
         drawContourPaths(curveContext, paths, { scaleX: 1, scaleY: 1, lineWidth: 1.05, strokeStyle: '#fff' });
@@ -400,6 +403,7 @@ async function paint(id: number) {
   }
 }
 async function stop(releaseAudio = true) {
+  temporalContours.reset();
   const videoDrained = drainVideoPackets();
   outputDecoder?.dispose();
   outputDecoder = null;
@@ -492,7 +496,7 @@ $('fullscreen').onclick = () => {
 $('rescue').onclick = () => {
   rescueUntil = performance.now() + 1000;
 };
-for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color', 'smoothing']) {
+for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color', 'smoothing', 'steadiness']) {
   $<HTMLInputElement>(id).oninput = () => {
     $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : id === 'threshold' ? `${value(id)}` : `${value(id)}%`;
   };
@@ -700,7 +704,7 @@ for (const [id, enabled] of [
       $(key).classList.toggle('selected', active);
       $(key).setAttribute('aria-pressed', String(active));
     }
-    for (const key of ['detail', 'threshold', 'color', 'recognition', 'smoothing']) $<HTMLInputElement>(key).disabled = !enabled;
+    for (const key of ['detail', 'threshold', 'color', 'recognition', 'smoothing', 'steadiness']) $<HTMLInputElement>(key).disabled = !enabled;
   };
 }
 
@@ -724,6 +728,7 @@ function preparePersonMask() {
  * Old uploads finish before native reset; old output responses fail the generation
  * check. Camera tracks stay live while a matching new mask is acquired. */
 async function resetPreparation() {
+  temporalContours.reset();
   const videoDrained = drainVideoPackets();
   outputDecoder?.dispose();
   outputDecoder = null;

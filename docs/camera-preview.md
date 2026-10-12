@@ -186,3 +186,16 @@ This is a controlled experiment intended to reduce deferred canvas/video-surface
 retention under occlusion and resize. It is not evidence that retained GPU surfaces
 caused the observed browser crash, nor a verified crash fix; compare resource/process
 measurements and a sustained soak against the preceding diagnostics-only revision.
+
+## Temporal edge steadiness
+
+**Curve smoothing** rounds each frame spatially; **Edge steadiness** additionally
+calms small frame-to-frame motion. Stabilization projects each current vertex onto
+nearby, similarly oriented prior segments using a bounded spatial grid, independent
+of path order or topology. A time-based response eases subpixel/one-pixel shimmer,
+relaxes near a 2.25-input-pixel movement limit, and immediately follows larger moves.
+Disappearing edges are never retained as trails. Gaps over 150 ms and stale-mask,
+Stop, source, mirror and mode resets discard history. The same stabilized paths
+are rasterized for the prepared view and used in the foreground. Work remains at
+320×180 and the geometry budget is 512 paths / 8,192 points; the output loop remains
+independent. A default of 65% favors stability while retaining motion response.

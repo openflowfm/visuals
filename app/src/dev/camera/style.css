@@ -613,7 +613,7 @@ select {
   color: #a9b89a;
 }
 .input-tools {
-  grid-template-columns: 140px minmax(180px, 1fr) 1fr 1fr 1fr;
+  grid-template-columns: 140px minmax(180px, 1fr) repeat(4, minmax(90px, 1fr));
   gap: 18px;
 }
 @media (max-width: 1000px) {
