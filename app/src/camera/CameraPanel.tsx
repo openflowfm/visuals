@@ -7,6 +7,7 @@ import { SwitchRow } from '../Switch';
 import { openSheet } from '../views';
 import { CameraController, DEFAULT_CAMERA_SETTINGS, type CameraSettings } from './controller';
 import { createCameraController } from './capture';
+import modelLicense from './person-assets/LICENSE.mediapipe?url';
 import './camera.css';
 const CameraContext = createContext<CameraController | null>(null);
 const OFF = { status: 'off' as const, message: 'Camera is off.', settings: DEFAULT_CAMERA_SETTINGS };
@@ -98,6 +99,9 @@ export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void 
         <Button tone="quiet" onPress={() => controller?.configure({ outlineOpacity: 1 })}>
           Bring my outline back
         </Button>
+        <a href={modelLicense} target="_blank" rel="noreferrer">
+          Local person model · Apache 2.0 license
+        </a>
       </div>
     </Sheet>
   );

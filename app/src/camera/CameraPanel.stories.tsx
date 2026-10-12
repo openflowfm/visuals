@@ -3,7 +3,7 @@ import { expect, fn, screen, userEvent, within } from 'storybook/test';
 import { useState } from 'react';
 import { CameraPanel, CameraProvider } from './CameraPanel';
 import { CameraController } from './controller';
-function Fixture({ denied = false, ...props }: { denied?: boolean; open: boolean; onClose(): void }) {
+function Fixture(props: { open: boolean; onClose(): void }) {
   const [controller] = useState(
     () =>
       new CameraController({
