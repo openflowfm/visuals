@@ -205,7 +205,8 @@ mod tests {
             })
             .collect();
         for (index, preset) in PRESETS.iter().enumerate() {
-            for (label, source) in [("old", preset.replace("fDecay=0.91", "fDecay=0.995")), ("retuned", preset.replace("fDecay=0.995", "fDecay=0.91"))] {
+            for (label, source) in [("old", preset.lines().map(|line| if line.starts_with("fDecay=") { "fDecay=0.995" } else { line }).collect::<Vec<_>>().join("\n")), ("retuned", preset.to_string())]
+            {
                 assert!(renderer.load(&source, 1).unwrap().fell_back.is_empty());
                 renderer.clear();
                 renderer.set_trails(0.65);
