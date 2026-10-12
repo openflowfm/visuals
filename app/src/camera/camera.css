@@ -1,54 +1,26 @@
-.camera-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
-}
-.camera-action.camera-active {
-  color: var(--accent, #c5e3ff);
-}
-/* Native Metal pixels sit outside WebKit's backdrop. The tint and reflections
-   provide the material there; backdrop-filter also softens page content. */
-.vf-sheet.settings.camera-panel {
-  --set-panel: transparent;
-  --camera-ink: #d6e8ff;
-  width: min(392px, calc(100vw - 16px));
-  border: 1px solid rgba(228, 239, 255, 0.2);
-  border-radius: 24px;
-  background: radial-gradient(ellipse at 0 0, rgba(180, 207, 238, 0.2), transparent 55%), linear-gradient(145deg, rgba(55, 61, 78, 0.88), rgba(22, 25, 35, 0.92) 60%, rgba(41, 39, 58, 0.9));
-  -webkit-backdrop-filter: blur(32px) saturate(145%);
-  backdrop-filter: blur(32px) saturate(145%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.3),
-    inset 1px 0 0 rgba(231, 239, 255, 0.06),
-    0 24px 64px rgba(0, 0, 0, 0.42);
-}
-.vf-sheet.settings.camera-panel .vf-sheet-head {
-  background: transparent;
-  box-shadow: none;
+@import '../../../kit/tokens.css';
+
+/* Camera uses the same header button and Settings sheet surfaces as the app. */
+.camera-action.camera-active:is(.home-tool, .stage-tool) {
+  color: var(--green);
 }
 .camera-body {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 8px 0 0;
-  min-height: 0;
-  overflow-y: auto;
+  padding-top: 8px;
 }
-.camera-body p,
-.camera-body h3 {
+.camera-body p {
   margin: 0;
 }
 .camera-power {
-  padding: 0 2px;
+  padding-bottom: 12px;
 }
 .camera-power .vf-switch-name {
   font-weight: 600;
 }
 .camera-panel .camera-status,
-.camera-panel .camera-note,
-.camera-panel .camera-note p {
-  color: #b9c2d1;
+.camera-panel .camera-note {
+  color: var(--set-caption);
   font-size: 11px;
   line-height: 1.5;
 }
@@ -56,34 +28,7 @@
   padding-top: 5px;
 }
 .camera-panel .camera-status[role='alert'] {
-  color: var(--danger, #ffb0a8);
-}
-.camera-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 14px 14px 8px;
-  border: 1px solid rgba(224, 233, 255, 0.09);
-  border-radius: 17px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.055), rgba(255, 255, 255, 0.015));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-.camera-group h3 {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding-bottom: 8px;
-  color: #eef2fc;
-  font-size: 12px;
-  font-weight: 600;
-}
-.camera-group h3 span {
-  color: #b9c2d1;
-  font-size: 11px;
-  font-weight: 400;
-}
-.camera-switches {
-  padding: 6px 0;
+  color: var(--red);
 }
 .camera-panel .wdg-select {
   width: 100%;
@@ -91,33 +36,31 @@
 }
 .camera-panel .wdg-select-body {
   width: 100%;
-  min-height: 44px;
-  border: 1px solid rgba(224, 239, 255, 0.13);
-  border-radius: 12px;
-  background: linear-gradient(rgba(230, 240, 255, 0.09), rgba(195, 213, 243, 0.025));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
-/* Keep the widgets' gestures, keyboard semantics and a 44px touch target.
-   Only the narrow rail and a refractive thumb are painted inside it. */
+/* Inspector Tune's over-glass slider, with no central detent: these settings
+   run from zero. Keep the widget's keyboard/drag behavior and 44px hit area. */
 .camera-panel .wdg-slider {
+  --camera-knob-w: 26px;
+  --camera-knob-h: 16px;
+  --camera-rail: 5px;
   display: grid;
   grid-template-columns: 1fr auto;
   grid-template-rows: auto 44px;
   gap: 0;
   width: 100%;
   min-width: 0;
-  --wdg-thumb: 25px;
 }
 .camera-panel .wdg-slider > .wdg-caption {
   grid-area: 1 / 1;
   justify-self: start;
-  color: #dbe1eb;
+  color: var(--ui);
   font-size: 12px;
 }
 .camera-panel .wdg-slider > .wdg-readout {
   grid-area: 1 / 2;
-  color: #c8d7ed;
-  font-size: 11px;
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 .camera-panel .wdg-slider > .wdg-body {
@@ -128,70 +71,61 @@
   position: relative;
   width: 100%;
   height: 44px;
+  min-height: 44px;
   border: 0;
-  border-radius: 12px;
-  background: transparent;
+  border-radius: 999px;
+  background: none;
   box-shadow: none;
   overflow: visible;
 }
-.camera-panel .wdg-slider-body::before,
-.camera-panel .wdg-slider .wdg-slider-fill {
-  position: absolute;
-  top: 18px;
-  bottom: auto;
-  height: 8px;
-  border-radius: 8px;
-  pointer-events: none;
-}
 .camera-panel .wdg-slider-body::before {
-  content: '';
+  position: absolute;
+  top: 50%;
   left: 0;
   right: 0;
-  background: rgba(10, 17, 30, 0.28);
-  box-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.3),
-    0 1px 0 rgba(233, 243, 255, 0.12);
+  height: var(--camera-rail);
+  border-radius: 999px;
+  background: var(--mac-over-glass-tracks-inactive-filled-idle-bg);
+  transform: translateY(-50%);
+  content: '';
+  pointer-events: none;
 }
 .camera-panel .wdg-slider .wdg-slider-fill {
-  left: 0;
-  width: calc(var(--wdg-fraction) * 100%);
-  background: linear-gradient(90deg, rgba(155, 186, 224, 0.4), rgba(210, 229, 255, 0.75));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  z-index: 1;
+  inset: 50% auto auto calc(var(--camera-knob-w) / 2 + var(--wdg-fill-start) * (100% - var(--camera-knob-w)));
+  width: calc(var(--wdg-fill-size) * (100% - var(--camera-knob-w)));
+  height: var(--camera-rail);
+  border-radius: 999px;
+  background: var(--green, var(--mac-over-glass-tracks-active-filled-idle-bg));
+  transform: translateY(-50%);
 }
 .camera-panel .wdg-slider .wdg-slider-thumb {
-  top: 11px;
-  bottom: auto;
-  height: 22px;
-  border: 1px solid rgba(241, 248, 255, 0.65);
-  border-radius: 14px;
-  background:
-    radial-gradient(ellipse at 30% 0, rgba(255, 255, 255, 0.8), transparent 65%), linear-gradient(160deg, rgba(224, 239, 255, 0.55), rgba(184, 207, 237, 0.22) 55%, rgba(231, 244, 255, 0.45));
+  z-index: 2;
+  inset: 50% auto auto calc(var(--camera-knob-w) / 2 + var(--wdg-fraction) * (100% - var(--camera-knob-w)));
+  width: var(--camera-knob-w);
+  height: var(--camera-knob-h);
+  border-radius: 999px;
+  background: var(--mac-over-glass-knobs-toggle-idle-bg);
   box-shadow:
-    inset 0 1px 1px rgba(255, 255, 255, 0.85),
-    inset 0 -1px 1px rgba(218, 235, 255, 0.4),
-    0 3px 7px rgba(0, 0, 0, 0.3);
-  -webkit-backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
+    0 1px 3px rgb(0 0 0 / 0.35),
+    var(--mac-over-glass-knobs-toggle-idle-shadow);
+  -webkit-backdrop-filter: var(--mac-over-glass-knobs-toggle-idle-backdrop);
+  backdrop-filter: var(--mac-over-glass-knobs-toggle-idle-backdrop);
+  transform: translate(-50%, -50%);
+  transition: transform 120ms ease;
+}
+.camera-panel .wdg-slider-body:active .wdg-slider-thumb {
+  transform: translate(-50%, -50%) scale(1.08);
 }
 .camera-panel .wdg-slider-body:focus-visible {
-  outline: 2px solid var(--camera-ink);
-  outline-offset: 1px;
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
 }
 .camera-panel footer {
-  padding: 0 2px;
+  padding-top: 12px;
 }
 .camera-panel footer a {
   display: inline-block;
   margin-top: 8px;
-  color: #c8d7ed;
-}
-@media (prefers-reduced-transparency: reduce) {
-  .vf-sheet.settings.camera-panel {
-    background: #262c38;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-  .camera-panel .wdg-slider .wdg-slider-thumb {
-    background: #cad9ed;
-  }
+  color: var(--set-caption);
 }

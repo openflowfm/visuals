@@ -53,14 +53,15 @@ export const Off: Story = {
     await expect(opacity).toHaveAttribute('aria-valuenow', '0');
     const low = opacity.getBoundingClientRect();
     await expect(low.height).toBe(44);
-    await expect(thumb.getBoundingClientRect().height).toBe(22);
-    await expect(fill.getBoundingClientRect().height).toBe(8);
+    await expect(thumb.getBoundingClientRect().height).toBe(16);
+    await expect(fill.getBoundingClientRect().height).toBe(5);
     const center = (element: HTMLElement) => {
       const box = element.getBoundingClientRect();
       return box.top + box.height / 2;
     };
     await expect(center(fill)).toBeCloseTo(center(thumb), 0);
-    await expect(getComputedStyle(panel.getByRole('status')).color).toBe('rgb(185, 194, 209)');
+    await expect(getComputedStyle(panel.getByRole('status')).color).toBe('rgb(164, 164, 172)');
+    await expect(getComputedStyle(await screen.findByRole('dialog', { name: 'Camera' })).borderRadius).toBe('18px');
     await expect(thumb.getBoundingClientRect().left).toBeCloseTo(low.left, 0);
     await userEvent.click(opacity);
     await expect(opacity).toHaveFocus();

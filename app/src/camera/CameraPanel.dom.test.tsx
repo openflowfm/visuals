@@ -119,3 +119,22 @@ test('enable toggle can cancel a pending permission request', async () => {
   expect(stop).toHaveBeenCalledOnce();
   expect(f.controller.state.status).toBe('off');
 });
+
+test('header action uses the shared camera glyph and announces a dialog without starting capture', () => {
+  const f = fixture();
+  const open = vi.fn();
+  window.addEventListener('vf-sheet', open);
+  render(
+    <CameraProvider controller={f.controller}>
+      <CameraAction className="home-tool" />
+    </CameraProvider>,
+  );
+  const action = screen.getByRole('button', { name: 'Camera controls' });
+  expect(action.getAttribute('aria-haspopup')).toBe('dialog');
+  expect(action.querySelector('svg[data-icon="camera"]')?.getAttribute('viewBox')).toBe('0 0 16 16');
+  expect(action.classList.contains('home-tool')).toBe(true);
+  fireEvent.click(action);
+  expect(open).toHaveBeenCalledOnce();
+  expect(f.acquire).not.toHaveBeenCalled();
+  window.removeEventListener('vf-sheet', open);
+});

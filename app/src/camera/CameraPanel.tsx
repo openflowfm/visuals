@@ -3,6 +3,7 @@ import { Button } from '@openflow/widgets/controls/Button.tsx';
 import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import { range } from '../controls';
+import { Icon } from '../layout/icons';
 import { Sheet } from '../Settings';
 import { SwitchRow } from '../Switch';
 import { openSheet } from '../views';
@@ -38,15 +39,16 @@ export function CameraAction({ className = '' }: { className?: string }) {
   const { status } = useCamera();
   const on = status === 'active' || status === 'starting';
   return (
-    <Button
-      tone="quiet"
+    <button
+      type="button"
       className={`camera-action ${on ? 'camera-active' : ''} ${className}`}
-      label={on ? 'Camera on: open controls' : 'Camera controls'}
-      title="Open camera controls"
-      onPress={() => openSheet('camera')}
+      aria-label={on ? 'Camera on: open controls' : 'Camera controls'}
+      aria-haspopup="dialog"
+      title={on ? 'Camera on: open controls' : 'Open camera controls'}
+      onClick={() => openSheet('camera')}
     >
-      <span aria-hidden="true">◉</span> Camera{on ? ' on' : ''}
-    </Button>
+      <Icon name="camera" />
+    </button>
   );
 }
 const SLIDERS: {
@@ -91,14 +93,14 @@ export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void 
     });
   return (
     <Sheet title="Camera" className="settings camera-panel" onClose={onClose}>
-      <div className="wdg camera-body">
+      <div className="wdg camera-body" data-appearance="dark">
         <div className="camera-power">
           <SwitchRow name="Enable camera" on={on} onChange={(enabled) => (enabled ? void controller?.start() : controller?.stop())} disabled={!controller} />
           <p role={status === 'failed' ? 'alert' : 'status'} className="camera-status">
             {message}
           </p>
         </div>
-        <section className="camera-group" aria-label="Source">
+        <section className="settings-section camera-group" aria-label="Source">
           <h3>Source</h3>
           <Select
             label="Camera device"
@@ -114,19 +116,15 @@ export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void 
           </div>
           {sliders(['threshold'])}
         </section>
-        <section className="camera-group" aria-label="Appearance">
-          <h3>
-            Appearance <span>Keep yourself recognizable</span>
-          </h3>
+        <section className="settings-section camera-group" aria-label="Appearance">
+          <h3>Appearance</h3>
           {sliders(['cameraOpacity', 'outlineOpacity', 'color'])}
           <Button tone="quiet" onPress={() => controller?.configure({ outlineOpacity: 1 })}>
             Bring my outline back
           </Button>
         </section>
-        <section className="camera-group" aria-label="Motion">
-          <h3>
-            Motion <span>Feed the preset</span>
-          </h3>
+        <section className="settings-section camera-group" aria-label="Motion">
+          <h3>Motion</h3>
           {sliders(['feedMix', 'steadiness', 'smoothing'])}
         </section>
         <footer className="camera-note">

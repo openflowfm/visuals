@@ -51,6 +51,7 @@ export const ICON_NAMES = [
   'help',
   'effects',
   'audio',
+  'camera',
   'mood',
   'intensity',
 ] as const;
@@ -210,6 +211,13 @@ const GLYPHS: Record<IconName, ReactNode> = {
   import: <path d="M8 2.25V9.75M4.75 6.5 8 9.75 11.25 6.5M2.75 10.75V12.25A1 1 0 0 0 3.75 13.25H12.25A1 1 0 0 0 13.25 12.25V10.75" />,
   // A four-pointed spark: the effects.
   effects: <path d="M8 1.75Q8.5 7.5 14.25 8Q8.5 8.5 8 14.25Q7.5 8.5 1.75 8Q7.5 7.5 8 1.75Z" />,
+  // A video camera: the capture body and its lens housing.
+  camera: (
+    <>
+      <rect x="1.75" y="4.25" width="8.5" height="7.5" rx="2" />
+      <path d="M10.25 6.25 14.25 4.25V11.75L10.25 9.75" />
+    </>
+  ),
   // A waveform's bars: what it hears.
   audio: <path d="M2.75 6.75V9.25M5.25 4.25V11.75M7.75 2.25V13.75M10.25 5.25V10.75M12.75 6.75V9.25" />,
   // A tag: a mood is one of the user's tags.
