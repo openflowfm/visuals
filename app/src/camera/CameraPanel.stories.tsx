@@ -62,7 +62,8 @@ export const Off: Story = {
     await expect(center(fill)).toBeCloseTo(center(thumb), 0);
     await expect(getComputedStyle(panel.getByRole('status')).color).toBe('rgb(185, 194, 209)');
     await expect(thumb.getBoundingClientRect().left).toBeCloseTo(low.left, 0);
-    opacity.focus();
+    await userEvent.click(opacity);
+    await expect(opacity).toHaveFocus();
     await userEvent.keyboard('{End}');
     await waitFor(() => expect(opacity).toHaveAttribute('aria-valuenow', '100'));
     await expect(thumb.getBoundingClientRect().right).toBeCloseTo(opacity.getBoundingClientRect().right, 0);
