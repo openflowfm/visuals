@@ -420,3 +420,22 @@ test('slow output cannot create parallel requests and stop rejects its late fram
   expect(canvasEvents.slice(before).some((e) => e.id === 'output' && e.action === 'paint')).toBe(false);
   expect(outputCalls).toBe(1);
 });
+
+test('duplicate native frame IDs report unique render FPS rather than request throughput', async () => {
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    return String(url).includes('camera/output')
+      ? new Response(new Uint8Array(16), { status: 200, headers: { 'X-Frame-Width': '2', 'X-Frame-Height': '2', 'X-Frame-Sequence': '123', 'X-Snapshot-Ms': '7.25' } })
+      : outputResponse(String(url));
+  });
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(document.getElementById('rate')!.textContent).toMatch(/^[01] NATIVE FPS/), { timeout: 2000 });
+  expect(requests.filter((r) => r.includes('camera/output')).length).toBeGreaterThan(5);
+  expect(document.getElementById('timings')!.textContent).toContain('Native snapshot 7.3 ms');
+  expect(document.getElementById('sustained-rate')!.textContent).toContain('rolling sample');
+});
+
+test('legacy output without frame IDs labels request throughput honestly', async () => {
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(document.getElementById('rate')!.textContent).toContain('READS/S / native FPS unavailable'), { timeout: 2000 });
+});

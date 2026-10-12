@@ -2,6 +2,7 @@ import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { Contours, rawFrameSize } from './contours';
 import { ColorSignal } from './color-signal';
+import { OutputMeter } from './output-meter';
 import { CameraAudio } from './audio-input';
 import { LatestSelection, stepPreset, type CameraPreset } from './preset-browser';
 import { traceContours, drawContourPaths, type ContourPath } from './curve-contours';
@@ -12,7 +13,7 @@ const root = document.querySelector<HTMLDivElement>('#camera-app')!;
 root.innerHTML = `
 <header><a class="wordmark" href="#">open<span>flow</span></a><div class="edition">EXPERIMENT 001 <span>↗ LIVE CAMERA LAB</span></div><div class="local"><i></i> LOCAL SIGNAL</div></header>
 <main><div class="intro"><div><p class="eyebrow">YOUR FACE. THE FEEDBACK LOOP.</p><h1>Camera <em>possession.</em></h1></div><p class="lede">Become a beautiful signal problem.<br>Feed yourself into the MilkDrop machine.</p></div>
-<section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><p id="timings" class="stage-metrics" hidden></p><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="preset-dock"><button id="previous-preset" aria-label="Previous preset">←</button><button id="browse-presets" aria-expanded="false">Chromatic vortex ▴</button><button id="next-preset" aria-label="Next preset">→</button><button id="random-preset" aria-label="Random preset">⤨</button></div><section id="preset-browser" aria-label="Preset browser" hidden><div class="browser-head"><input id="preset-search" type="search" aria-label="Search presets" placeholder="Find a hallucination…"/><button id="close-presets" aria-label="Close preset browser">×</button></div><p id="preset-count"></p><div id="preset-list"></div><div class="browser-pages"><button id="preset-page-back">Previous 60</button><button id="preset-page-next">Next 60</button></div><p id="preset-error" role="status"></p></section><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
+<section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div class="stage-metrics" id="performance-details" hidden><p id="sustained-rate">Waiting for native frame IDs…</p><p id="timings"></p></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="preset-dock"><button id="previous-preset" aria-label="Previous preset">←</button><button id="browse-presets" aria-expanded="false">Chromatic vortex ▴</button><button id="next-preset" aria-label="Next preset">→</button><button id="random-preset" aria-label="Random preset">⤨</button></div><section id="preset-browser" aria-label="Preset browser" hidden><div class="browser-head"><input id="preset-search" type="search" aria-label="Search presets" placeholder="Find a hallucination…"/><button id="close-presets" aria-label="Close preset browser">×</button></div><p id="preset-count"></p><div id="preset-list"></div><div class="browser-pages"><button id="preset-page-back">Previous 60</button><button id="preset-page-next">Next 60</button></div><p id="preset-error" role="status"></p></section><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
 <aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Chromatic vortex</b><span>Spiral into a spectral wormhole</span><i>01</i></button><button data-preset="1"><b>Prism cult</b><span>Sixfold stained-glass hallucination</span><i>02</i></button><button data-preset="2"><b>Acid tide</b><span>Liquid ribbons and chromatic rupture</span><i>03</i></button></div>
 <div class="section-title">02 <span>LOSE YOUR COMPOSURE</span></div>
 <label class="knob"><span>Recognition <output id="recognition-value">85%</output></span><input id="recognition" type="range" min="0" max="100" value="85"/><small>Pure hallucination → Keep me present</small></label>
@@ -203,6 +204,10 @@ async function capture(id: number) {
   }
 }
 async function paint(id: number) {
+  const meter = new OutputMeter(performance.now());
+  let measuredSize = '';
+  let snapshotTotal = 0,
+    snapshotCount = 0;
   let nextOutputAt = performance.now();
   while (id === generation && mode) {
     // A deadline avoids quantizing a slightly late native response down to 30 Hz.
@@ -220,8 +225,20 @@ async function paint(id: number) {
         const buffer = await r.arrayBuffer();
         const bodyAt = performance.now();
         const [width, height] = rawFrameSize(r.headers, buffer.byteLength);
-        const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
         if (id === generation) {
+          const size = `${width}×${height}:${acceptedPresetId}`;
+          if (size !== measuredSize) {
+            meter.reset(performance.now());
+            measuredSize = size;
+          }
+          meter.record(performance.now(), r.headers.get('X-Frame-Sequence'));
+          const snapshotHeader = r.headers.get('X-Snapshot-Ms');
+          const snapshotMs = snapshotHeader === null ? NaN : Number(snapshotHeader);
+          if (Number.isFinite(snapshotMs) && snapshotMs >= 0) {
+            snapshotTotal += snapshotMs;
+            snapshotCount++;
+          }
+          const image = new ImageData(new Uint8ClampedArray(buffer), width, height);
           if (output.width !== width || output.height !== height) {
             output.width = width;
             output.height = height;
@@ -249,10 +266,16 @@ async function paint(id: number) {
           bodyTotal += bodyAt - headersAt;
           composeTotal += performance.now() - bodyAt;
           if (performance.now() - rateAt >= 1000) {
-            $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} OUTPUT FPS / ${width}×${height}`;
+            const recent = meter.snapshot(performance.now(), 1000);
+            const sustained = meter.snapshot(performance.now());
+            $('rate').textContent = recent.verified ? `${recent.nativeFps.toFixed(0)} NATIVE FPS / ${width}×${height}` : `${recent.readsPerSecond.toFixed(0)} READS/S / native FPS unavailable`;
+            $('sustained-rate').textContent = sustained.verified
+              ? `${sustained.nativeFps.toFixed(1)} native FPS · ${sustained.seconds.toFixed(1)}s rolling sample`
+              : 'Native frame IDs unavailable · throughput is not render FPS';
             $('input-cost').textContent = `${((captureFrames * 1000) / (performance.now() - rateAt)).toFixed(0)} INPUT FPS · ${preparationMs.toFixed(1)} MS`;
             $('timings').textContent =
-              `Output: fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
+              `Native snapshot ${snapshotCount ? (snapshotTotal / snapshotCount).toFixed(1) + ' ms' : 'unavailable'} | Output: fetch ${(fetchTotal / frames).toFixed(1)} ms · body ${(bodyTotal / frames).toFixed(1)} ms · compose ${(composeTotal / frames).toFixed(1)} ms | Input: prep ${(preparationTotal / Math.max(1, captureFrames)).toFixed(1)} ms · upload ${(uploadTotal / Math.max(1, captureFrames)).toFixed(1)} ms`;
+            snapshotTotal = snapshotCount = 0;
             frames = captureFrames = 0;
             preparationTotal = uploadTotal = fetchTotal = bodyTotal = composeTotal = 0;
             rateAt = performance.now();
@@ -281,6 +304,7 @@ async function stop(releaseAudio = true) {
   video.srcObject = null;
   $('signal').textContent = 'NO INPUT';
   $('rate').textContent = 'NATIVE OUTPUT / IDLE';
+  $('sustained-rate').textContent = 'Stopped · no active measurement';
   $('input-cost').textContent = 'INPUT TO THE LOOP';
   $<HTMLButtonElement>('stop').disabled = true;
   $('source-info').textContent = 'Input stopped. Camera tracks released.';
@@ -494,7 +518,7 @@ if (token)
       $('preset-error').textContent = String(error);
     });
 $('show-timings').onchange = () => {
-  $('timings').hidden = !$<HTMLInputElement>('show-timings').checked;
+  $('performance-details').hidden = !$<HTMLInputElement>('show-timings').checked;
 };
 $('resolution').onchange = () => {
   void settings().catch((error) => status(String(error)));

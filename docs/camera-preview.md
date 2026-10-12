@@ -132,3 +132,13 @@ mean header/fetch wait, response-body transfer and composition time, plus prepar
 and upload time, over each reporting interval. This exposes transport/render costs
 without assuming the browser is the bottleneck. A requested 60 Hz camera or uncapped
 output loop is not evidence of achieved 60 FPS; measure each resolution/preset.
+
+Distinct-frame measurement uses the runtime's monotonic `X-Frame-Sequence`, which
+increments after an actual native render, including interpolated refreshes, and
+not after a snapshot. Repeated IDs contribute zero additional native frames; gaps
+in IDs do not invent frames the browser never received. **Show timing breakdown**
+includes a rolling ten-second distinct-frame mean and its actual sampling duration,
+plus mean `X-Snapshot-Ms` reported by the native snapshot path. Resolution, accepted
+preset and source changes start a fresh sample. Without valid frame IDs the UI
+explicitly reports reads/second and says native FPS is unavailable. Identity can
+still be recomposited onto a duplicate response without counting a new native frame.
