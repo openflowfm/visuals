@@ -9,6 +9,8 @@
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import type * as api from '../api.ts';
+import type { AudioStatus, AudioLane } from '../audio-api.ts';
+import { sameSource } from '../SourcePicker.tsx';
 import type * as fx from '../fx.ts';
 import type * as link from '../link.ts';
 import type * as output from '../output.ts';
@@ -39,6 +41,7 @@ export interface World {
   update: api.Update | null;
   sources: api.AudioSources;
   heard: api.Heard;
+  audio?: AudioStatus;
   levels: [number, number];
   stats: api.Stats;
   firstRun: boolean;
@@ -440,12 +443,50 @@ export function handler(w: World) {
         return new ArrayBuffer(0);
       case 'audio_sources':
         return w.sources;
+      case 'audio_status': {
+        if (!w.audio) {
+          const source = w.sources.sources.find((s) => s.name === w.heard.choice?.name)?.id ?? null;
+          w.audio = {
+            main: { ...w.heard, source, selected: source, enabled: !!source, unavailable: false },
+            mic: { choice: null, channels: 0, source: null, selected: null, enabled: false, unavailable: false },
+          };
+        }
+        return w.audio;
+      }
+      case 'choose_audio_lane': {
+        if (!w.audio) {
+          const source = w.sources.sources.find((s) => s.name === w.heard.choice?.name)?.id ?? null;
+          w.audio = {
+            main: { ...w.heard, source, selected: source, enabled: !!source, unavailable: false },
+            mic: { choice: null, channels: 0, source: null, selected: null, enabled: false, unavailable: false },
+          };
+        }
+        const lane = args.lane as AudioLane;
+        const id = args.source as api.SourceId | null;
+        const source = w.sources.sources.find((s) => sameSource(s.id, id));
+        if (id && (!source || (lane === 'mic' && id.kind !== 'device'))) throw new Error('Input unavailable');
+        w.audio[lane] = {
+          choice: source ? { name: source.name, size: source.channels, left: Number(args.left), right: Number(args.right) } : null,
+          channels: source?.channels ?? 0,
+          source: id,
+          selected: id,
+          enabled: !!id,
+          unavailable: false,
+        };
+        w.heard = w.audio.main;
+        return w.audio;
+      }
       case 'listening':
         return w.heard;
       case 'inputs':
         return w.sources.sources.filter((s) => s.id.kind === 'device').map((s) => ({ name: s.name, channels: s.channels }));
-      case 'listen_to':
-        return (args.source as api.SourceId | undefined)?.kind === 'system' ? 'Everything the Mac plays' : String((args.name as string | undefined) ?? 'Ableton Live 12');
+      case 'listen_to': {
+        const source = w.sources.sources.find((s) => sameSource(s.id, args.source as api.SourceId));
+        if (!source) throw new Error('Source unavailable');
+        w.heard = { choice: { name: source.name, size: source.channels, left: Number(args.left), right: Number(args.right) }, channels: source.channels };
+        if (w.audio) w.audio.main = { ...w.heard, source: source.id, selected: source.id, enabled: true, unavailable: false };
+        return source.name;
+      }
 
       // The pack, settings, privacy, updates.
       case 'pack_status':

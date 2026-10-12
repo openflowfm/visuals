@@ -34,3 +34,45 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.audio-advanced-body {
+  min-width: 235px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  box-shadow: var(--shadow-popover);
+}
+.audio-lane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.audio-lane-name {
+  flex-basis: 100%;
+  font-weight: 500;
+}
+.audio-optional {
+  color: var(--caption);
+  font-weight: 400;
+}
+.audio-lane .audio-channels {
+  display: flex;
+  gap: 8px;
+}
+.audio-lane .audio-note {
+  flex-basis: 100%;
+  white-space: normal;
+}
+.audio-mixer-shown > .audio-lane {
+  flex-basis: 100%;
+  padding-bottom: 12px;
+}
+.audio-mix-levels {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--caption);
+}
