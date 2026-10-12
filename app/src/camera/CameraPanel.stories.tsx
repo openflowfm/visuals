@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, screen, userEvent, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { CameraPanel, CameraProvider } from './CameraPanel';
 import { CameraController } from './controller';
@@ -58,10 +58,10 @@ export const Off: Story = {
     await expect(thumb.getBoundingClientRect().left).toBeCloseTo(low.left, 0);
     opacity.focus();
     await userEvent.keyboard('{End}');
-    await expect(opacity).toHaveAttribute('aria-valuenow', '100');
+    await waitFor(() => expect(opacity).toHaveAttribute('aria-valuenow', '100'));
     await expect(thumb.getBoundingClientRect().right).toBeCloseTo(opacity.getBoundingClientRect().right, 0);
     await userEvent.keyboard('{Home}');
-    await expect(opacity).toHaveAttribute('aria-valuenow', '0');
+    await waitFor(() => expect(opacity).toHaveAttribute('aria-valuenow', '0'));
     await expect(panel.getByRole('slider', { name: 'Outline opacity' })).toHaveAttribute('aria-valuenow', '65');
     await userEvent.click(panel.getByRole('button', { name: 'Bring my outline back' }));
     await expect(panel.getByRole('slider', { name: 'Camera opacity' })).toHaveAttribute('aria-valuenow', '0');
