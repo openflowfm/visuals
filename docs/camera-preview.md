@@ -179,3 +179,10 @@ These counters expose application ownership; they cannot measure internal browse
 GPU or driver allocations. A crash without growing application balances still needs
 browser/process evidence. No periodic decoder recycling is enabled merely to hide
 an unexplained stability problem.
+
+The output canvas requests an opaque (`alpha: false`) backing store. Encoded frames
+clear and replace the full canvas before foreground composition; Stop remains black.
+This is a controlled experiment intended to reduce deferred canvas/video-surface
+retention under occlusion and resize. It is not evidence that retained GPU surfaces
+caused the observed browser crash, nor a verified crash fix; compare resource/process
+measurements and a sustained soak against the preceding diagnostics-only revision.

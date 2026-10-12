@@ -70,6 +70,9 @@ beforeEach(async () => {
     const context = new Proxy(
       {
         createLinearGradient: () => ({ addColorStop: vi.fn() }),
+        drawImage: (source: object) => {
+          canvasEvents.push({ id, action: 'displayWidth' in source ? 'decoded' : 'draw' });
+        },
         getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4) }),
         putImageData: (image: ImageData) => {
           canvasEvents.push({ id, action: 'paint', first: image.data[0] });
@@ -480,6 +483,13 @@ test('encoded output closes decoded frames and raw comparison disposes its decod
   await waitFor(() => expect(document.getElementById('video-capability')!.textContent).toContain('supported'));
   document.getElementById('demo')!.click();
   await waitFor(() => expect(closed).toHaveBeenCalled());
+  const outputEvents = canvasEvents.filter((event) => event.id === 'output');
+  const decodedAt = outputEvents.findIndex((event) => event.action === 'decoded');
+  expect(decodedAt).toBeGreaterThan(0);
+  expect(outputEvents[decodedAt - 1].action).toBe('clear');
+  expect(vi.mocked(HTMLCanvasElement.prototype.getContext).mock.calls.some(([kind, options]) => kind === '2d' && (options as CanvasRenderingContext2DSettings | undefined)?.alpha === false)).toBe(
+    true,
+  );
   const select = document.getElementById('output-transport') as HTMLSelectElement;
   select.value = 'raw';
   select.dispatchEvent(new Event('change'));

@@ -30,7 +30,7 @@ root.innerHTML = `
 <section class="audio-tools" aria-label="Sound reaction"><button id="audio-toggle">Enable audio</button><select id="audio-device" aria-label="Audio input"><option value="">Default microphone / interface</option></select><label class="knob"><span>Sensitivity <output id="gain-value">1.0×</output></span><input id="gain" type="range" min="0" max="400" value="100"/></label><meter id="audio-meter" min="0" max="1" value="0" aria-label="Audio input level"></meter><span id="audio-status" role="status">Audio off</span></section><footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
-const ctx = output.getContext('2d')!;
+const ctx = output.getContext('2d', { alpha: false })!;
 const input = document.createElement('canvas');
 const WIDTH = 320,
   HEIGHT = 180,
@@ -329,8 +329,11 @@ async function paint(id: number) {
               output.width = width;
               output.height = height;
             }
-            if (decoded) ctx.drawImage(decoded, 0, 0, width, height);
-            else ctx.putImageData(image!, 0, 0);
+            if (decoded) {
+              // Fully replace the opaque video surface before identity compositing.
+              ctx.clearRect(0, 0, width, height);
+              ctx.drawImage(decoded, 0, 0, width, height);
+            } else ctx.putImageData(image!, 0, 0);
             if (performance.now() - identityAt <= 250 && useContours) {
               ctx.save();
               ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
