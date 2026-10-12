@@ -13,7 +13,7 @@
 .camera-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   padding: 12px 0;
 }
 .camera-body p {
@@ -29,16 +29,7 @@
 .camera-control {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-}
-.camera-control > span {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-.camera-control input {
-  width: 100%;
-  accent-color: var(--accent, #bddcff);
+  gap: 3px;
 }
 
 .camera-body {

@@ -82,7 +82,6 @@ export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void 
           const value = Math.round(settings[key] * (normalized ? 100 : 1));
           return (
             <div className="camera-control" key={key}>
-              <span>{label}</span>
               <Slider
                 param={range(label, 0, max, DEFAULT_CAMERA_SETTINGS[key] * (normalized ? 100 : 1))}
                 value={value}
