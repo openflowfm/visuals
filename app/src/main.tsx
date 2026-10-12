@@ -1,34 +1,34 @@
-import { StrictMode } from 'react';
+import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ThemeRoot } from '@openflow/widgets/theme/ThemeRoot.tsx';
-import { DEFAULT_THEME } from '@openflow/widgets/theme/theme.ts';
-import '@openflow/widgets/palette.css';
-import '@openflow/widgets/tokens.css';
-import './app.css';
-import './chrome.css';
-import { App } from './App.tsx';
-import { Update } from './Update.tsx';
-import { startChrome } from './chrome.ts';
+import { VisualsApp } from '@satoramoto/zen/visuals';
+import '@satoramoto/zen/zen.css';
+import '@satoramoto/zen/visuals.css';
+import './main.css';
+import { installTauriBridge } from './zenBridge.ts';
 
-// Served on its own (a browser tab on the dev port) the page has no app behind it:
-// no engine, no presets, no bench. The window `npm run app` opens is the editor.
-const inApp = '__TAURI_INTERNALS__' in window;
-// The main window's title bar is the page's own top bar (chrome.ts).
-if (inApp) startChrome();
+// The page is zen's visual[flow] UI (`@satoramoto/zen/visuals`): the home, live
+// mode, the sheets, the welcome flow and the prompts, in its own theme scope
+// with the `visuals` pack, dark as the window's frost is. Every command and
+// event goes through the bridge installed here, over Tauri. Served on its own
+// (a browser tab on the dev port) there is no Tauri behind the page and no
+// bridge to install; zen's UI then says it has no backend.
+if ('__TAURI_INTERNALS__' in window) installTauriBridge();
+
+// The editor, only in a lab build: without `VITE_LAB` this is `null` at build
+// time, and the editor's code (the graph, the inspector, the edits, the suite's
+// widgets they still use) never reaches the bundle.
+const Lab = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null;
+
+const app = <VisualsApp mode="dark" />;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeRoot theme={DEFAULT_THEME} className="vf-root">
-      {inApp ? (
-        <>
-          <App />
-          <Update />
-        </>
-      ) : (
-        <p className="outside">
-          This is the editor's page without the app behind it. The editor is the window <code>npm run app</code> opened.
-        </p>
-      )}
-    </ThemeRoot>
+    {Lab ? (
+      <Suspense fallback={null}>
+        <Lab app={app} />
+      </Suspense>
+    ) : (
+      app
+    )}
   </StrictMode>,
 );
