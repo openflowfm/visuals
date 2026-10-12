@@ -364,7 +364,7 @@ function selectPreset(item: CameraPreset) {
   $('preset-error').textContent = '';
   document.querySelectorAll<HTMLElement>('[data-preset]').forEach((b) => b.classList.toggle('selected', `camera:${b.dataset.preset}` === item.id));
   renderPresets();
-  const body = JSON.stringify({ presetId: item.id });
+  const body = JSON.stringify({ presetId: item.id, speed: value('speed') / 100, persistence: value('persistence') / 100, resolution: $<HTMLSelectElement>('resolution').value });
   void presetSelections.request(
     () => {
       settingsChain = settingsChain.catch(() => {}).then(() => post('camera/settings', body));

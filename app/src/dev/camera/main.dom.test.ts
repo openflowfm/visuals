@@ -308,6 +308,8 @@ test('preset dock loads searchable catalog and sends native preset IDs without r
   document.getElementById('next-preset')!.click();
   await waitFor(() => expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult'));
   await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('camera:1'))).toBe(true));
+  const selectedRequest = vi.mocked(fetch).mock.calls.find(([url, init]) => String(url).includes('camera/settings') && String(init?.body).includes('camera:1'));
+  expect(JSON.parse(String(selectedRequest?.[1]?.body))).toMatchObject({ presetId: 'camera:1', speed: 0.8, persistence: 0.65, resolution: '720p' });
   expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(stops);
   document.getElementById('browse-presets')!.click();
   expect(document.getElementById('preset-browser')!.hidden).toBe(false);
