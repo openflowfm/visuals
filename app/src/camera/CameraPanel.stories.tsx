@@ -55,11 +55,18 @@ export const Off: Story = {
     await expect(low.height).toBe(44);
     await expect(thumb.getBoundingClientRect().height).toBe(22);
     await expect(fill.getBoundingClientRect().height).toBe(8);
+    const center = (element: HTMLElement) => {
+      const box = element.getBoundingClientRect();
+      return box.top + box.height / 2;
+    };
+    await expect(center(fill)).toBeCloseTo(center(thumb), 0);
+    await expect(getComputedStyle(panel.getByRole('status')).color).toBe('rgb(185, 194, 209)');
     await expect(thumb.getBoundingClientRect().left).toBeCloseTo(low.left, 0);
     opacity.focus();
     await userEvent.keyboard('{End}');
     await waitFor(() => expect(opacity).toHaveAttribute('aria-valuenow', '100'));
     await expect(thumb.getBoundingClientRect().right).toBeCloseTo(opacity.getBoundingClientRect().right, 0);
+    await expect(center(fill)).toBeCloseTo(center(thumb), 0);
     await userEvent.keyboard('{Home}');
     await waitFor(() => expect(opacity).toHaveAttribute('aria-valuenow', '0'));
     await expect(panel.getByRole('slider', { name: 'Outline opacity' })).toHaveAttribute('aria-valuenow', '65');

@@ -45,8 +45,9 @@
 .camera-power .vf-switch-name {
   font-weight: 600;
 }
-.camera-status,
-.camera-note {
+.camera-panel .camera-status,
+.camera-panel .camera-note,
+.camera-panel .camera-note p {
   color: #b9c2d1;
   font-size: 11px;
   line-height: 1.5;
@@ -54,7 +55,7 @@
 .camera-status {
   padding-top: 5px;
 }
-.camera-status[role='alert'] {
+.camera-panel .camera-status[role='alert'] {
   color: var(--danger, #ffb0a8);
 }
 .camera-group {
@@ -134,7 +135,7 @@
   overflow: visible;
 }
 .camera-panel .wdg-slider-body::before,
-.camera-panel .wdg-slider-fill {
+.camera-panel .wdg-slider .wdg-slider-fill {
   position: absolute;
   top: 18px;
   bottom: auto;
@@ -151,7 +152,7 @@
     inset 0 1px 3px rgba(0, 0, 0, 0.3),
     0 1px 0 rgba(233, 243, 255, 0.12);
 }
-.camera-panel .wdg-slider-fill {
+.camera-panel .wdg-slider .wdg-slider-fill {
   left: 0;
   width: calc(var(--wdg-fraction) * 100%);
   background: linear-gradient(90deg, rgba(155, 186, 224, 0.4), rgba(210, 229, 255, 0.75));
