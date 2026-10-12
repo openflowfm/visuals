@@ -11,6 +11,15 @@ export class ColorSignal {
     this.emission = new Uint8ClampedArray(width * height * 4);
     this.identity = new Uint8ClampedArray(width * height * 4);
   }
+  /** Palette color independent of raster edge strength, for native wave vertices. */
+  strokeColor(x: number, y: number, source: Uint8ClampedArray): [number, number, number] {
+    const row = Math.max(0, Math.min(this.height - 1, Math.round(y)));
+    const column = Math.max(0, Math.min(this.width - 1, Math.round(x)));
+    const p = (row * this.width + column) * 4;
+    const luma = (source[p] * 0.2126 + source[p + 1] * 0.7152 + source[p + 2] * 0.0722) / 255;
+    const band = (row * 1.1 + luma * 95) & 255;
+    return [this.palette[band * 3] / 255, this.palette[band * 3 + 1] / 255, this.palette[band * 3 + 2] / 255];
+  }
   prepare(edges: Uint8ClampedArray, source: Uint8ClampedArray, opacity: Float32Array | null, color: number, time: number) {
     const saturation = Math.max(0, Math.min(1, color / 100));
     // A traveling spectrum maps facial luminance and vertical position to hue.

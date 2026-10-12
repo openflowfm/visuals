@@ -103,7 +103,7 @@ afterEach(async () => {
 test('does not request camera permission on load or in demo; demo reaches native bridge', async () => {
   expect(getUserMedia).not.toHaveBeenCalled();
   document.getElementById('demo')!.click();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=320&h=180'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/contours'))).toBe(true));
   expect(getUserMedia).not.toHaveBeenCalled();
   expect(document.getElementById('signal')!.textContent).toContain('TEST SUBJECT');
   document.getElementById('stop')!.click();
@@ -126,7 +126,7 @@ test('a permission grant arriving after Stop is released without sending camera 
   document.getElementById('stop')!.click();
   grant({ getTracks: () => [{ stop: stopped }] } as unknown as MediaStream);
   await waitFor(() => expect(stopped).toHaveBeenCalledOnce());
-  expect(requests.some((r) => r.includes('camera/frame'))).toBe(false);
+  expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(false);
 });
 
 test('permission denial is shown and leaves source stopped', async () => {
@@ -151,12 +151,12 @@ test('a delayed older stop cannot clear a newer demo session', async () => {
   await waitFor(() => expect(stops).toBe(1));
   document.getElementById('demo')!.click();
   await new Promise((r) => setTimeout(r, 20));
-  expect(requests.some((r) => r.includes('camera/settings') || r.includes('camera/frame'))).toBe(false);
+  expect(requests.some((r) => r.includes('camera/settings') || r.match(/camera\/(?:frame|contours)/))).toBe(false);
   finishOldStop();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
   const beforeFrame = requests.slice(
     0,
-    requests.findIndex((r) => r.includes('camera/frame')),
+    requests.findIndex((r) => r.match(/camera\/(?:frame|contours)/)),
   );
   expect(beforeFrame.filter((r) => r.includes('camera/stop'))).toHaveLength(2);
   expect(beforeFrame.filter((r) => r.includes('camera/settings'))).toHaveLength(1);
@@ -174,11 +174,11 @@ test('person model failure never silently sends the whole scene', async () => {
   );
   document.getElementById('demo')!.click();
   await waitFor(() => expect(document.getElementById('mask-status')!.textContent).toContain('Person isolation unavailable'));
-  expect(requests.some((r) => r.includes('camera/frame'))).toBe(false);
+  expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(false);
   const checkbox = document.getElementById('person-only') as HTMLInputElement;
   checkbox.checked = false;
   checkbox.dispatchEvent(new Event('change'));
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
   expect(document.getElementById('mask-status')!.textContent).toContain('Whole scene');
 });
 
@@ -204,9 +204,9 @@ test('mirror change discards delayed old-coordinate masks and acquires a fresh o
   expect(old.terminate).toHaveBeenCalledOnce();
   old.complete();
   await new Promise((r) => setTimeout(r, 40));
-  expect(requests.filter((r) => r.includes('camera/frame'))).toHaveLength(0);
+  expect(requests.filter((r) => r.match(/camera\/(?:frame|contours)/))).toHaveLength(0);
   MaskWorker.instances[1].complete();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
 });
 
 test('person-only transition drains old uploads, clears feedback and rejects late room output', async () => {
@@ -221,7 +221,7 @@ test('person-only transition drains old uploads, clears feedback and rejects lat
   vi.mocked(fetch).mockImplementation(async (url) => {
     const route = String(url);
     requests.push(route);
-    if (route.includes('camera/frame') && !heldUpload) {
+    if (route.match(/camera\/(?:frame|contours)/) && !heldUpload) {
       heldUpload = true;
       await new Promise<void>((done) => {
         finishUpload = done;
@@ -266,10 +266,10 @@ test('person-only transition drains old uploads, clears feedback and rejects lat
   const lastStop = requests.map((r) => r.includes('camera/stop')).lastIndexOf(true);
   expect(requests.map((r) => r.includes('camera/settings')).lastIndexOf(true)).toBeGreaterThan(lastStop);
   expect(requests.filter((r) => r.includes('camera/stop'))).toHaveLength(2);
-  expect(requests.filter((r) => r.includes('camera/frame'))).toHaveLength(1);
+  expect(requests.filter((r) => r.match(/camera\/(?:frame|contours)/))).toHaveLength(1);
   expect(canvasEvents.some((e) => e.id === 'output' && e.action === 'paint' && e.first === 99)).toBe(false);
   MaskWorker.instances[0].complete();
-  await waitFor(() => expect(requests.filter((r) => r.includes('camera/frame')).length).toBeGreaterThan(1));
+  await waitFor(() => expect(requests.filter((r) => r.match(/camera\/(?:frame|contours)/)).length).toBeGreaterThan(1));
 });
 
 test('identity waits for accepted upload and is discarded when its person mask expires', async () => {
@@ -277,7 +277,7 @@ test('identity waits for accepted upload and is discarded when its person mask e
   let accept!: () => void;
   vi.mocked(fetch).mockImplementation(async (url) => {
     requests.push(String(url));
-    if (String(url).includes('camera/frame') && !accept)
+    if (String(url).match(/camera\/(?:frame|contours)/) && !accept)
       await new Promise<void>((resolve) => {
         accept = resolve;
       });
@@ -307,7 +307,7 @@ test('raw comparison disables contour-only controls and returning to Contours re
 
 test('preset dock loads searchable catalog and sends native preset IDs without restarting the source', async () => {
   document.getElementById('demo')!.click();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
   const stops = requests.filter((r) => r.includes('camera/stop')).length;
   document.getElementById('next-preset')!.click();
   await waitFor(() => expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult'));
@@ -354,7 +354,7 @@ test('rejected preset restores accepted choice and a later start uses the accept
   expect(document.getElementById('browse-presets')!.textContent).toContain('Chromatic vortex');
   expect(document.querySelector('[data-preset="0"]')!.classList.contains('selected')).toBe(true);
   document.getElementById('demo')!.click();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
   const settings = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/settings'));
   expect(JSON.parse(String(settings.at(-1)?.[1]?.body)).presetId).toBe('camera:0');
 });
@@ -395,7 +395,7 @@ test('starting while a preset selection is pending reloads the accepted new pres
   await new Promise((resolve) => setTimeout(resolve, 20));
   expect(settingsCount).toBe(1);
   acceptSelection();
-  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame'))).toBe(true));
+  await waitFor(() => expect(requests.some((r) => r.match(/camera\/(?:frame|contours)/))).toBe(true));
   const settingsRequests = vi.mocked(fetch).mock.calls.filter(([url]) => String(url).includes('camera/settings'));
   expect(settingsRequests.map(([, init]) => JSON.parse(String(init?.body)).presetId)).toEqual(['camera:1', 'camera:1']);
   expect(document.getElementById('browse-presets')!.textContent).toContain('Prism cult');
@@ -618,4 +618,14 @@ test('decode failure cancels prefetched packet before raw fallback continues', a
   expect(aborted).toBe(true);
   expect(videoCalls).toBe(2);
   expect(document.getElementById('transport-status')!.textContent).toContain('Raw fallback');
+});
+
+test('contours upload native wave geometry while Raw camera retains RGBA transport', async () => {
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/contours'))).toBe(true));
+  const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).includes('camera/contours'));
+  expect(JSON.parse(String(request?.[1]?.body))).toMatchObject({ width: 320, height: 180, mix: 0.09, paths: [] });
+  document.getElementById('raw-mode')!.click();
+  await waitFor(() => expect(requests.some((r) => r.includes('camera/frame?w=320&h=180'))).toBe(true));
+  expect((document.getElementById('steadiness') as HTMLInputElement).disabled).toBe(true);
 });

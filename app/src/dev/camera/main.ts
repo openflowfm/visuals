@@ -2,6 +2,7 @@ import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { TemporalContours } from './temporal-contours';
 import { Contours, rawFrameSize } from './contours';
+import { contourPacket } from './contour-packet';
 import { ColorSignal } from './color-signal';
 import { closeVideoFrame, videoResourceSummary } from './video-resources';
 import { VideoPackets } from './video-packets';
@@ -202,7 +203,9 @@ async function capture(id: number) {
       preparedContext.putImageData(new ImageData(new Uint8ClampedArray(data.buffer as ArrayBuffer), WIDTH, HEIGHT), 0, 0);
       preparationMs = performance.now() - filterStarted;
       const uploadStarted = performance.now();
-      posting = post(`camera/frame?w=${WIDTH}&h=${HEIGHT}&mix=${mix}`, data.buffer as ArrayBuffer);
+      posting = useContours
+        ? post('camera/contours', JSON.stringify(contourPacket(paths, WIDTH, HEIGHT, mix, (x, y) => colorSignal.strokeColor(x, y, source))))
+        : post(`camera/frame?w=${WIDTH}&h=${HEIGHT}&mix=${mix}`, data.buffer as ArrayBuffer);
       await posting;
       if (id === generation) {
         captureFrames++;

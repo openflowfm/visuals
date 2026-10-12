@@ -199,3 +199,13 @@ Stop, source, mirror and mode resets discard history. The same stabilized paths
 are rasterized for the prepared view and used in the foreground. Work remains at
 320×180 and the geometry budget is 512 paths / 8,192 points; the output loop remains
 independent. A default of 65% favors stability while retaining motion response.
+
+Contour mode now sends those paths as colored native waveform geometry through
+`POST /__bridge/camera/contours`, rather than uploading an opaque raster image.
+The payload contains source dimensions, mix and whole open/closed paths with
+normalized palette colors per vertex. Serialization independently enforces the
+512-path / 8,192-point limit, dropping whole excess paths rather than truncating a
+closed loop. Vertex colors come from the palette, never from black/antialiased edge
+pixels. The prepared thumbnail remains a raster view of the same geometry; the
+Recognition overlay uses the same stabilized paths. Set Recognition to zero to
+inspect only the native engine. Raw camera comparison retains the RGBA frame route.

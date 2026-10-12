@@ -21,3 +21,13 @@ test('empty masks and no contours cannot reintroduce the room in identity', () =
   expect(signal.identity[3]).toBe(0);
   expect(signal.identity[7]).toBe(0);
 });
+
+test('native vertex colors use the palette even when the raster edge pixel is black', () => {
+  const signal = new ColorSignal(2, 1),
+    source = new Uint8ClampedArray([100, 100, 100, 255, 0, 0, 0, 255]);
+  signal.prepare(new Uint8ClampedArray(8), source, null, 100, 0);
+  expect(signal.emission[0]).toBe(0);
+  expect(Math.max(...signal.strokeColor(0, 0, source))).toBe(1);
+  signal.prepare(new Uint8ClampedArray(8), source, null, 0, 0);
+  expect(signal.strokeColor(0, 0, source)).toEqual([1, 1, 1]);
+});
