@@ -1,6 +1,7 @@
 import './style.css';
 import { TOKEN_KEY, tokenFrom } from '../bridge';
 import { Contours, rawFrameSize } from './contours';
+import { ColorSignal } from './color-signal';
 import { PersonMask } from './person-mask';
 import demoPhotoUrl from './person-assets/astronaut.png?url';
 
@@ -9,14 +10,16 @@ root.innerHTML = `
 <header><a class="wordmark" href="#">open<span>flow</span></a><div class="edition">EXPERIMENT 001 <span>↗ LIVE CAMERA LAB</span></div><div class="local"><i></i> LOCAL SIGNAL</div></header>
 <main><div class="intro"><div><p class="eyebrow">YOUR FACE. THE FEEDBACK LOOP.</p><h1>Camera <em>possession.</em></h1></div><p class="lede">Become a beautiful signal problem.<br>Feed yourself into the MilkDrop machine.</p></div>
 <section class="instrument" aria-label="Camera instrument"><div class="stage"><canvas id="output" width="960" height="540" aria-label="Processed native engine output"></canvas><div class="stage-top"><span id="signal">NO INPUT</span><span id="rate">NATIVE MILKDROP / METAL</span></div><div id="welcome"><div class="orb">◎</div><h2>Something wants to see you.</h2><p>Try the test subject first. Then become it.</p><button id="demo-center">Run demo <span>↗</span></button></div><div class="stage-bottom"><span id="status" role="status" aria-live="polite">Ready when you are.</span><button id="fullscreen" aria-label="Full screen output">⛶</button></div></div>
-<aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Echo tunnel</b><span>Your outline, infinitely receding</span><i>01</i></button><button data-preset="1"><b>Mirror cathedral</b><span>Turn your silhouette into architecture</span><i>02</i></button><button data-preset="2"><b>Liquid wire</b><span>Bend the lines that make you</span><i>03</i></button></div>
+<aside><div class="section-title">01 <span>CHOOSE YOUR AFFLICTION</span></div><div class="presets"><button data-preset="0" class="selected"><b>Chromatic vortex</b><span>Spiral into a spectral wormhole</span><i>01</i></button><button data-preset="1"><b>Prism cult</b><span>Sixfold stained-glass hallucination</span><i>02</i></button><button data-preset="2"><b>Acid tide</b><span>Liquid ribbons and chromatic rupture</span><i>03</i></button></div>
 <div class="section-title">02 <span>LOSE YOUR COMPOSURE</span></div>
-<label class="knob"><span>Fresh camera <output id="mix-value">14%</output></span><input id="mix" type="range" min="0" max="100" value="14"/><small>Ghosts ← → Recognition</small></label>
+<label class="knob"><span>Recognition <output id="recognition-value">85%</output></span><input id="recognition" type="range" min="0" max="100" value="85"/><small>Pure hallucination → Keep me present</small></label>
+<label class="knob"><span>Color <output id="color-value">100%</output></span><input id="color" type="range" min="0" max="100" value="100"/><small>Silver → Full spectrum</small></label>
+<label class="knob"><span>Fresh camera <output id="mix-value">9%</output></span><input id="mix" type="range" min="0" max="100" value="9"/><small>Sparse ink → Dense ink</small></label>
 <label class="knob"><span>Afterimage <output id="persistence-value">65%</output></span><input id="persistence" type="range" min="0" max="98" value="65"/><small>Let your past selves linger</small></label>
 <label class="knob"><span>Speed <output id="speed-value">0.8×</output></span><input id="speed" type="range" min="10" max="300" value="80"/><small>Slow hypnosis → Full possession</small></label>
 <label class="mirror"><input id="mirror" type="checkbox" checked/> Mirror source <span>↔</span></label><button id="rescue">Bring my face back <span>↶</span></button></aside></section>
 <section class="input-tools" aria-label="Source preparation"><div class="input-preview"><canvas id="prepared" width="320" height="180" aria-label="Prepared input sent to feedback"></canvas><span id="input-cost">INPUT TO THE LOOP</span></div><div class="input-choice"><p class="eyebrow">DISTILL THE SIGNAL</p><div class="source-modes"><button id="contour-mode" class="selected" aria-pressed="true">Contours</button><button id="raw-mode" aria-pressed="false">Raw camera</button></div><label class="person-choice"><input id="person-only" type="checkbox" checked/> Person only</label><p id="mask-status" role="status">Local subject isolation for camera input.</p></div><label class="knob"><span>Edge detail <output id="detail-value">45%</output></span><input id="detail" type="range" min="0" max="100" value="45"/><small>Soft silhouette → Fine features</small></label><label class="knob"><span>Noise cutoff <output id="threshold-value">12</output></span><input id="threshold" type="range" min="1" max="60" value="12"/><small>Raise to remove room texture</small></label></section><div class="transport"><div><button id="camera" class="primary">Start camera <span>↗</span></button><button id="demo">Run demo</button><button id="stop" disabled>Stop</button></div><p id="source-info">No camera or microphone access until you ask.</p></div>
-<footer><span>Person → contours → OpenFlow feedback → browser</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
+<footer><span>One person → spectral feedback + crisp identity</span><span>Flashing & moving imagery. Start gently.</span></footer><p class="credits" id="credits"></p></main>`;
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const output = $<HTMLCanvasElement>('output');
 const ctx = output.getContext('2d')!;
@@ -27,6 +30,17 @@ const WIDTH = 320,
 input.width = WIDTH;
 input.height = HEIGHT;
 const contours = new Contours(WIDTH, HEIGHT);
+const colorSignal = new ColorSignal(WIDTH, HEIGHT);
+const identity = document.createElement('canvas');
+identity.id = 'identity-source';
+identity.width = WIDTH;
+identity.height = HEIGHT;
+const identityContext = identity.getContext('2d')!;
+let identityAt = -Infinity;
+function clearIdentity() {
+  identityAt = -Infinity;
+  identityContext.clearRect(0, 0, WIDTH, HEIGHT);
+}
 const prepared = $<HTMLCanvasElement>('prepared');
 const preparedContext = prepared.getContext('2d')!;
 let useContours = true;
@@ -45,7 +59,7 @@ try {
 } catch {
   token = tokenFrom(location.search, null);
 }
-const authors = ['Echo tunnel', 'Mirror cathedral', 'Liquid wire'];
+const authors = ['Chromatic vortex', 'Prism cult', 'Acid tide'];
 let preset = 0;
 let mode: 'demo' | 'camera' | null = null;
 let stream: MediaStream | null = null;
@@ -112,6 +126,7 @@ async function capture(id: number) {
       const mask = isolate ? personMask?.current() : null;
       if (isolate && mask) $('mask-status').textContent = 'Person mask active · background removed locally.';
       if (isolate && !mask) {
+        clearIdentity();
         if (personMask?.status === 'ready') $('mask-status').textContent = 'Waiting for a fresh person mask…';
         await new Promise((r) => setTimeout(r, FRAME_MS));
         continue;
@@ -119,11 +134,21 @@ async function capture(id: number) {
       const mix = performance.now() < rescueUntil ? 0.8 : value('mix') / 100;
       const filterStarted = performance.now();
       const source = g.getImageData(0, 0, WIDTH, HEIGHT).data;
-      const data = useContours ? contours.process(source, value('detail'), value('threshold'), mask ?? undefined) : mask ? contours.cutout(source, mask) : source;
+      let data: Uint8ClampedArray;
+      if (useContours) {
+        const edges = contours.process(source, value('detail'), value('threshold'), mask ?? undefined);
+        data = colorSignal.prepare(edges, source, mask ? contours.foreground : null, value('color'), performance.now() / 1000);
+      } else data = mask ? contours.cutout(source, mask) : source;
       preparedContext.putImageData(new ImageData(new Uint8ClampedArray(data.buffer as ArrayBuffer), WIDTH, HEIGHT), 0, 0);
       preparationMs = performance.now() - filterStarted;
       posting = post(`camera/frame?w=${WIDTH}&h=${HEIGHT}&mix=${mix}`, data.buffer as ArrayBuffer);
       await posting;
+      // Commit the exact source used for the successful upload. A reset may have
+      // happened while the request was in flight; never revive its old identity.
+      if (id === generation && useContours && (!isolate || personMask?.current())) {
+        identityContext.putImageData(new ImageData(colorSignal.identity, WIDTH, HEIGHT), 0, 0);
+        identityAt = mask?.capturedAt ?? start;
+      }
     } catch (e) {
       if (id === generation) {
         await stop();
@@ -150,6 +175,12 @@ async function paint(id: number) {
             output.height = height;
           }
           ctx.putImageData(image, 0, 0);
+          if (performance.now() - identityAt <= 250 && useContours) {
+            ctx.save();
+            ctx.globalAlpha = performance.now() < rescueUntil ? 1 : value('recognition') / 100;
+            ctx.drawImage(identity, 0, 0, width, height);
+            ctx.restore();
+          } else clearIdentity();
           frames++;
           if (performance.now() - rateAt >= 1000) {
             $('rate').textContent = `${((frames * 1000) / (performance.now() - rateAt)).toFixed(0)} FPS / NATIVE OUTPUT`;
@@ -187,6 +218,7 @@ async function stop() {
   $('welcome').hidden = false;
   ctx.clearRect(0, 0, output.width, output.height);
   preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
+  clearIdentity();
   status('Stopped. Feedback cleared.');
   const lastFrame = posting;
   const lastOutput = reading;
@@ -253,7 +285,7 @@ $('fullscreen').onclick = () => {
 $('rescue').onclick = () => {
   rescueUntil = performance.now() + 1000;
 };
-for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold']) {
+for (const id of ['mix', 'persistence', 'speed', 'detail', 'threshold', 'recognition', 'color']) {
   $<HTMLInputElement>(id).oninput = () => {
     $(id + '-value').textContent = id === 'speed' ? `${(value(id) / 100).toFixed(1)}×` : id === 'threshold' ? `${value(id)}` : `${value(id)}%`;
   };
@@ -289,6 +321,7 @@ for (const [id, enabled] of [
 ] as const) {
   $(id).onclick = () => {
     useContours = enabled;
+    void resetPreparation();
     for (const [key, active] of [
       ['contour-mode', enabled],
       ['raw-mode', !enabled],
@@ -323,6 +356,7 @@ async function resetPreparation() {
   personMask?.dispose();
   personMask = null;
   preparedContext.clearRect(0, 0, WIDTH, HEIGHT);
+  clearIdentity();
   ctx.clearRect(0, 0, output.width, output.height);
   const enabled = $<HTMLInputElement>('person-only').checked;
   $('mask-status').textContent = enabled ? 'Waiting for a fresh person mask…' : 'Whole scene · background included.';

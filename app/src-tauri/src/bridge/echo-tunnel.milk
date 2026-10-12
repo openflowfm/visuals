@@ -1,12 +1,12 @@
 [preset00]
 fRating=5
-fGammaAdj=1
-fDecay=0.96
+fGammaAdj=1.4
+fDecay=0.995
 fVideoEchoZoom=1
 fVideoEchoAlpha=0
 nVideoEchoOrientation=0
 fWaveAlpha=0
-bTexWrap=0
+bTexWrap=1
 bDarkenCenter=0
 bBrighten=0
 bDarken=0
@@ -23,4 +23,15 @@ sy=1
 ob_a=0
 ib_a=0
 mv_a=0
-per_frame_1=zoom=1.012; rot=0.0025*sin(time*0.3);
+per_frame_1=zoom=1.035; rot=0.027+0.012*sin(time*0.63);
+per_pixel_1=zoom=zoom+0.022*sin(rad*9-time*1.7); rot=rot+0.018*sin(rad*12+time);
+comp_1=`shader_body
+comp_2=`{
+comp_3=`float2 p = uv - 0.5;
+comp_4=`float2 shift = p * (0.009 + 0.006*sin(time));
+comp_5=`float3 a = tex2D(sampler_main, uv + shift).xyz;
+comp_6=`float3 b = tex2D(sampler_main, uv).xyz;
+comp_7=`float3 c = tex2D(sampler_main, uv - shift).xyz;
+comp_8=`ret = float3(a.r,b.g,c.b) * 1.65;
+comp_9=`ret = min(float3(1,1,1), pow(max(ret,float3(0,0,0)),float3(0.65,0.65,0.65))*1.35);
+comp_10=`}

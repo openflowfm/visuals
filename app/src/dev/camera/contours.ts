@@ -12,7 +12,7 @@ export class Contours {
   private readonly smooth: Float32Array;
   private readonly strength: Float32Array;
   private readonly direction: Uint8Array;
-  private readonly foreground: Float32Array;
+  readonly foreground: Float32Array;
   private readonly cutoutPixels: Uint8ClampedArray<ArrayBuffer>;
 
   constructor(

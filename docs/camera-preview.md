@@ -38,8 +38,9 @@ authenticated loopback dev bridge; there is no remote upload or recording.
   The small **Input to the loop** preview shows the actual pixels being uploaded.
 - **Edge detail** controls denoising; lower removes fine textures. **Noise cutoff**
   rejects weaker edges. Raise it for a noisy room; lower for a dimly lit face.
-- **Echo tunnel**, **Mirror cathedral**, and **Liquid wire** are camera-specific
-  presets designed for recursive outlines rather than music-only imagery.
+- **Chromatic vortex**, **Prism cult**, and **Acid tide** are camera-specific
+  presets: a spinning RGB-split wormhole, sixfold prismatic symmetry, and liquid
+  chromatic ribbons. All motion and color separation run in native MilkDrop shaders.
 - **Fresh camera** is the new image's blend per preset step. Low values give the
   feedback more room to deform. Zero allows existing imagery to evolve alone.
 - **Afterimage** uses the engine's existing brightness-preserving trails effect.
@@ -77,3 +78,19 @@ and physical-camera behavior require a user test. Filter tests cover grain
 rejection, low-contrast contours, background removal and dark silhouettes. DOM
 regressions cover permission/lifecycle races, mask failure without silent fallback,
 and invalid raw native output.
+
+## Spectral identity (revision 3)
+
+Following satoramoto/web's Tree Museum strategy, one prepared source drives both
+native feedback and a crisp foreground. Colored contours are the actual RGB bytes
+uploaded to MilkDrop, not a tint on the returned picture. **Color** sets their
+saturation (zero returns silver contours). A gently traveling palette varies with
+vertical position and subject luminance. **Recognition** independently mixes a
+bright contour and lightly posterized facial-shading plate above the wild native
+output. Zero exposes the native loop alone; **Bring my face back** briefly restores
+full foreground strength as well as fresh input. Raw comparison omits this plate.
+The foreground is committed only after its matching upload succeeds. It is cleared
+on stop, mode, mirror or isolation changes and after 250 ms without a fresh mask.
+Both products use the same 320×180 source; only Canvas scaling/compositing runs at
+output resolution. The presets are original camera-specific .milk files, with no
+changes to the ordinary OpenFlow render path.

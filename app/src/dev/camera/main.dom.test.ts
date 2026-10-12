@@ -238,6 +238,7 @@ test('person-only transition drains old uploads, clears feedback and rejects lat
   expect(canvasEvents.slice(eventsBefore)).toEqual(
     expect.arrayContaining([
       { id: 'prepared', action: 'clear' },
+      { id: 'identity-source', action: 'clear' },
       { id: 'output', action: 'clear' },
     ]),
   );
@@ -259,4 +260,29 @@ test('person-only transition drains old uploads, clears feedback and rejects lat
   expect(canvasEvents.some((e) => e.id === 'output' && e.action === 'paint' && e.first === 99)).toBe(false);
   MaskWorker.instances[0].complete();
   await waitFor(() => expect(requests.filter((r) => r.includes('camera/frame')).length).toBeGreaterThan(1));
+});
+
+test('identity waits for accepted upload and is discarded when its person mask expires', async () => {
+  MaskWorker.automatic = false;
+  let accept!: () => void;
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    requests.push(String(url));
+    if (String(url).includes('camera/frame') && !accept)
+      await new Promise<void>((resolve) => {
+        accept = resolve;
+      });
+    return outputResponse(String(url));
+  });
+  document.getElementById('demo')!.click();
+  await waitFor(() => expect(MaskWorker.instances[0]?.timestamp).toBeGreaterThan(0));
+  MaskWorker.instances[0].complete();
+  await waitFor(() => expect(accept).toBeDefined());
+  expect(canvasEvents.some((event) => event.id === 'identity-source' && event.action === 'paint')).toBe(false);
+  accept();
+  await waitFor(() => expect(canvasEvents.some((event) => event.id === 'identity-source' && event.action === 'paint')).toBe(true));
+  const lastPaint = canvasEvents.length;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  expect(canvasEvents.slice(lastPaint).some((event) => event.id === 'identity-source' && event.action === 'clear')).toBe(true);
+  // Drain any next pending upload before teardown Stop waits for it.
+  accept();
 });
