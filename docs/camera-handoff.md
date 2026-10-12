@@ -1,19 +1,16 @@
-# Camera lab handoff — 2026-10-11
+# Camera lab handoff — 2026-10-12
 
-## Paused state
+## Running state
 
-Ryan asked to put this down, commit everything, write a handoff, and stop servers. All camera assignment servers are stopped. Do not restart until work is resumed.
-
-Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`
-Branch: `codex/camera-coordinator`
-Implementation head before this handoff: `64ddeaa69bd326aed33538c149dc421871ac2169`.
-Original saved OpenFlow checkout and main were not updated. Nothing pushed or published.
+Resumed at Ryan's request. Coordinator implementation head: `7609a48c915457b8c34e1680b5eeb4efb2d3ac10`, branch `codex/camera-coordinator`.
+Persistent coordinator: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/outputs/camera-lab`.
+Unified launcher is running on 4286/6116 (session 73456); read its fresh token from `work/camera-coordinator.log`. Original saved checkout/main remain unchanged; nothing pushed or published.
 
 ## User direction
 
 Experimental browser webcam into the actual OpenFlow MilkDrop engine, with person-only isolation before feedback. Keep the person recognizable while allowing colorful, extreme presets. Follow the satoramoto/web strategy: inject the source into feedback and draw a stable representation of the same source above the distortion.
 
-Latest requested features: compact preset overlay for fast cycling; smooth, almost-vector contours; higher-resolution output; microphone/audio-interface reactivity. Then Ryan questioned the 30 FPS result and wants 60 FPS. He explicitly permits encoding the stream if necessary. Encoding has not been implemented or selected as the next approach.
+Latest requested features: compact preset overlay for fast cycling; smooth, almost-vector contours; higher-resolution output; microphone/audio-interface reactivity. Then Ryan questioned the 30 FPS result and wants 60 FPS. He explicitly permits encoding the stream if necessary. Hardware H.264 output is now implemented on macOS, with raw RGBA fallback.
 
 ## Implemented
 
@@ -25,40 +22,28 @@ Latest requested features: compact preset overlay for fast cycling; smooth, almo
 - Explicit Enable audio, microphone/interface selector, sensitivity, input meter. Browser mono PCM snapshots feed native engine FFT; no speaker monitoring. Stop drains requests and releases tracks/context. No automatic microphone permission request on startup.
 - Preset request serialization, rejection rollback to the last accepted preset, and startup ordering fixes.
 
-## Latest performance change — not yet accepted
+## 60 FPS implementation and evidence
 
-Source `35b6308b4a8b53ecd9388048cefb5d304e300c44` integrated as `64ddeaa69bd326aed33538c149dc421871ac2169`.
+- Camera-only reusable GPU readback texture/staging avoids per-frame allocation. Ordinary OpenFlow snapshots remain unchanged.
+- Hardware-required VideoToolbox H.264, pooled BGRA buffers, Accelerate conversion, all-IDR Annex B packets. Absolute 60 Hz producer deadlines; at most two encodes pending and latest-only output. Stop/resize/idle release or invalidate owned resources.
+- Browser WebCodecs decoder with one pending decode and one prefetched packet. Frames are explicitly closed; Stop/reset cancels work. Unsupported/failed encoding falls back to raw RGBA. No encoder dependency or camera code in production builds.
+- Distinct native sequence IDs underpin rolling output FPS. Duplicate snapshots do not count. CPU contour/source preparation remains independently bounded at 30 Hz; camera requests 60 subject to hardware/browser availability. **60 output FPS is not 60 prepared camera frames per second.**
+- Before encoding: raw 720p 59.9 distinct FPS; raw 1080p 48.2 FPS (10-second browser windows).
+- Native 1080p hardware harness: 180/180 frames in 3.004 seconds, 59.93 FPS, zero pending drops. Integrated encoded endpoint: 180 frames in 3.003 seconds, 59.94 FPS, mean packet 171 KB (versus 8.29 MB raw).
+- Integrated browser 1080p/photo/person-only: Chromatic 59.7, Prism 59.2, Acid 59.9 distinct FPS; Acid with synthetic PCM 59.7. 720p H.264 59.5. These are 10-second windows, not long-term guarantees.
+- Stop/restart, resolution switching, raw/auto switching worked. Physical camera/microphone remain untested by agents; synthetic PCM verifies the native audio path only.
+- One longer in-app-browser run fell to 56 FPS then its tab crashed; native server remained alive (~177 MB RSS). Cause is unproven. A fresh diagnostics baseline passed 8,010 frames at 59 FPS with all frames closed, zero live/orphaned frames, one decoder, 46.5 MiB JS heap.
+- Latest separate experiment makes the output canvas opaque and clears it before encoded composition, to avoid possible deferred canvas retention. It is **not a proven crash fix**. Resource counters expose heap/frame/decoder ownership. No speculative decoder recycling was added.
 
-Previously both capture/preparation and output loops were explicitly capped at 30 FPS. The latest commit:
+Final opaque-canvas soak: more than five minutes at 1080p/photo/person-only, 18,720 decoded and 18,720 closed frames, zero live/orphaned frames, one live/created decoder, zero pending decode jobs at sampling. Latest rolling window 59.5 FPS; sampled windows 59.5–59.9. Heap fluctuated with collection (24.7–59.2 MiB sampled, final 32.6 MiB). No repeat crash during this bounded run. This does not establish the earlier crash cause or guarantee indefinite stability. A 20-second synthetic audio load completed (999 posts, cleared afterward). Screenshot: `outputs/camera-60fps.png` in the enclosing task workspace.
 
-- Uses a 60 Hz output deadline with one request in flight; avoids RAF/async frame quantization.
-- Keeps expensive preparation independently bounded at 30 Hz.
-- Requests camera ideal/max 60 FPS, subject to device/browser support. This does NOT mean processed source updates are 60 FPS.
-- Shows actual output FPS and accepted input FPS separately.
-- Adds an opt-in timing breakdown for fetch/body/compose/preparation/upload and caches the foreground gradient.
+Validation: 308 Rust tests passed, four ignored; separate ignored native hardware harness exercised manually. Normal/lab native and UI builds, formatting, typecheck, production exclusion checks passed on source revisions. Latest frontend source: 73 targeted camera/bridge tests passed and rerun successfully in the coordinator (61 camera + 12 bridge). Independent review found no remaining actionable issues; unsupported-platform Stop/restart fallback issue was fixed and re-reviewed. Exact source/integrated path equality verified. Long-run browser stability and physical moving-camera quality remain acceptance boundaries.
 
-The author reports 52 targeted tests and typecheck passed. This last performance commit has NOT received final source review, browser measurement, or normal/lab UI build checks. Do not claim achieved 60 FPS.
+## Next acceptance work
 
-## Evidence before that last performance commit
-
-- Curve source review clear; backend review clear; frontend review clear through startup fix `92081bf6` (integrated `18d5f322`).
-- 51 combined camera/bridge tests, typecheck, formatting, normal/lab UI builds, production UI exclusion passed through `18d5f322`.
-- Backend: 303 Rust tests passed, three ignored; normal/lab native builds, formatting, production binary/UI exclusion passed. No core engine source changes in this revision.
-- Native smoke: all three camera presets at all three resolutions loaded without shader fallback. Actual output: 640×360/921,600 bytes; 1280×720/3,686,400; 1920×1080/8,294,400.
-- Synthetic PCM caused actual native FFT/bass response; stale audio became silent. Audio and stop endpoints worked. No physical microphone or webcam was accessed by agents.
-- Integrated browser photo fixture: overlay search, library loading, rapid next/next, resolution switching, and smooth outlines worked. 720p roughly 29–30 FPS; a heavy Paint Spill variant at 1080p roughly 21–25 FPS. Those measurements were with the old 30 FPS output cap.
-- Combined browser preparation roughly 8.5–10 ms. Developer CPU-only synthetic preparation median 5.36 ms, p95 5.55 ms, excluding Canvas/model/network/native work.
-- Idle 720p HTTP readback probe: median total 10.96 ms, native snapshot header median 7.21 ms. Large outliers occurred (p95 ~634 ms in only 30 samples); this is a small idle probe, not evidence of sustained 60 FPS under load.
-
-## Next performance investigation
-
-1. Review latest `35b6308b`/`64ddeaa6`, then run the relevant checks and live photo demo with timing breakdown. Measure actual output and input FPS at 720p and 1080p under representative presets.
-2. Separate native snapshot time (`X-Snapshot-Ms`) from browser fetch/body/compose and preparation. Do not infer an in-app browser limit from the previous explicit 30 FPS cap.
-3. Current raw transport is ~221 MB/s at 720p60 or ~498 MB/s at 1080p60, before other costs. Snapshot allocates a texture and staging buffer for each request and synchronously reads back the GPU.
-4. If snapshot allocation/readback dominates, consider a camera-only reusable snapshot texture/staging buffer, resizing only on dimension changes. Keep ordinary OpenFlow rendering unchanged.
-5. If transfer/decode dominates, evaluate an encoded stream (explicitly acceptable to Ryan), including latency, hardware encoder availability, and browser decoding. Avoid guessing that encoding alone fixes synchronous GPU readback. Browser-native rendering is another larger architectural option, not currently implemented.
-6. Only compare another browser if measurements still implicate the browser. Do not claim 60 FPS until demonstrated; do not count duplicate presentation callbacks as new native frames.
-7. Real microphone/interface and webcam acceptance is still a user test. Enable audio explicitly and confirm input meter/preset response; preserve local-only handling and no audible monitoring.
+1. Continue sustained 1080p encoded testing, watching distinct native FPS and resource counters. Record any repeat crash without claiming a browser limit from one failure.
+2. Ryan should try the real webcam and explicitly enable microphone/interface input. Confirm person recognition, foreground smoothness, audio response, moving H.264 quality and latency.
+3. Heavy third-party presets may exceed the frame budget; the three camera presets are the measured set. No blanket 60 FPS guarantee for all 9,798 presets.
 
 ## Relevant code and protocol
 
@@ -69,24 +54,26 @@ The author reports 52 targeted tests and typecheck passed. This last performance
 - `app/src-tauri/src/bridge/camera.rs`: authenticated local catalog, settings, RGBA and PCM transport.
 - `app/src-tauri/src/bench.rs`: native camera audio, renderer/output resize, snapshot.
 - `docs/camera-preview.md`, `docs/camera-lab/runtime-v4.md`: usage and API contract.
-- GET `/__bridge/camera/presets`, GET `/__bridge/camera/output`.
+- GET `/__bridge/camera/presets`, GET `/__bridge/camera/output` (raw), GET `/__bridge/camera/video?after=<sequence>` (H.264). Encoded response has native sequence/timestamp/dimensions/codec/timings; 204 means no fresh frame, 503 triggers fallback.
+- `app/src-tauri/src/bridge/video.rs` and `video/hardware.rs`: bounded encoded producer and VideoToolbox ownership. Frontend `h264-decoder.ts`, `video-packets.ts`, `output-meter.ts`: decoding, bounded fetch, measured FPS.
 - POST camera settings requires speed/persistence; accepts presetId and resolution. Preset IDs are catalog-allowlisted, never arbitrary client paths.
 - POST `/__bridge/camera/audio?rate=48000&gain=1`: 512 or 1024 mono Float32 LE samples; bounded finite data/rate/gain; 250 ms expiry. POST `/__bridge/camera/audio/stop` silences it.
 - Camera POST input remains bounded at 640×360; current preparation is 320×180. Foreground curves scale cleanly to output size; this is not a high-detail 1080p camera segmentation model.
 
 ## Preserved worktrees and mappings
 
-All three temporary worktrees are retained for resumption; do not discard unique or uncertain files. No assignment server remains.
+The three older worktrees below remain preserved; do not discard unique or uncertain files. The four completed performance/H.264 worktrees from this turn were removed normally after clean-state, ignored-file, and exact integration checks; their branches remain. No assignment server remains; the coordinator preview is running.
 
 - `work/camera-runtime`, branch `codex/camera-runtime`, source `1137b60d67bd5404dc893a10ecf022341d52fa57` → coordinator `a723a43d`.
 - `work/camera-curves`, branch `codex/camera-curves`, source `32041dea19f9c7eb234a77143255e5ee793d9c33` → `f5754a40`.
 - `work/camera-controls`, branch `codex/camera-controls`, source head `35b6308b4a8b53ecd9388048cefb5d304e300c44`.
 - Frontend source `5bab32c3` → `2b1f6db6`; payload fix `79cd721a` → `d026b273`; rejection rollback `7266bfb5` → `c486f782`; startup fix `92081bf6` → `18d5f322`; performance `35b6308b` → `64ddeaa6`.
 - Frontend local curve dependency `4b8276d` duplicates source `32041dea`; integrated only once.
+- This turn source → integration: readback `f6e4c0af` → `21a10aa2`; metrics `972c3996` → `f8720c10`; H.264 backend `82c67da8` → `608c3a58`; H.264 frontend `f12d2a21` → `a0c1cbeb`; fallback fix `a9cc86a9` → `61454421`; fetch overlap `0a63c427` → `5660a245`; native pacing `897623d0` → `fe1cf13a`; diagnostics `3d9803e8` → `716cf50c`; opaque canvas `62b0d2c7` → `7609a48c`.
 - Shared native build cache: `work/camera-target`. Coordinate exclusive ownership before simultaneous native builds.
 - Detailed assignment ledger: `/Users/ryan/Documents/Codex/2026-10-11/i-wa/work/coordination.md`.
 
-## Restart only when requested
+## Unified launcher
 
 From the coordinator directory, use the unified launcher only:
 
@@ -99,4 +86,4 @@ npm run dev
 
 Read the fresh token from launcher output, then open `/camera.html?token=...`. Tokens from prior runs are expired. Use the photographic demo for agent verification. Never independently launch Vite/Storybook/native children to repair the preview.
 
-Final stopped coordinator session: `45527`; launcher PID `47499`, children `47506–47508`. Confirmed absent, and camera ports 4286/6116, 4288/6118, 4289/6119 vacant after shutdown. No further runtime testing was performed after Ryan asked to stop.
+Current preview was resumed under explicit user authorization. Leave the coordinator running for the user; stop only its identified launcher/process group when requested. Older stopped session IDs in prior handoff are historical.
