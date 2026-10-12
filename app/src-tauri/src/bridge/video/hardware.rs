@@ -112,6 +112,8 @@ fn check(status: i32, operation: &str) -> Result<(), String> {
 struct Context {
     shared: Arc<Shared>,
     pending: AtomicUsize,
+    #[cfg(test)]
+    completed: AtomicUsize,
 }
 struct Submission {
     sequence: u64,
@@ -141,7 +143,12 @@ impl Encoder {
             }
             let empty = dictionary();
             CFDictionarySetValue(attributes.0 as Mut, kCVPixelBufferIOSurfacePropertiesKey, empty.0);
-            let mut context = Box::new(Context { shared, pending: AtomicUsize::new(0) });
+            let mut context = Box::new(Context {
+                shared,
+                pending: AtomicUsize::new(0),
+                #[cfg(test)]
+                completed: AtomicUsize::new(0),
+            });
             let mut session = null();
             check(
                 VTCompressionSessionCreate(null(), size.0 as i32, size.1 as i32, u32::from_be_bytes(*b"avc1"), spec.0, attributes.0, null(), callback, &mut *context as *mut _ as Mut, &mut session),
@@ -243,6 +250,10 @@ unsafe extern "C" fn callback(context: Mut, source: Mut, status: i32, _flags: u3
         }))
     }))
     .unwrap_or_else(|_| Err("hardware video callback failed".into()));
+    #[cfg(test)]
+    if result.is_ok() {
+        context.completed.fetch_add(1, Ordering::Relaxed);
+    }
     if let Ok(mut state) = context.shared.state.lock() {
         if state.enabled && state.epoch == submission.epoch {
             match result {
@@ -321,6 +332,68 @@ fn append_nals(avcc: &[u8], header: usize, out: &mut Vec<u8>) -> Result<(), Stri
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    #[ignore = "manual real-time GPU/encoder throughput measurement"]
+    fn paced_gpu_snapshot_hardware_throughput() {
+        let video = Video::default();
+        video.0.state.lock().unwrap().enabled = true;
+        let size = (1920, 1080);
+        let (device, queue) = engine::render::headless().unwrap();
+        let mut renderer = engine::render::Renderer::new(device, queue, size.0, size.1);
+        renderer.load(include_str!("../mirror-cathedral.milk"), 1).unwrap();
+        let input: Vec<u8> = (0..640 * 360).flat_map(|i| [(i % 251) as u8, ((i / 640) % 251) as u8, 160, 255]).collect();
+        renderer.set_camera_frame(640, 360, &input, 0.15).unwrap();
+        let snapshot = crate::bench::CameraSnapshot::new(&renderer, size);
+        let mut encoder = Encoder::new(size, 0, video.0.clone()).unwrap();
+        let mut audio = engine::audio::Audio::default();
+        let origin = Instant::now();
+        for sequence in 1..=12 {
+            renderer.render(&mut audio, 1.0 / 60.0);
+            let (_, _, rgba) = snapshot.read(&mut renderer).unwrap();
+            encoder.submit(rgba, sequence, origin.elapsed().as_micros() as u64, 0.0).unwrap();
+            unsafe {
+                check(VTCompressionSessionCompleteFrames(encoder.session.0, Time { value: 0, scale: 0, flags: 0, epoch: 0 }), "warmup").unwrap();
+            }
+        }
+        encoder.context.completed.store(0, Ordering::Relaxed);
+        let clock = Instant::now();
+        let mut cadence = Cadence::new(clock);
+        let mut skipped = 0;
+        let mut snapshots = Vec::new();
+        let mut submit_times = Vec::new();
+        for sequence in 13..=192 {
+            let start = Instant::now();
+            renderer.render(&mut audio, 1.0 / 60.0);
+            if encoder.pending() < 2 {
+                let (_, _, rgba) = snapshot.read(&mut renderer).unwrap();
+                let snapshot_ms = start.elapsed().as_secs_f64() * 1000.0;
+                let submit = Instant::now();
+                encoder.submit(rgba, sequence, origin.elapsed().as_micros() as u64, snapshot_ms).unwrap();
+                snapshots.push(snapshot_ms);
+                submit_times.push(submit.elapsed().as_secs_f64() * 1000.0);
+            } else {
+                skipped += 1;
+            }
+            std::thread::sleep(cadence.delay(Instant::now()));
+        }
+        unsafe {
+            check(VTCompressionSessionCompleteFrames(encoder.session.0, Time { value: 0, scale: 0, flags: 0, epoch: 0 }), "drain").unwrap();
+        }
+        let completed = encoder.context.completed.load(Ordering::Relaxed);
+        let elapsed = clock.elapsed().as_secs_f64();
+        snapshots.sort_by(f64::total_cmp);
+        submit_times.sort_by(f64::total_cmp);
+        eprintln!(
+            "1080p native paced harness: {completed}/180 callbacks, {skipped} pending skips, {elapsed:.3}s, {:.2} unique fps, snapshot+render median {:.2}ms p95 {:.2}ms, submit median {:.2}ms",
+            completed as f64 / elapsed,
+            snapshots[snapshots.len() / 2],
+            snapshots[snapshots.len() * 95 / 100],
+            submit_times[submit_times.len() / 2]
+        );
+        assert!(video.0.state.lock().unwrap().error.is_none());
+        assert!(completed > 0);
+    }
+
     #[test]
     fn hardware_frames_are_independent_bounded_and_discarded_after_stop() {
         let video = Video::default();

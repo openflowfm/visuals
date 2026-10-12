@@ -150,7 +150,7 @@ fn snapshot(renderer: &mut Renderer, size: (u32, u32)) -> Option<Picture> {
 /// A single bounded readback allocation, reused only by the experimental camera.
 /// Ordinary application snapshots retain their existing lifetime and behavior.
 #[cfg(feature = "dev-bridge")]
-struct CameraSnapshot {
+pub(crate) struct CameraSnapshot {
     size: (u32, u32),
     row: u32,
     texture: wgpu::Texture,
@@ -160,7 +160,7 @@ struct CameraSnapshot {
 
 #[cfg(feature = "dev-bridge")]
 impl CameraSnapshot {
-    fn new(renderer: &Renderer, size: (u32, u32)) -> Self {
+    pub(crate) fn new(renderer: &Renderer, size: (u32, u32)) -> Self {
         let (w, h) = size;
         let device = renderer.device();
         let texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -184,7 +184,7 @@ impl CameraSnapshot {
         Self { size, row, texture, view, staging }
     }
 
-    fn read(&self, renderer: &mut Renderer) -> Option<Picture> {
+    pub(crate) fn read(&self, renderer: &mut Renderer) -> Option<Picture> {
         let (w, h) = self.size;
         renderer.present(&self.view, wgpu::TextureFormat::Rgba8Unorm, self.size);
         let device = renderer.device();

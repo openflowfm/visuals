@@ -76,14 +76,35 @@ impl Video {
     }
 }
 
+/// Keep timer overshoot out of the next frame's deadline. A long stall resets
+/// phase, allowing one immediate refresh without building a catch-up queue.
+#[cfg(any(target_os = "macos", test))]
+struct Cadence {
+    next: Instant,
+}
+#[cfg(any(target_os = "macos", test))]
+impl Cadence {
+    const PERIOD: Duration = Duration::from_nanos(16_666_667);
+    fn new(now: Instant) -> Self {
+        Self { next: now }
+    }
+    fn delay(&mut self, now: Instant) -> Duration {
+        self.next += Self::PERIOD;
+        if now.saturating_duration_since(self.next) > Self::PERIOD {
+            self.next = now;
+        }
+        self.next.saturating_duration_since(now)
+    }
+}
+
 fn produce(shared: Arc<Shared>, app: AppHandle) {
     #[cfg(target_os = "macos")]
     {
         let mut encoder: Option<hardware::Encoder> = None;
         let mut last_sequence = 0;
         let clock = Instant::now();
+        let mut cadence = Cadence::new(clock);
         loop {
-            let started = Instant::now();
             let mut state = shared.state.lock().unwrap();
             if !state.enabled || state.requested.elapsed() > Duration::from_secs(2) {
                 state.enabled = false;
@@ -95,6 +116,7 @@ fn produce(shared: Arc<Shared>, app: AppHandle) {
                 while !state.enabled {
                     state = shared.changed.wait(state).unwrap();
                 }
+                cadence = Cadence::new(Instant::now());
             }
             let epoch = state.epoch;
             let failed = state.error.is_some();
@@ -132,7 +154,7 @@ fn produce(shared: Arc<Shared>, app: AppHandle) {
                     }
                 }
             }
-            std::thread::sleep(Duration::from_secs_f64(1.0 / 60.0).saturating_sub(started.elapsed()));
+            std::thread::sleep(cadence.delay(Instant::now()));
         }
     }
     #[cfg(not(target_os = "macos"))]
@@ -174,6 +196,19 @@ impl Bridge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn cadence_does_not_accumulate_timer_overshoot_or_queue_stalled_frames() {
+        let start = Instant::now();
+        let mut cadence = Cadence::new(start);
+        assert_eq!(cadence.delay(start), Cadence::PERIOD);
+        for frame in 1..120 {
+            let now = start + Cadence::PERIOD * frame + Duration::from_millis(2);
+            assert_eq!(cadence.delay(now), Cadence::PERIOD - Duration::from_millis(2));
+        }
+        let resumed = start + Duration::from_secs(20);
+        assert_eq!(cadence.delay(resumed), Duration::ZERO);
+        assert_eq!(cadence.delay(resumed), Cadence::PERIOD);
+    }
     #[test]
     fn unsupported_requests_fail_before_and_after_stop() {
         let video = Video::default();
