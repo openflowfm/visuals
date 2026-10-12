@@ -3,6 +3,7 @@ import { HOME, useSheet, type View } from './views.tsx';
 import { Home } from './Home.tsx';
 import { Settings } from './Settings.tsx';
 import { MoreEffects } from './MoreEffects.tsx';
+import { CameraProvider, CameraPanel } from './camera/CameraPanel.tsx';
 import { CrashPrompt } from './CrashPrompt.tsx';
 import { useAccessibility } from './access.ts';
 import { Live } from './Live.tsx';
@@ -59,10 +60,13 @@ export function App() {
   // Nothing plays live behind an owed warning: live starts once it is understood.
   return (
     <FlashWarning warning={warning} live={mode.view === 'live'}>
-      <Page mode={mode} onMode={onMode} />
-      <Settings open={sheet === 'settings'} onClose={close} />
-      <MoreEffects open={sheet === 'effects'} onClose={close} />
-      <CrashPrompt />
+      <CameraProvider>
+        <Page mode={mode} onMode={onMode} />
+        <Settings open={sheet === 'settings'} onClose={close} />
+        <MoreEffects open={sheet === 'effects'} onClose={close} />
+        <CameraPanel open={sheet === 'camera'} onClose={close} />
+        <CrashPrompt />
+      </CameraProvider>
     </FlashWarning>
   );
 }

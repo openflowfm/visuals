@@ -7,6 +7,7 @@ mod actions;
 mod bench;
 #[cfg(feature = "dev-bridge")]
 mod bridge;
+mod camera;
 mod catalog;
 mod crash;
 #[cfg(target_os = "macos")]
@@ -37,6 +38,9 @@ mod userlib;
 macro_rules! commands {
     ($($lab:ident),* $(,)?) => {
         tauri::generate_handler![
+            camera::camera_begin,
+            camera::camera_submit,
+            camera::camera_end,
             library::presets,
             library::open,
             catalog::library_index,
