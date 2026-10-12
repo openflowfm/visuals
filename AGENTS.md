@@ -4,7 +4,7 @@ Read [`README.md`](README.md) first. The product is the MilkDrop engine (`engine
 the player app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src`);
 `docs/milkdrop-engine.md` is their plan and status. The preset editor is in **lab** builds
 only: the `lab` Cargo feature on `visuals-app` (its commands, `app/src-tauri/src/editor.rs`)
-and `VITE_LAB=1` for the page (`app/src/Lab.tsx`, `Editor.tsx`, `editor.ts`, the graph and the inspector).
+and `VITE_LAB=1` for the page (`app/src/Lab.tsx`, which loads zen's editor: `@satoramoto/zen/visuals/lab`).
 The app people get is built without both.
 
 **The page is zen's.** The UI people get (the home, live mode, the sheets, the welcome
@@ -12,10 +12,12 @@ flow, the prompts) is `VisualsApp` from the design OS zen (`@satoramoto/zen/visu
 GitHub `satoramoto/zen`, `src/library/visuals/`), in its `visuals` pack. `app/src/main.tsx`
 installs the Tauri bridge (`app/src/zenBridge.ts`: zen reaches the app only through it)
 and renders it; `app/src/main.css` is the page's frame and Instrument Sans. Change a
-screen, a control or its look in zen, then move the dependency's pin here. What stays in
-`app/src`: the lab's editor (still on `@openflow/widgets`, which zen doesn't replace yet,
-with the components it uses), the command types and model modules the lab, the tests and
-Storybook's fake app use (`api.ts`, `playlists.ts`…), `stories/`, and `dev/`.
+screen, a control or its look in zen, then move the dependency's pin here. The lab's
+editor is zen's too: `app/src/Lab.tsx` (a lab build only) renders `VisualsApp` with
+`lab={VisualsEditor}` from `@satoramoto/zen/visuals/lab`, zen's own entry for it, so none
+of the editor reaches the app's page. What stays in `app/src`: the command types and
+model modules the tests and Storybook's fake app use (`api.ts`, `playlists.ts`…),
+`stories/`, and `dev/`.
 
 | Command | What it checks | When to run |
 | --- | --- | --- |

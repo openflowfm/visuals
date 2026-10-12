@@ -31,8 +31,7 @@
     "check:no-dev-code": "node app/no-dev-code.mjs"
   },
   "dependencies": {
-    "@openflow/widgets": "git+https://github.com/openflowfm/widgets.git#ef99d1b2331c8ee11ecabdaa5c7328e5fed2ef97",
-    "@satoramoto/zen": "git+https://github.com/satoramoto/zen.git#865e7c279f3c60c059cff22a0438412f1ad00f2c",
+    "@satoramoto/zen": "git+https://github.com/satoramoto/zen.git#421831ddf2ea2fa07da7804fd705df06cd702ea7",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",

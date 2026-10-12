@@ -15,20 +15,18 @@ import { installTauriBridge } from './zenBridge.ts';
 if ('__TAURI_INTERNALS__' in window) installTauriBridge();
 
 // The editor, only in a lab build: without `VITE_LAB` this is `null` at build
-// time, and the editor's code (the graph, the inspector, the edits, the suite's
-// widgets they still use) never reaches the bundle.
+// time, and the editor's code (zen's `@satoramoto/zen/visuals/lab`: the graph,
+// the inspector, the edits and their commands) never reaches the bundle.
 const Lab = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null;
-
-const app = <VisualsApp mode="dark" />;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     {Lab ? (
       <Suspense fallback={null}>
-        <Lab app={app} />
+        <Lab />
       </Suspense>
     ) : (
-      app
+      <VisualsApp mode="dark" />
     )}
   </StrictMode>,
 );
