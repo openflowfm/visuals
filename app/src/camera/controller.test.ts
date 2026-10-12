@@ -80,6 +80,7 @@ test('permission rejection and track loss stop resources and expose errors', asy
   expect(h.controller.state.status).toBe('failed');
   expect(h.track.stop).toHaveBeenCalled();
   expect(h.source.dispose).toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(0);
   expect(h.deps.end).toHaveBeenCalledWith('token');
 });
 test('mirror/isolation reset source history and bump epoch; absent fresh frames do not submit', async () => {
@@ -127,4 +128,101 @@ test('restart waits for the previous submit ack; old failure cannot stop a new s
   expect(h.controller.state.status).toBe('active');
   expect(h.deps.submit).toHaveBeenCalledTimes(2);
   h.controller.stop();
+});
+
+test('device selection while off is inert; switching active capture releases it before acquiring the next', async () => {
+  const h = harness();
+  h.controller.selectDevice('usb');
+  expect(h.deps.acquire).not.toHaveBeenCalled();
+  await h.controller.start();
+  expect(h.deps.acquire).toHaveBeenLastCalledWith('usb');
+  h.controller.selectDevice('built-in');
+  expect(h.track.stop).toHaveBeenCalledOnce();
+  expect(h.source.dispose).toHaveBeenCalledOnce();
+  expect(h.deps.acquire).toHaveBeenLastCalledWith('built-in');
+  expect(h.track.stop.mock.invocationCallOrder[0]).toBeLessThan(h.deps.acquire.mock.invocationCallOrder[1]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.controller.state).toMatchObject({ deviceId: 'built-in', status: 'active' });
+  h.controller.stop();
+});
+test('rapid choices discard old permission grants and keep only the latest selection', async () => {
+  const h = harness();
+  const first = deferred<MediaStream>();
+  const second = deferred<MediaStream>();
+  h.deps.acquire.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const start = h.controller.start();
+  h.controller.selectDevice('second');
+  h.controller.selectDevice('third');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.controller.state).toMatchObject({ deviceId: 'third', status: 'active' });
+  const discarded = { getTracks: () => [{ stop: vi.fn() }] } as unknown as MediaStream;
+  const stop = vi.fn();
+  const late = { getTracks: () => [{ stop }] } as unknown as MediaStream;
+  first.resolve(late);
+  second.resolve(discarded);
+  await start;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(stop).toHaveBeenCalledOnce();
+  expect(h.deps.begin).toHaveBeenCalledOnce();
+  expect(h.controller.state).toMatchObject({ deviceId: 'third', status: 'active' });
+  h.controller.stop();
+});
+test('native session transitions are ordered through late begins and slow ends', async () => {
+  const h = harness();
+  const firstBegin = deferred<string>();
+  const firstEnd = deferred<void>();
+  h.deps.begin.mockReturnValueOnce(firstBegin.promise).mockResolvedValue('latest');
+  h.deps.end.mockReturnValueOnce(firstEnd.promise);
+  const start = h.controller.start();
+  await vi.advanceTimersByTimeAsync(0);
+  h.controller.selectDevice('second');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.deps.begin).toHaveBeenCalledOnce();
+  firstBegin.resolve('obsolete');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.deps.end).toHaveBeenCalledWith('obsolete');
+  expect(h.deps.begin).toHaveBeenCalledOnce();
+  h.controller.selectDevice('latest');
+  firstEnd.resolve();
+  await start;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.deps.begin).toHaveBeenCalledTimes(2);
+  expect(h.deps.submit.mock.calls[0][0].sessionToken).toBe('latest');
+  expect(h.controller.state.deviceId).toBe('latest');
+  h.controller.stop();
+});
+test('enumeration refreshes labels on grant and devicechange; unsubscribe drops late results', async () => {
+  const h = harness();
+  const enumerate = vi.fn(async () => [{ deviceId: 'usb', label: '' }]);
+  let changed = () => {};
+  const unwatch = vi.fn();
+  const controller = new CameraController({
+    ...h.deps,
+    enumerate,
+    watchDevices: (callback) => {
+      changed = callback;
+      return unwatch;
+    },
+  });
+  const detach = controller.watchDevices();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.state.devices).toEqual([{ deviceId: 'usb', label: '' }]);
+  expect(h.deps.acquire).not.toHaveBeenCalled();
+  enumerate.mockResolvedValue([{ deviceId: 'usb', label: 'Desk camera' }]);
+  await controller.start();
+  expect(controller.state.devices[0].label).toBe('Desk camera');
+  enumerate.mockResolvedValue([]);
+  changed();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(controller.state.devices).toEqual([]);
+  expect(h.deps.acquire).toHaveBeenCalledOnce();
+  const late = deferred<{ deviceId: string; label: string }[]>();
+  enumerate.mockReturnValue(late.promise);
+  changed();
+  detach();
+  late.resolve([{ deviceId: 'late', label: 'No longer watched' }]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(unwatch).toHaveBeenCalledOnce();
+  expect(controller.state.devices).toEqual([]);
+  controller.stop();
 });

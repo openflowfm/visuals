@@ -31,7 +31,7 @@ test('sheet closure and view content changes preserve capture; unmount releases 
   expect(f.acquire).not.toHaveBeenCalled();
   expect(screen.getByRole('slider', { name: 'Camera opacity' }).getAttribute('aria-valuenow')).toBe('0');
   expect(screen.getByRole('slider', { name: 'Outline opacity' }).getAttribute('aria-valuenow')).toBe('65');
-  fireEvent.click(screen.getByRole('button', { name: 'Enable camera' }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
   await waitFor(() => expect(f.controller.state.status).toBe('active'));
   mounted.rerender(page(false, 'Live'));
   expect(screen.queryByRole('dialog')).toBeNull();
@@ -42,7 +42,7 @@ test('sheet closure and view content changes preserve capture; unmount releases 
   expect(f.controller.state.settings).toMatchObject({ outlineOpacity: 1, cameraOpacity: 0, feedMix: 0.3 });
   mounted.unmount();
   expect(f.stop).toHaveBeenCalledOnce();
-  expect(f.end).toHaveBeenCalledWith('test');
+  await waitFor(() => expect(f.end).toHaveBeenCalledWith('test'));
 });
 test('denial is visible and opening the sheet never requests camera', async () => {
   const f = fixture(true);
@@ -52,7 +52,7 @@ test('denial is visible and opening the sheet never requests camera', async () =
     </CameraProvider>,
   );
   expect(f.acquire).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Enable camera' }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
   expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Permission denied');
 });
 test('pagehide releases capture without changing existing UI settings', async () => {
@@ -66,4 +66,56 @@ test('pagehide releases capture without changing existing UI settings', async ()
   act(() => window.dispatchEvent(new Event('pagehide')));
   expect(f.stop).toHaveBeenCalledOnce();
   expect(f.controller.state.settings.outlineOpacity).toBe(0.65);
+});
+
+test('source picker has safe default and anonymous labels; grouped controls and enable switch remain accessible', async () => {
+  const f = fixture();
+  f.controller.state = {
+    ...f.controller.state,
+    devices: [
+      { deviceId: 'desk', label: '' },
+      { deviceId: 'usb', label: 'USB camera' },
+    ],
+  };
+  render(
+    <CameraProvider controller={f.controller}>
+      <CameraPanel open onClose={() => {}} />
+    </CameraProvider>,
+  );
+  expect(screen.getByRole('combobox', { name: 'Camera device' }).textContent).toContain('System default camera');
+  for (const name of ['Source', 'Appearance', 'Motion']) expect(screen.getByRole('region', { name })).toBeTruthy();
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Camera device' }), { key: 'ArrowDown' });
+  expect(f.controller.state.deviceId).toBe('desk');
+  expect(screen.getByRole('combobox').textContent).toContain('Camera 1');
+  expect(f.acquire).not.toHaveBeenCalled();
+  fireEvent.keyDown(screen.getByRole('combobox'), { key: 'End' });
+  expect(f.controller.state.deviceId).toBe('usb');
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
+  expect(screen.getByRole('switch', { name: 'Enable camera' }).getAttribute('aria-checked')).toBe('true');
+  await waitFor(() => expect(f.acquire).toHaveBeenCalledWith('usb'));
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
+  expect(screen.getByRole('switch', { name: 'Enable camera' }).getAttribute('aria-checked')).toBe('false');
+  expect(f.controller.state.status).toBe('off');
+});
+test('enable toggle can cancel a pending permission request', async () => {
+  const f = fixture();
+  let resolve!: (stream: MediaStream) => void;
+  f.acquire.mockImplementation(
+    () =>
+      new Promise((done) => {
+        resolve = done;
+      }),
+  );
+  render(
+    <CameraProvider controller={f.controller}>
+      <CameraPanel open onClose={() => {}} />
+    </CameraProvider>,
+  );
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
+  expect(f.controller.state.status).toBe('starting');
+  fireEvent.click(screen.getByRole('switch', { name: 'Enable camera' }));
+  const stop = vi.fn();
+  await act(async () => resolve({ getTracks: () => [{ stop }] } as unknown as MediaStream));
+  expect(stop).toHaveBeenCalledOnce();
+  expect(f.controller.state.status).toBe('off');
 });

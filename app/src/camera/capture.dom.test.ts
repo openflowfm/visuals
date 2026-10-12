@@ -96,3 +96,33 @@ test('4:3 and portrait inputs retain aspect ratio with centered padding and mirr
   expect(transform).toHaveBeenLastCalledWith(1, 0, 0, 1, 0, 0);
   capture.dispose();
 });
+
+test('camera listing uses video devices only, observes devicechange, and exact selection never falls back', async () => {
+  const media = new EventTarget();
+  const acquire = vi.fn().mockRejectedValue(new Error('Selected camera unavailable'));
+  const enumerateDevices = vi.fn(async () => [
+    { kind: 'audioinput', deviceId: 'mic', label: 'Microphone' },
+    { kind: 'videoinput', deviceId: '', label: '' },
+    { kind: 'videoinput', deviceId: 'desk', label: '' },
+  ]);
+  Object.assign(media, { getUserMedia: acquire, enumerateDevices });
+  const removed = vi.spyOn(media, 'removeEventListener');
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: media });
+  const controller = createCameraController();
+  const detach = controller.watchDevices();
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(controller.state.devices).toEqual([{ deviceId: 'desk', label: '' }]);
+  expect(acquire).not.toHaveBeenCalled();
+  controller.selectDevice('desk');
+  expect(acquire).not.toHaveBeenCalled();
+  await controller.start();
+  expect(acquire).toHaveBeenCalledExactlyOnceWith({ audio: false, video: { deviceId: { exact: 'desk' }, width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 60, max: 60 } } });
+  expect(controller.state.status).toBe('failed');
+  media.dispatchEvent(new Event('devicechange'));
+  expect(enumerateDevices).toHaveBeenCalledTimes(2);
+  detach();
+  expect(removed).toHaveBeenCalledWith('devicechange', expect.any(Function));
+  media.dispatchEvent(new Event('devicechange'));
+  expect(enumerateDevices).toHaveBeenCalledTimes(2);
+});

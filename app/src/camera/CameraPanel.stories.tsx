@@ -7,6 +7,10 @@ function Fixture(props: { open: boolean; onClose(): void }) {
   const [controller] = useState(
     () =>
       new CameraController({
+        enumerate: async () => [
+          { deviceId: 'anonymous', label: '' },
+          { deviceId: 'desk', label: 'Desk camera' },
+        ],
         acquire: async () => {
           throw new Error('Camera permission denied. Check camera access in system settings.');
         },
@@ -37,7 +41,27 @@ type Story = StoryObj<typeof meta>;
 export const Off: Story = {
   play: async ({ args }) => {
     const panel = within(await screen.findByRole('dialog', { name: 'Camera' }));
-    await expect(panel.getByRole('slider', { name: 'Camera opacity' })).toHaveAttribute('aria-valuenow', '0');
+    await expect(panel.getByRole('combobox', { name: 'Camera device' })).toHaveTextContent('System default camera');
+    await userEvent.click(panel.getByRole('combobox', { name: 'Camera device' }));
+    await userEvent.keyboard('{End}{Enter}');
+    await expect(panel.getByRole('combobox', { name: 'Camera device' })).toHaveTextContent('Desk camera');
+    await expect(panel.getByRole('switch', { name: 'Enable camera' })).toHaveAttribute('aria-checked', 'false');
+    for (const name of ['Source', 'Appearance', 'Motion']) await expect(panel.getByRole('region', { name })).toBeVisible();
+    const opacity = panel.getByRole('slider', { name: 'Camera opacity' });
+    const thumb = opacity.querySelector('.wdg-slider-thumb') as HTMLElement;
+    const fill = opacity.querySelector('.wdg-slider-fill') as HTMLElement;
+    await expect(opacity).toHaveAttribute('aria-valuenow', '0');
+    const low = opacity.getBoundingClientRect();
+    await expect(low.height).toBe(44);
+    await expect(thumb.getBoundingClientRect().height).toBe(22);
+    await expect(fill.getBoundingClientRect().height).toBe(8);
+    await expect(thumb.getBoundingClientRect().left).toBeCloseTo(low.left, 0);
+    opacity.focus();
+    await userEvent.keyboard('{End}');
+    await expect(opacity).toHaveAttribute('aria-valuenow', '100');
+    await expect(thumb.getBoundingClientRect().right).toBeCloseTo(opacity.getBoundingClientRect().right, 0);
+    await userEvent.keyboard('{Home}');
+    await expect(opacity).toHaveAttribute('aria-valuenow', '0');
     await expect(panel.getByRole('slider', { name: 'Outline opacity' })).toHaveAttribute('aria-valuenow', '65');
     await userEvent.click(panel.getByRole('button', { name: 'Bring my outline back' }));
     await expect(panel.getByRole('slider', { name: 'Camera opacity' })).toHaveAttribute('aria-valuenow', '0');
@@ -48,7 +72,7 @@ export const Off: Story = {
 };
 export const PermissionDenied: Story = {
   play: async () => {
-    await userEvent.click(await screen.findByRole('button', { name: 'Enable camera' }));
+    await userEvent.click(await screen.findByRole('switch', { name: 'Enable camera' }));
     await expect(await screen.findByRole('alert')).toHaveTextContent('Camera permission denied');
   },
 };

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Button } from '@openflow/widgets/controls/Button.tsx';
+import { Select } from '@openflow/widgets/controls/Select.tsx';
 import { Slider } from '@openflow/widgets/controls/Slider.tsx';
 import { range } from '../controls';
 import { Sheet } from '../Settings';
@@ -10,7 +11,7 @@ import { createCameraController } from './capture';
 import modelLicense from './person-assets/LICENSE.mediapipe?url';
 import './camera.css';
 const CameraContext = createContext<CameraController | null>(null);
-const OFF = { status: 'off' as const, message: 'Camera is off.', settings: DEFAULT_CAMERA_SETTINGS };
+const OFF = { deviceId: '', devices: [], deviceMessage: '', status: 'off' as const, message: 'Camera is off.', settings: DEFAULT_CAMERA_SETTINGS };
 const noSubscribe = () => () => {};
 const offSnapshot = () => OFF;
 function useCamera() {
@@ -22,10 +23,12 @@ function useCamera() {
 export function CameraProvider({ children, controller: provided }: { children: ReactNode; controller?: CameraController }) {
   const [controller] = useState(() => provided ?? createCameraController());
   useEffect(() => {
+    const unwatch = controller.watchDevices();
     const stop = () => controller.stop();
     window.addEventListener('pagehide', stop);
     return () => {
       window.removeEventListener('pagehide', stop);
+      unwatch();
       controller.stop();
     };
   }, [controller]);
@@ -62,45 +65,76 @@ const SLIDERS: {
   { key: 'threshold', label: 'Noise cutoff', hint: 'Raise to remove faint texture', max: 60 },
 ];
 export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void }) {
-  const { controller, status, message, settings } = useCamera();
+  const { controller, status, message, settings, deviceId, devices, deviceMessage } = useCamera();
   if (!open) return null;
   const on = status === 'active' || status === 'starting';
+  const choices = [{ deviceId: '', label: 'System default camera' }, ...devices.map((device, index) => ({ ...device, label: device.label || `Camera ${index + 1}` }))];
+  if (deviceId && !choices.some((device) => device.deviceId === deviceId)) choices.push({ deviceId, label: 'Selected camera · unavailable' });
+  const sliders = (keys: (typeof SLIDERS)[number]['key'][]) =>
+    keys.map((key) => {
+      const { label, hint, normalized, max = 100 } = SLIDERS.find((slider) => slider.key === key)!;
+      const value = Math.round(settings[key] * (normalized ? 100 : 1));
+      return (
+        <Slider
+          key={key}
+          param={range(label, 0, max, DEFAULT_CAMERA_SETTINGS[key] * (normalized ? 100 : 1))}
+          value={value}
+          onChange={(next) => controller?.configure({ [key]: next / (normalized ? 100 : 1) })}
+          display={`${value}${max === 100 ? '%' : ''}`}
+          orientation="horizontal"
+          length="auto"
+          layout="stacked"
+          fill
+          title={hint}
+        />
+      );
+    });
   return (
     <Sheet title="Camera" className="settings camera-panel" onClose={onClose}>
       <div className="wdg camera-body">
-        <p>Feed your edges into the playing preset. Your current music input and presets keep playing.</p>
-        <Button onPress={() => (on ? controller?.stop() : void controller?.start())} disabled={!controller}>
-          {on ? 'Stop camera' : 'Enable camera'}
-        </Button>
-        <p role={status === 'failed' ? 'alert' : 'status'} className="camera-status">
-          {message}
-        </p>
-        <p className="camera-note">Video only, processed locally. Closing this panel keeps the camera on. Stop camera releases it.</p>
-        <SwitchRow name="Person only" on={settings.personOnly} onChange={(personOnly) => controller?.configure({ personOnly })} title="Remove the room; waits for a fresh local person mask" />
-        <SwitchRow name="Mirror camera" on={settings.mirror} onChange={(mirror) => controller?.configure({ mirror })} />
-        {SLIDERS.map(({ key, label, hint, normalized, max = 100 }) => {
-          const value = Math.round(settings[key] * (normalized ? 100 : 1));
-          return (
-            <div className="camera-control" key={key}>
-              <Slider
-                param={range(label, 0, max, DEFAULT_CAMERA_SETTINGS[key] * (normalized ? 100 : 1))}
-                value={value}
-                onChange={(next) => controller?.configure({ [key]: next / (normalized ? 100 : 1) })}
-                display={`${value}${max === 100 ? '%' : ''}`}
-                orientation="horizontal"
-                layout="inside"
-                title={hint}
-              />
-              <small>{hint}</small>
-            </div>
-          );
-        })}
-        <Button tone="quiet" onPress={() => controller?.configure({ outlineOpacity: 1 })}>
-          Bring my outline back
-        </Button>
-        <a href={modelLicense} target="_blank" rel="noreferrer">
-          Local person model · Apache 2.0 license
-        </a>
+        <div className="camera-power">
+          <SwitchRow name="Enable camera" on={on} onChange={(enabled) => (enabled ? void controller?.start() : controller?.stop())} disabled={!controller} />
+          <p role={status === 'failed' ? 'alert' : 'status'} className="camera-status">
+            {message}
+          </p>
+        </div>
+        <section className="camera-group" aria-label="Source">
+          <h3>Source</h3>
+          <Select
+            label="Camera device"
+            items={choices.map((device) => device.label)}
+            index={choices.findIndex((device) => device.deviceId === deviceId)}
+            onChange={(index) => controller?.selectDevice(choices[index].deviceId)}
+            disabled={!controller}
+          />
+          {deviceMessage && <p className="camera-note">{deviceMessage}</p>}
+          <div className="camera-switches">
+            <SwitchRow name="Person only" on={settings.personOnly} onChange={(personOnly) => controller?.configure({ personOnly })} title="Remove the room; waits for a fresh local person mask" />
+            <SwitchRow name="Mirror camera" on={settings.mirror} onChange={(mirror) => controller?.configure({ mirror })} />
+          </div>
+          {sliders(['threshold'])}
+        </section>
+        <section className="camera-group" aria-label="Appearance">
+          <h3>
+            Appearance <span>Keep yourself recognizable</span>
+          </h3>
+          {sliders(['cameraOpacity', 'outlineOpacity', 'color'])}
+          <Button tone="quiet" onPress={() => controller?.configure({ outlineOpacity: 1 })}>
+            Bring my outline back
+          </Button>
+        </section>
+        <section className="camera-group" aria-label="Motion">
+          <h3>
+            Motion <span>Feed the preset</span>
+          </h3>
+          {sliders(['feedMix', 'steadiness', 'smoothing'])}
+        </section>
+        <footer className="camera-note">
+          <p>Video stays on this device. Closing this panel keeps it running. Your music input stays unchanged.</p>
+          <a href={modelLicense} target="_blank" rel="noreferrer">
+            Local person model · Apache 2.0
+          </a>
+        </footer>
       </div>
     </Sheet>
   );

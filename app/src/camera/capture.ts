@@ -132,9 +132,20 @@ export function createCameraController() {
   return new CameraController({
     ...nativeCameraCommands,
     now: () => performance.now(),
-    acquire: () => {
+    enumerate: async () => {
+      const devices = await navigator.mediaDevices?.enumerateDevices();
+      return (devices ?? []).filter((device) => device.kind === 'videoinput' && device.deviceId).map(({ deviceId, label }) => ({ deviceId, label }));
+    },
+    watchDevices: (changed) => {
+      navigator.mediaDevices?.addEventListener('devicechange', changed);
+      return () => navigator.mediaDevices?.removeEventListener('devicechange', changed);
+    },
+    acquire: (deviceId) => {
       if (!navigator.mediaDevices?.getUserMedia) return Promise.reject(new Error('Camera capture is unavailable in this window.'));
-      return navigator.mediaDevices.getUserMedia({ audio: false, video: { width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 60, max: 60 } } });
+      return navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { ...(deviceId ? { deviceId: { exact: deviceId } } : {}), width: { ideal: 640 }, height: { ideal: 360 }, frameRate: { ideal: 60, max: 60 } },
+      });
     },
     source: (stream, fail) => new BrowserCapture(stream, fail),
   });

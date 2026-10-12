@@ -31,13 +31,22 @@ export interface CaptureSource {
   reset(): void;
   dispose(): void;
 }
+export interface CameraDevice {
+  deviceId: string;
+  label: string;
+}
 export interface CameraState {
+  deviceId: string;
+  devices: CameraDevice[];
+  deviceMessage: string;
   status: 'off' | 'starting' | 'active' | 'failed';
   message: string;
   settings: CameraSettings;
 }
 export interface CameraDependencies {
-  acquire(): Promise<MediaStream>;
+  acquire(deviceId: string): Promise<MediaStream>;
+  enumerate?(): Promise<CameraDevice[]>;
+  watchDevices?(changed: () => void): () => void;
   source(stream: MediaStream, fail: (error: unknown) => void): CaptureSource;
   begin(): Promise<string>;
   end(token: string): Promise<void>;
@@ -46,7 +55,7 @@ export interface CameraDependencies {
 }
 /** Persistent capture owner. UI/view lifetime never owns a stream or an IPC loop. */
 export class CameraController {
-  state: CameraState = { status: 'off', message: 'Camera is off. Enable requests video only.', settings: { ...DEFAULT_CAMERA_SETTINGS } };
+  state: CameraState = { deviceId: '', devices: [], deviceMessage: '', status: 'off', message: 'Camera is off. Enable requests video only.', settings: { ...DEFAULT_CAMERA_SETTINGS } };
   private listeners = new Set<() => void>();
   private generation = 0;
   private epoch = 0;
@@ -56,7 +65,44 @@ export class CameraController {
   private token: string | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private pending: Promise<unknown> = Promise.resolve();
+  private nativeLifecycle: Promise<unknown> = Promise.resolve();
+  private deviceRevision = 0;
   constructor(private deps: CameraDependencies) {}
+  /** Enumeration never opens a device. Owned by the persistent provider. */
+  watchDevices() {
+    const unwatch = this.deps.watchDevices?.(() => void this.refreshDevices());
+    void this.refreshDevices();
+    return () => {
+      ++this.deviceRevision;
+      unwatch?.();
+    };
+  }
+  async refreshDevices() {
+    if (!this.deps.enumerate) return;
+    const revision = ++this.deviceRevision;
+    try {
+      const devices = await this.deps.enumerate();
+      if (revision !== this.deviceRevision) return;
+      this.state = { ...this.state, devices, deviceMessage: '' };
+    } catch {
+      if (revision !== this.deviceRevision) return;
+      this.state = { ...this.state, deviceMessage: 'Camera list unavailable. You can still try the selected camera.' };
+    }
+    this.listeners.forEach((listener) => listener());
+  }
+  selectDevice(deviceId: string) {
+    if (deviceId === this.state.deviceId) return;
+    const restart = this.state.status === 'starting' || this.state.status === 'active';
+    if (restart) this.stop();
+    this.state = { ...this.state, deviceId };
+    this.listeners.forEach((listener) => listener());
+    if (restart) void this.start();
+  }
+  private native<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.nativeLifecycle.catch(() => {}).then(operation);
+    this.nativeLifecycle = next;
+    return next;
+  }
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => {
@@ -82,12 +128,13 @@ export class CameraController {
     const id = ++this.generation;
     this.publish('starting', 'Waiting for camera permission…');
     try {
-      const stream = await this.deps.acquire();
+      const stream = await this.deps.acquire(this.state.deviceId);
       if (id !== this.generation) {
         stream.getTracks().forEach((track) => track.stop());
         return;
       }
       this.stream = stream;
+      void this.refreshDevices();
       const track = stream.getVideoTracks()[0];
       if (!track || track.readyState === 'ended') throw new Error('The camera is no longer available.');
       track.onended = () => {
@@ -98,12 +145,18 @@ export class CameraController {
       });
       await this.source.ready;
       if (id !== this.generation) return;
-      const token = await this.deps.begin();
-      if (id !== this.generation) {
-        await this.deps.end(token);
-        return;
-      }
-      this.token = token;
+      const token = await this.native(async () => {
+        if (id !== this.generation) return null;
+        const next = await this.deps.begin();
+        if (id !== this.generation) {
+          await this.deps.end(next);
+          return null;
+        }
+        // Assign inside the serialized operation so Stop cannot miss a live token.
+        this.token = next;
+        return next;
+      });
+      if (!token || id !== this.generation) return;
       this.sequence = 0;
       this.epoch++;
       this.publish('active', 'Camera on · preparing a fresh person mask…');
@@ -127,7 +180,7 @@ export class CameraController {
     const token = this.token;
     this.token = null;
     if (token)
-      void this.deps.end(token).catch((error) => {
+      void this.native(() => this.deps.end(token)).catch((error) => {
         if (this.state.status === 'off') this.publish('off', `Camera stopped; native cleanup reported: ${String(error)}`);
       });
     this.publish('off', 'Camera is off.');

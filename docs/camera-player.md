@@ -1,11 +1,24 @@
 # Camera in visual[flow]
 
-Open **Camera** from Home or Live. **Enable camera** requests video only; the
+Open **Camera** from Home or Live. The **Enable camera** toggle requests video only; the
 existing music input, presets, effects and output controls stay authoritative.
 Camera is off at launch. Closing the sheet, changing views or switching presets
-keeps it running. **Stop camera**, device loss, page teardown and errors release
+keeps it running. Turning the toggle off, device loss, page teardown and errors release
 capture and invalidate its native session. A permission grant or acknowledgement
-arriving after Stop cannot restart it.
+arriving after Stop cannot restart it. The toggle can cancel a pending permission request.
+
+**Source** includes the camera selector, person isolation, mirroring and noise
+cutoff. The selector lists video inputs without opening them, starts with System
+default camera, and refreshes labels after permission and on device changes.
+Choosing a camera while off leaves it off. Changing cameras while on releases the
+old capture first; the chosen device is requested exactly, with no silent fallback.
+A missing selected device remains visible as unavailable. Native session changes
+are serialized so late permission grants or native responses cannot revive an old
+source. **Appearance** groups image/outline opacity and color; **Motion** groups
+edge feed, steadiness and curve smoothing. The sheet and sliders have scoped glass
+materials with 44px gesture targets. CSS backdrop blur affects page content, not
+the separate native Metal surface; layered tint/reflection gives that backing its
+frosted appearance. Reduced-transparency preferences use an opaque material.
 
 The defaults are camera image 0%, recognizable outline 65%, native edge feed 30%,
 edge steadiness 85%, and person-only isolation. Camera opacity shows original RGB
