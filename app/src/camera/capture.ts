@@ -1,3 +1,4 @@
+import { captureRect, gatePaddingEdges } from './capture-fit';
 import { budgetContours } from './geometry-budget';
 import { Contours } from './contours';
 import { traceContours } from './curve-contours';
@@ -89,8 +90,12 @@ export class BrowserCapture implements CaptureSource {
     if (!this.callbackFrames) this.freshness.observe(this.video.getVideoPlaybackQuality().totalVideoFrames, now);
     const capturedAt = this.freshness.take(now);
     if (capturedAt === null) return null;
+    const rect = captureRect(this.video.videoWidth, this.video.videoHeight, WIDTH, HEIGHT);
+    if (!rect) return null;
+    this.ctx.resetTransform();
+    this.ctx.clearRect(0, 0, WIDTH, HEIGHT);
     this.ctx.setTransform(settings.mirror ? -1 : 1, 0, 0, 1, settings.mirror ? WIDTH : 0, 0);
-    this.ctx.drawImage(this.video, 0, 0, WIDTH, HEIGHT);
+    this.ctx.drawImage(this.video, rect.x, rect.y, rect.width, rect.height);
     this.ctx.resetTransform();
     if (settings.personOnly) this.mask?.update(this.canvas);
     const mask = settings.personOnly ? this.mask?.current() : null;
@@ -98,6 +103,7 @@ export class BrowserCapture implements CaptureSource {
     this.maskWasFresh = Boolean(mask);
     const source = this.ctx.getImageData(0, 0, WIDTH, HEIGHT).data;
     const edges = this.contours.process(source, settings.detail, settings.threshold, mask ?? undefined);
+    gatePaddingEdges(edges, WIDTH, HEIGHT, rect);
     const paths = this.temporal.update(budgetContours(traceContours(edges, WIDTH, HEIGHT, settings.smoothing)), now, settings.steadiness);
     this.signal.prepare(edges, source, mask ? this.contours.foreground : null, settings.color, now / 1000);
     const remainingFreshMs = Math.max(0, 250 - (performance.now() - Math.min(capturedAt, mask?.capturedAt ?? capturedAt)));

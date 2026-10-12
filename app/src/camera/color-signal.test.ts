@@ -42,3 +42,10 @@ test('camera image preserves original RGB and full masked opacity independently 
   signal.prepare(new Uint8ClampedArray(8), source, null, 100, 12);
   expect([...signal.identity]).toEqual([...source]);
 });
+
+test('camera letterbox transparency is retained independently of the person mask', () => {
+  const signal = new ColorSignal(2, 1);
+  const source = new Uint8ClampedArray([0, 0, 0, 0, 180, 120, 70, 128]);
+  signal.prepare(new Uint8ClampedArray(8), source, new Float32Array([1, 0.5]), 100, 0);
+  expect([...signal.identity]).toEqual([0, 0, 0, 0, 180, 120, 70, 64]);
+});

@@ -14,6 +14,9 @@ import { BrowserCapture, createCameraController } from './capture';
 import { DEFAULT_CAMERA_SETTINGS } from './controller';
 let video: HTMLVideoElement;
 let callback: VideoFrameRequestCallback;
+let draw: ReturnType<typeof vi.fn>;
+let clear: ReturnType<typeof vi.fn>;
+let transform: ReturnType<typeof vi.fn>;
 const decode = (frames: number) => callback(performance.now(), { presentedFrames: frames } as VideoFrameCallbackMetadata);
 beforeEach(() => {
   vi.restoreAllMocks();
@@ -26,6 +29,8 @@ beforeEach(() => {
     if (name === 'video') {
       video = element as HTMLVideoElement;
       Object.defineProperty(video, 'readyState', { value: 2 });
+      Object.defineProperty(video, 'videoWidth', { value: 640, configurable: true });
+      Object.defineProperty(video, 'videoHeight', { value: 360, configurable: true });
       Object.defineProperty(video, 'srcObject', { value: null, writable: true });
       video.requestVideoFrameCallback = (next) => {
         callback = next;
@@ -37,7 +42,10 @@ beforeEach(() => {
   }) as typeof document.createElement);
   vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue();
   vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
-  const ctx = { setTransform() {}, resetTransform() {}, drawImage() {}, getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4).fill(255) }) };
+  draw = vi.fn();
+  clear = vi.fn();
+  transform = vi.fn();
+  const ctx = { setTransform: transform, resetTransform: vi.fn(), drawImage: draw, clearRect: clear, getImageData: () => ({ data: new Uint8ClampedArray(320 * 180 * 4).fill(255) }) };
   vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -69,4 +77,22 @@ test('explicit enable asks for video with audio false, denial is surfaced', asyn
   await controller.start();
   expect(acquire.mock.calls[0][0]).toMatchObject({ audio: false, video: { frameRate: { ideal: 60, max: 60 } } });
   expect(controller.state).toMatchObject({ status: 'failed', message: 'Denied' });
+});
+
+test('4:3 and portrait inputs retain aspect ratio with centered padding and mirroring', () => {
+  const capture = new BrowserCapture({ getVideoTracks: () => [] } as unknown as MediaStream, vi.fn());
+  Object.defineProperty(video, 'videoHeight', { value: 480 });
+  decode(1);
+  capture.frame({ ...DEFAULT_CAMERA_SETTINGS, personOnly: false, mirror: true });
+  expect(clear).toHaveBeenCalledWith(0, 0, 320, 180);
+  expect(draw).toHaveBeenLastCalledWith(video, 40, 0, 240, 180);
+  expect(transform).toHaveBeenLastCalledWith(-1, 0, 0, 1, 320, 0);
+  expect(clear.mock.invocationCallOrder[0]).toBeLessThan(draw.mock.invocationCallOrder[0]);
+  Object.defineProperty(video, 'videoWidth', { value: 360 });
+  Object.defineProperty(video, 'videoHeight', { value: 640 });
+  decode(2);
+  capture.frame({ ...DEFAULT_CAMERA_SETTINGS, personOnly: false, mirror: false });
+  expect(draw).toHaveBeenLastCalledWith(video, 109.375, 0, 101.25, 180);
+  expect(transform).toHaveBeenLastCalledWith(1, 0, 0, 1, 0, 0);
+  capture.dispose();
 });

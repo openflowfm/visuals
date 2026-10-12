@@ -43,7 +43,7 @@ export class ColorSignal {
         this.identity[p + c] = source[p + c];
       }
       this.emission[p + 3] = 255;
-      this.identity[p + 3] = alpha * 255;
+      this.identity[p + 3] = alpha * source[p + 3];
     }
     return this.emission;
   }
