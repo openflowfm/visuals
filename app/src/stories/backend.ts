@@ -52,6 +52,7 @@ export interface World {
   crashes: api.CrashReport[];
   crashesEnabled: boolean;
   update: api.Update | null;
+  updateChannel: api.UpdateChannels;
   sources: api.AudioSources;
   heard: api.Heard;
   audio?: AudioStatus;
@@ -89,6 +90,7 @@ export const world = (over: Partial<World> = {}): World => ({
   crashes: [],
   crashesEnabled: true,
   update: null,
+  updateChannel: { channel: 'release', default: 'release' },
   sources: F.SOURCES,
   heard: F.HEARD,
   levels: [0.46, 0.4],
@@ -570,6 +572,12 @@ export function handler(w: World) {
         return w.update;
       case 'update_install':
         return never;
+      case 'update_channel':
+        return w.updateChannel;
+      case 'update_channel_set':
+        w.updateChannel = { ...w.updateChannel, channel: args.channel as api.UpdateChannel };
+        w.update = null;
+        return w.updateChannel;
     }
     // Plugins (the opener, the webview's drag and drop) have nothing to say here.
     if (cmd.startsWith('plugin:')) return null;

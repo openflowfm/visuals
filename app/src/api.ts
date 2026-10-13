@@ -132,10 +132,22 @@ export interface Update {
   notes: string;
   date: string | null;
 }
-/** A newer version on this build's channel, or null when this one is the latest. */
+/** A newer version on the channel followed (`updateChannel`), or null when this one is the latest. */
 export const updateCheck = () => invoke<Update | null>('update_check');
 /** Download and install the update `updateCheck` found, then relaunch. */
 export const updateInstall = () => invoke<void>('update_install');
+
+/** `updater::Channel`: which builds the app updates to. `release`: each published `vX.Y.Z`; `latest`: every build from `main`. */
+export type UpdateChannel = 'release' | 'latest';
+/** `updater::Channels`: the channel followed now, and this build's own (followed until one is chosen: `latest` for a build from `main`, `release` otherwise). */
+export interface UpdateChannels {
+  channel: UpdateChannel;
+  default: UpdateChannel;
+}
+/** The update channel followed, kept in `updates.json`. */
+export const updateChannel = () => invoke<UpdateChannels>('update_channel');
+/** Follow `channel` from now on (the next `updateCheck` reads its manifest), kept for next launch; rejects, still following it, when it couldn't be kept. */
+export const updateChannelSet = (channel: UpdateChannel) => invoke<UpdateChannels>('update_channel_set', { channel });
 
 /** Play (or stop) the test sound into the engine, as if it were heard. */
 export const testSound = (on: boolean) => invoke<void>('test_sound', { on });

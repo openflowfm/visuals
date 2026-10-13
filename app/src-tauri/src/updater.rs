@@ -1,27 +1,29 @@
-//! Updates: checking for a newer release and installing it, with the Tauri
-//! updater. Three channels, chosen when the app is built (`VISUALS_CHANNEL`,
-//! which `release.yml` sets; see `docs/releasing.md`):
+//! Updates: checking for a newer version and installing it, with the Tauri
+//! updater. Two channels (see `docs/releasing.md`), and the app follows the one
+//! chosen in zen's Settings sheet (the Updates choice, `satoramoto/zen` branch
+//! `visuals/update-channel`, arriving with the next zen pin), kept in `updates.json`:
 //!
-//! - stable (the default, and any name it doesn't know) follows final
-//!   releases: `latest.json` on the latest published release, so a draft goes
-//!   out only once it is published. It never offers a prerelease;
-//! - beta follows the fixed `beta` prerelease, whose `latest.json` names each
-//!   release candidate and each final once published, compared as versions:
-//!   `1.0.0-rc.2` moves on to `1.0.0-rc.3`, then to `1.0.0`;
+//! - release follows final releases: `latest.json` on GitHub's latest release,
+//!   which is never a draft or a prerelease, so it moves only when a `vX.Y.Z`
+//!   tag's draft is published. It never offers a prerelease;
 //! - latest follows the fixed `latest` prerelease, rebuilt on every push to
-//!   `main`. Every latest build has the same app version, so its
-//!   `latest.json` says `<version>-latest.<build>` and a build is newer when
-//!   its build number is (`VISUALS_BUILD`, the run number, also set by
-//!   `release.yml`).
+//!   `main`. Every latest build has the app version in `tauri.conf.json`, so
+//!   its `latest.json` says `<version>-latest.<build>` and a build is newer when
+//!   its numbers are later, or the same with a later build than this one's
+//!   (`VISUALS_BUILD`, the release run's number, which `release.yml` compiles
+//!   into every build, tagged ones too, so the numbers are one sequence).
 //!
-//! The page asks on launch and when the menu's "Check for Updates…" fires
-//! (`app/src/Update.tsx`); nothing installs without the user saying so.
+//! Until a choice is made the channel is the build's own: latest for a build
+//! from `main` (`VISUALS_CHANNEL=latest`, set by `release.yml`), release for any
+//! other. The page asks on launch and when the menu's "Check for Updates…"
+//! fires; nothing installs without the user saying so.
 //!
 //! A build without the updater's public key in `tauri.conf.json` (still the
 //! placeholder) or a debug build says "Updates aren't set up in this build"
-//! and checks nothing.
+//! and checks nothing; the channel can still be chosen and is kept.
 
-use serde::Serialize;
+use crate::settings;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::sync::Mutex;
 use tauri::Manager;
@@ -32,12 +34,17 @@ use tauri_plugin_updater::UpdaterExt;
 const PLACEHOLDER: &str = "REPLACE_WITH_CONTENTS_OF_visual-flow-updater.key.pub";
 
 /// Where each channel's `latest.json` lives.
-const STABLE: &str = "https://github.com/openflowfm/visuals/releases/latest/download/latest.json";
-const BETA: &str = "https://github.com/openflowfm/visuals/releases/download/beta/latest.json";
+const RELEASE: &str = "https://github.com/openflowfm/visuals/releases/latest/download/latest.json";
 const LATEST: &str = "https://github.com/openflowfm/visuals/releases/download/latest/latest.json";
+
+/// Where the chosen channel is kept, in [`settings::dir`].
+const FILE: &str = "updates.json";
 
 /// What the page shows when updates can't be checked in this build.
 const NOT_SET_UP: &str = "Updates aren't set up in this build.";
+
+/// What [`update_channel_set`] says when the choice couldn't be kept.
+const NOT_KEPT: &str = "Couldn't save the update channel; it is followed until visual[flow] quits.";
 
 /// A newer release than the one running.
 #[derive(Serialize, Clone, Debug)]
@@ -49,37 +56,57 @@ pub struct Update {
     date: Option<String>,
 }
 
-/// Which releases this build follows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Channel {
-    Stable,
-    Beta,
+/// Which releases the app follows (`api.UpdateChannel`).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Channel {
+    Release,
     Latest,
 }
 
 impl Channel {
-    /// The channel `VISUALS_CHANNEL` named at build time; stable when it named
-    /// none or one this build doesn't know.
-    fn of(name: Option<&str>) -> Channel {
+    /// The channel a build follows until one is chosen, from the
+    /// `VISUALS_CHANNEL` it was built with: latest for `latest`, release for
+    /// none or anything else (the old `stable` and `beta` among them).
+    fn of_build(name: Option<&str>) -> Channel {
         match name {
-            Some("beta") => Channel::Beta,
             Some("latest") => Channel::Latest,
-            _ => Channel::Stable,
+            _ => Channel::Release,
         }
     }
 
     fn endpoint(self) -> &'static str {
         match self {
-            Channel::Stable => STABLE,
-            Channel::Beta => BETA,
+            Channel::Release => RELEASE,
             Channel::Latest => LATEST,
         }
     }
 }
 
-/// This build's channel.
-fn channel() -> Channel {
-    Channel::of(option_env!("VISUALS_CHANNEL"))
+/// This build's own channel.
+fn built() -> Channel {
+    Channel::of_build(option_env!("VISUALS_CHANNEL"))
+}
+
+/// What's kept in [`FILE`].
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
+struct Kept {
+    channel: Channel,
+}
+
+/// The channel to follow: the one kept, or the build's own when none is (no
+/// file, or one that couldn't be read, which `settings` moves aside and says).
+fn chosen(kept: Option<Kept>, built: Channel) -> Channel {
+    kept.map_or(built, |k| k.channel)
+}
+
+/// The channel followed, as the page reads it (`api.UpdateChannels`).
+#[derive(Serialize, Clone, Copy, Debug, PartialEq)]
+pub struct Channels {
+    /// Followed now.
+    channel: Channel,
+    /// This build's own, followed until one is chosen.
+    default: Channel,
 }
 
 /// This build's number (the release run's), if it was built by `release.yml`.
@@ -129,17 +156,17 @@ fn version_order(a: Version, b: Version) -> Ordering {
     (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)).then_with(|| prerelease_order(a.3, b.3))
 }
 
-/// Whether `remote` is newer than the running `current` on `channel`.
+/// Whether `remote` is newer than the running `current` (whose build number
+/// is `build`) on `channel`. The running app may have been built for the other
+/// channel: a release app switched to latest, or the other way.
 ///
-/// - Stable offers only a release (never a prerelease) of a later version.
-/// - Beta offers any later version: the next release candidate, then the
-///   release it leads to.
+/// - Release offers only a release (never a prerelease) of a later version: a
+///   release candidate moves on to its release.
 /// - Latest offers a build whose version's numbers are later, or the same
 ///   with a later build than this one's.
 fn newer(channel: Channel, current: Version, build: Option<u64>, remote: Version) -> bool {
     match channel {
-        Channel::Stable => remote.3.is_empty() && version_order(current, remote) == Ordering::Less,
-        Channel::Beta => version_order(current, remote) == Ordering::Less,
+        Channel::Release => remote.3.is_empty() && version_order(current, remote) == Ordering::Less,
         Channel::Latest => {
             let (cur, rem) = ((current.0, current.1, current.2), (remote.0, remote.1, remote.2));
             if rem != cur {
@@ -147,8 +174,8 @@ fn newer(channel: Channel, current: Version, build: Option<u64>, remote: Version
             }
             match (latest_build(remote.3), build) {
                 (Some(r), Some(b)) => r > b,
-                // A latest build made anywhere but the release run has no
-                // number to compare with: the published one is the newer.
+                // A build made anywhere but the release run has no number to
+                // compare with: the published one is the newer.
                 (Some(_), None) => true,
                 _ => false,
             }
@@ -170,24 +197,57 @@ fn set_up(app: &tauri::AppHandle) -> bool {
 
 /// The update `update_check` last found, for `update_install`.
 #[derive(Default)]
-struct Found(Mutex<Option<tauri_plugin_updater::Update>>);
+struct Found(Mutex<Option<(Channel, tauri_plugin_updater::Update)>>);
 
-/// Set up the updater plugin, when the app starts. Checking is the page's to
-/// ask for.
+/// The channel followed now. Its lock is held while [`FILE`] is written, so
+/// the file ends with the channel followed.
+struct Following(Mutex<Channel>);
+
+/// Set up the updater plugin and read the kept channel, when the app starts.
+/// Checking is the page's to ask for.
 pub fn start(app: tauri::AppHandle) {
     app.manage(Found::default());
+    app.manage(Following(Mutex::new(chosen(settings::load::<Kept>(FILE), built()))));
     if let Err(e) = app.plugin(tauri_plugin_updater::Builder::new().build()) {
         eprintln!("updates: the updater didn't start: {e}");
     }
 }
 
-/// A newer release, if there is one.
+fn following(app: &tauri::AppHandle) -> Channel {
+    *app.state::<Following>().0.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// The channel followed, and this build's own.
+#[tauri::command]
+pub fn update_channel(app: tauri::AppHandle) -> Channels {
+    Channels { channel: following(&app), default: built() }
+}
+
+/// Follow `channel` from now on, kept for next launch. It is followed at once
+/// either way; if it couldn't be kept, the error says so (and the settings'
+/// problems too). An update found on the channel before is forgotten.
+#[tauri::command]
+pub fn update_channel_set(app: tauri::AppHandle, channel: Channel) -> Result<Channels, String> {
+    let kept = {
+        let state = app.state::<Following>();
+        let mut now = state.0.lock().unwrap_or_else(|e| e.into_inner());
+        *now = channel;
+        *app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        settings::save_json(FILE, &Kept { channel })
+    };
+    if !kept {
+        return Err(NOT_KEPT.into());
+    }
+    Ok(Channels { channel, default: built() })
+}
+
+/// A newer version on the channel followed, if there is one.
 #[tauri::command]
 pub async fn update_check(app: tauri::AppHandle) -> Result<Option<Update>, String> {
     if !set_up(&app) {
         return Err(NOT_SET_UP.into());
     }
-    let channel = channel();
+    let channel = following(&app);
     let failed = |e: tauri_plugin_updater::Error| format!("Couldn't check for updates: {e}");
     let endpoint = channel.endpoint().parse().map_err(|e| format!("Couldn't check for updates: {e}"))?;
     let updater = app
@@ -201,17 +261,38 @@ pub async fn update_check(app: tauri::AppHandle) -> Result<Option<Update>, Strin
         .build()
         .map_err(failed)?;
     let found = updater.check().await.map_err(failed)?;
+    // Under the channel's lock, so a change of channel can't come between
+    // the look and keeping what was found.
+    let state = app.state::<Following>();
+    let now = state.0.lock().unwrap_or_else(|e| e.into_inner());
+    if *now != channel {
+        // The channel changed while checking: what was found is the old one's.
+        return Ok(None);
+    }
     let shown = found.as_ref().map(|u| Update { version: u.version.clone(), notes: u.body.clone().unwrap_or_default(), date: u.date.map(|d| d.to_string()) });
-    *app.state::<Found>().0.lock().unwrap() = found;
+    *app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()) = found.map(|u| (channel, u));
+    drop(now);
     Ok(shown)
 }
 
 /// Download and install the newer release, then restart into it.
 #[tauri::command]
 pub async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
-    let update = app.state::<Found>().0.lock().unwrap().clone().ok_or("no update to install")?;
+    let (channel, update) = app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("no update to install")?;
     update.download_and_install(|_, _| {}, || {}).await.map_err(|e| format!("Couldn't install the update: {e}"))?;
+    if !same_channel(channel, following(&app)) {
+        return Err(CHANNEL_CHANGED.into());
+    }
     app.restart()
+}
+
+/// Said when the channel changed while an update downloaded.
+const CHANNEL_CHANGED: &str = "The update channel changed while the update downloaded, so it wasn't applied. Check again.";
+
+/// Whether an update found on `found` may still be restarted into now that
+/// the app follows `now`.
+fn same_channel(found: Channel, now: Channel) -> bool {
+    found == now
 }
 
 #[cfg(test)]
@@ -219,55 +300,85 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_channel_is_stable_unless_named_beta_or_latest() {
-        assert_eq!(Channel::of(None), Channel::Stable);
-        assert_eq!(Channel::of(Some("stable")), Channel::Stable);
-        assert_eq!(Channel::of(Some("beta")), Channel::Beta);
-        assert_eq!(Channel::of(Some("latest")), Channel::Latest);
-        // The old nightly, a typo or anything else: stable.
-        assert_eq!(Channel::of(Some("nightly")), Channel::Stable);
-        assert_eq!(Channel::of(Some("Beta")), Channel::Stable);
-        assert_eq!(Channel::of(Some("")), Channel::Stable);
-        assert_eq!(Channel::Stable.endpoint(), STABLE);
-        assert_eq!(Channel::Beta.endpoint(), BETA);
+    fn a_build_follows_latest_only_when_built_from_main() {
+        assert_eq!(Channel::of_build(None), Channel::Release);
+        assert_eq!(Channel::of_build(Some("release")), Channel::Release);
+        assert_eq!(Channel::of_build(Some("latest")), Channel::Latest);
+        // The old stable and beta, a typo or anything else: release.
+        assert_eq!(Channel::of_build(Some("stable")), Channel::Release);
+        assert_eq!(Channel::of_build(Some("beta")), Channel::Release);
+        assert_eq!(Channel::of_build(Some("Latest")), Channel::Release);
+        assert_eq!(Channel::of_build(Some("")), Channel::Release);
+    }
+
+    #[test]
+    fn each_channel_reads_its_own_manifest() {
+        assert_eq!(Channel::Release.endpoint(), RELEASE);
         assert_eq!(Channel::Latest.endpoint(), LATEST);
+        assert_ne!(RELEASE, LATEST);
     }
 
     #[test]
-    fn stable_offers_only_a_later_version() {
-        let s = Channel::Stable;
-        assert!(newer(s, (0, 3, 0, ""), None, (0, 3, 1, "")));
-        assert!(newer(s, (0, 3, 0, ""), None, (1, 0, 0, "")));
-        assert!(!newer(s, (0, 3, 0, ""), None, (0, 3, 0, "")));
-        assert!(!newer(s, (0, 3, 1, ""), None, (0, 3, 0, "")));
+    fn the_kept_channel_wins_over_the_builds_own() {
+        assert_eq!(chosen(Some(Kept { channel: Channel::Latest }), Channel::Release), Channel::Latest);
+        assert_eq!(chosen(Some(Kept { channel: Channel::Release }), Channel::Latest), Channel::Release);
+        assert_eq!(chosen(None, Channel::Latest), Channel::Latest, "nothing kept: the build's own");
+        assert_eq!(chosen(None, Channel::Release), Channel::Release);
+    }
+
+    #[test]
+    fn the_kept_channel_reads_back_and_a_bad_one_doesnt() {
+        let json = serde_json::to_string(&Kept { channel: Channel::Latest }).unwrap();
+        assert_eq!(json, r#"{"channel":"latest"}"#);
+        assert_eq!(serde_json::from_str::<Kept>(&json).unwrap(), Kept { channel: Channel::Latest });
+        // The versioned file settings writes reads too.
+        assert_eq!(serde_json::from_str::<Kept>(r#"{"version":1,"channel":"release"}"#).unwrap(), Kept { channel: Channel::Release });
+        // A channel this build doesn't know isn't a choice: settings moves it aside.
+        assert!(serde_json::from_str::<Kept>(r#"{"channel":"beta"}"#).is_err());
+    }
+
+    #[test]
+    fn updater_install_needs_the_same_channel() {
+        assert!(same_channel(Channel::Release, Channel::Release));
+        assert!(!same_channel(Channel::Release, Channel::Latest));
+        assert!(!same_channel(Channel::Latest, Channel::Release));
+        assert!(serde_json::from_str::<Kept>(r#"{}"#).is_err());
+    }
+
+    #[test]
+    fn the_page_reads_the_channels_as_it_expects() {
+        let c = Channels { channel: Channel::Latest, default: Channel::Release };
+        assert_eq!(serde_json::to_string(&c).unwrap(), r#"{"channel":"latest","default":"release"}"#);
+        assert_eq!(serde_json::from_str::<Channel>(r#""release""#).unwrap(), Channel::Release);
+    }
+
+    #[test]
+    fn release_offers_only_a_later_version() {
+        let r = Channel::Release;
+        assert!(newer(r, (0, 3, 0, ""), None, (0, 3, 1, "")));
+        assert!(newer(r, (0, 3, 0, ""), None, (1, 0, 0, "")));
+        assert!(!newer(r, (0, 3, 0, ""), None, (0, 3, 0, "")));
+        assert!(!newer(r, (0, 3, 1, ""), None, (0, 3, 0, "")));
         // A release candidate moves on to its release, never the other way.
-        assert!(newer(s, (0, 3, 0, "rc.1"), None, (0, 3, 0, "")));
-        assert!(!newer(s, (0, 3, 0, ""), None, (0, 3, 0, "rc.1")));
+        assert!(newer(r, (0, 3, 0, "rc.1"), None, (0, 3, 0, "")));
+        assert!(!newer(r, (0, 3, 0, ""), None, (0, 3, 0, "rc.1")));
     }
 
     #[test]
-    fn stable_never_sees_a_prerelease() {
-        let s = Channel::Stable;
-        assert!(!newer(s, (1, 0, 0, ""), None, (1, 1, 0, "rc.1")));
-        assert!(!newer(s, (1, 0, 0, ""), None, (2, 0, 0, "rc.1")));
-        assert!(!newer(s, (1, 0, 0, ""), Some(5), (1, 0, 1, "latest.900")));
+    fn release_never_sees_a_prerelease_or_a_latest_build() {
+        let r = Channel::Release;
+        assert!(!newer(r, (1, 0, 0, ""), None, (1, 1, 0, "rc.1")));
+        assert!(!newer(r, (1, 0, 0, ""), None, (2, 0, 0, "rc.1")));
+        assert!(!newer(r, (1, 0, 0, ""), Some(5), (1, 0, 1, "latest.900")));
     }
 
     #[test]
-    fn beta_moves_through_the_candidates_to_the_release() {
-        let b = Channel::Beta;
-        assert!(newer(b, (1, 0, 0, "rc.2"), None, (1, 0, 0, "rc.3")));
-        assert!(newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "")));
-        assert!(newer(b, (1, 0, 0, "rc.2"), None, (1, 0, 0, "")));
-        assert!(!newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "rc.3")));
-        assert!(!newer(b, (1, 0, 0, "rc.3"), None, (1, 0, 0, "rc.2")));
-        assert!(!newer(b, (1, 0, 0, ""), None, (1, 0, 0, "rc.3")));
-        // Candidate numbers are compared as numbers, not text.
-        assert!(newer(b, (1, 0, 0, "rc.9"), None, (1, 0, 0, "rc.10")));
-        // After a release, the next one's candidates.
-        assert!(newer(b, (1, 0, 0, ""), None, (1, 0, 1, "rc.1")));
-        assert!(newer(b, (1, 0, 0, ""), None, (1, 1, 0, "rc.1")));
-        assert!(!newer(b, (1, 1, 0, "rc.1"), None, (1, 0, 1, "")));
+    fn a_latest_app_switched_to_release_waits_for_the_next_release() {
+        // A latest build of 0.3.0 (build 600): the 0.3.0 release isn't newer, 0.3.1 is.
+        let r = Channel::Release;
+        assert!(!newer(r, (0, 3, 0, ""), Some(600), (0, 3, 0, "")));
+        assert!(!newer(r, (0, 3, 0, ""), Some(600), (0, 2, 9, "")));
+        assert!(newer(r, (0, 3, 0, ""), Some(600), (0, 3, 1, "")));
     }
 
     #[test]
@@ -301,9 +412,36 @@ mod tests {
     }
 
     #[test]
+    fn a_release_app_switched_to_latest_takes_a_build_after_its_own() {
+        // The 0.3.0 release was run 500; main's builds of 0.3.0 after it are newer, before it aren't.
+        let l = Channel::Latest;
+        assert!(newer(l, (0, 3, 0, ""), Some(500), (0, 3, 0, "latest.510")));
+        assert!(!newer(l, (0, 3, 0, ""), Some(500), (0, 3, 0, "latest.490")));
+        // main has moved on to 0.4.0: any of its builds.
+        assert!(newer(l, (0, 3, 0, ""), Some(500), (0, 4, 0, "latest.501")));
+        // A release candidate's app moves onto a later build of its version.
+        assert!(newer(l, (1, 0, 0, "rc.1"), Some(700), (1, 0, 0, "latest.701")));
+    }
+
+    #[test]
     fn a_latest_build_without_a_build_number_takes_the_published_one() {
         assert!(newer(Channel::Latest, (0, 3, 0, ""), None, (0, 3, 0, "latest.5")));
         assert!(!newer(Channel::Latest, (0, 3, 0, ""), Some(5), (0, 3, 0, "")));
+    }
+
+    /// The manifest as `release.yml` writes it (`latest.json`, one platform),
+    /// read by the updater plugin itself: the latest scheme's version is a
+    /// semver prerelease whose parts reach the comparison as [`newer`] wants.
+    #[test]
+    fn the_manifest_release_yml_writes_reads_in_the_updater() {
+        let json = r#"{"version":"0.3.0-latest.121","notes":"Latest build 121","pub_date":"2026-10-13T12:00:00Z",
+            "platforms":{"darwin-aarch64":{"signature":"c2ln","url":"https://github.com/openflowfm/visuals/releases/download/latest/visual-flow-latest-121_aarch64.app.tar.gz"}}}"#;
+        let release: tauri_plugin_updater::RemoteRelease = serde_json::from_str(json).expect("the updater reads latest.json");
+        let v = &release.version;
+        assert_eq!((v.major, v.minor, v.patch, v.pre.as_str()), (0, 3, 0, "latest.121"));
+        assert_eq!(latest_build(v.pre.as_str()), Some(121));
+        assert!(release.download_url("darwin-aarch64").is_ok());
+        assert!(newer(Channel::Latest, (0, 3, 0, ""), Some(120), (v.major, v.minor, v.patch, v.pre.as_str())));
     }
 
     #[test]
@@ -316,16 +454,16 @@ mod tests {
 
     /// The placeholder here and in `tauri.conf.json` must be the same text, or
     /// a build without the key would think it has one; the config's endpoint
-    /// is stable's, which beta and latest builds replace.
+    /// is release's, which [`update_check`] replaces with the channel's own.
     #[test]
-    fn the_config_holds_the_placeholder_and_the_stable_endpoint() {
+    fn the_config_holds_the_placeholder_and_the_release_endpoint() {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let updater = &conf["plugins"]["updater"];
         let pubkey = updater["pubkey"].as_str().expect("plugins.updater.pubkey");
         if pubkey.starts_with("REPLACE_WITH") {
             assert_eq!(pubkey, PLACEHOLDER);
         }
-        assert_eq!(updater["endpoints"][0].as_str(), Some(STABLE));
+        assert_eq!(updater["endpoints"][0].as_str(), Some(RELEASE));
         // The plugin reads it at start; a config it can't read means no updater.
         let read: tauri_plugin_updater::Config = serde_json::from_value(updater.clone()).expect("the updater plugin reads its config");
         assert_eq!(read.endpoints.len(), 1);

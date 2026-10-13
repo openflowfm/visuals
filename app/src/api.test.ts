@@ -31,3 +31,13 @@ describe('the library commands', () => {
     expect(invoke).toHaveBeenCalledWith('smart_playlist_save', { name: 'Chill', query: { groups: { speed: ['low'] }, text: '' }, starter: 'starter-chill' });
   });
 });
+
+describe('the update channel commands', () => {
+  it('read the channel and choose one by the names updater.rs takes', async () => {
+    invoke.mockClear();
+    await api.updateChannel();
+    await api.updateChannelSet('latest');
+    await api.updateChannelSet('release');
+    expect(invoke.mock.calls).toEqual([['update_channel'], ['update_channel_set', { channel: 'latest' }], ['update_channel_set', { channel: 'release' }]]);
+  });
+});
