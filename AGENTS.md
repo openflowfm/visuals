@@ -32,25 +32,29 @@ sidebar and inspector dock, Stage's forms) are tested.
 **Working on the app and zen together.** A generic control, a token or a theme is zen's;
 a screen or a part of this app is `app/src/ui/`. To change both at once:
 
-1. `ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`app/design.sh`). It runs
+1. `npm run dev` (the page in a browser, plus Storybook) or `npm run dev:app` (the real
+   window) link the local zen first (`app/dev-zen.sh`): `ZEN_SOURCE` is the checkout,
+   `~/Code/satoramoto/zen` by default when it exists; they run
    `npm install --no-save "$ZEN_SOURCE"` (node_modules/@satoramoto/zen becomes a link to the
-   checkout); starts zen's own launcher, `PREVIEW_LABEL=Zen PREVIEW_PORT=4191
-   STORYBOOK_PORT=6022 npm --prefix "$ZEN_SOURCE" run dev`, unless something already answers
-   on 6022 (then it reuses it and never stops it); and starts this repo's Storybook,
-   `storybook dev --ci --no-open --host 127.0.0.1 -p 6006` (`STORYBOOK_PORT` for another
-   port; exit 1 when it's taken). It prints the one URL to open: this Storybook, with zen's
-   composed in under "zen". Ctrl-C (or either child ending) stops what it started.
-2. With `ZEN_SOURCE` set, `vite.app.config.ts` (and so `vite.dev.config.ts`) and
+   checkout; skipped when it already is) and export `ZEN_SOURCE`. With no checkout there, or
+   `ZEN_SOURCE=` (empty), they say so in one line and run against the pinned zen.
+2. Both also start the Storybooks (`app/dev-zen.sh`): zen's own launcher, `PREVIEW_LABEL=Zen
+   PREVIEW_PORT=$ZEN_PREVIEW_PORT STORYBOOK_PORT=$ZEN_STORYBOOK_PORT npm --prefix
+   "$ZEN_SOURCE" run dev` (4191 and 6022 by default), unless a Storybook already answers
+   `/index.json` on `ZEN_STORYBOOK_PORT` (then it reuses it and never stops it; it exits 1
+   first when either port is taken by something else). This repo's Storybook composes
+   zen's in under "zen" (`ZEN_STORYBOOK_URL`, which they set), on `STORYBOOK_PORT` (6006, or
+   a free port). Each prints what runs and the Storybook URL.
+3. With `ZEN_SOURCE` set, `vite.app.config.ts` (and so `vite.dev.config.ts`) and
    `.storybook/main.ts` follow zen's `zen-source` recipe: the `zen-source` export condition
    first (zen's entries resolve to its TS/TSX source, hot-reloaded), React deduped, the
-   checkout allowed to be served; `.storybook/main.ts` adds the `zen` ref
-   (`ZEN_STORYBOOK_URL`, http://localhost:6022 by default). `ZEN_SOURCE=… npm run dev`
-   works the same way once the link is in place. Without `ZEN_SOURCE` nothing changes: the
-   pinned GitHub build (`lib/`) is used and there is no ref.
-3. Land the zen change first, as its own zen PR. Meanwhile this repo's branch may pin that
+   checkout allowed to be served; `.storybook/main.ts` adds the `zen` ref. Without
+   `ZEN_SOURCE` nothing changes: the pinned GitHub build (`lib/`) is used and there is no ref.
+   `npm run app` and `npm run storybook` never link: they use whatever node_modules holds.
+4. The link stays after the run. A plain `npm install` puts the pinned build back.
+5. Land the zen change first, as its own zen PR. Meanwhile this repo's branch may pin that
    zen branch's head sha (`"@satoramoto/zen": "github:satoramoto/zen#<sha>"`, then
-   `npm install`); once the zen PR merges, pin zen's `main` sha and merge here. A plain
-   `npm install` puts the pinned build back after a `design` run.
+   `npm install`); once the zen PR merges, pin zen's `main` sha and merge here.
 
 The library rules zen holds its own code to (only `toCssVars()` variables, no literal
 colours or radii, the tiers) still describe `app/src/ui/`, but nothing here tests them yet.
@@ -68,11 +72,12 @@ colours or radii, the tiers) still describe `app/src/ui/`, but nothing here test
 | `npx vitest run --project unit <files>` | targeted unit tests (`app/src/**/*.test.{ts,tsx}`, `app/src/ui/` among them); they run in node, and a file that mounts components in a DOM opts into one on its first line: `// @vitest-environment happy-dom` (Testing Library and user-event; `ui/model/library.dom.test.tsx` is the pattern, and `ui/model/useLive.test.tsx` for a hook on `ui/fixtures/`' backend) or `// @vitest-environment jsdom` (the tests that came from zen, in `app/src/ui/`). `app/src/ui/test-setup.ts` adds jest-dom's matchers and Testing Library's cleanup | the tests next to what you changed; CI runs them all (`npm test`) |
 | `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story renders in headless Chromium without throwing, and its `play` checks pass: the UI's parts (`app/src/ui/**/*.stories.tsx`, titled `open[flow]/visuals/…`, on `app/src/ui/fixtures/`) and the whole app (`app/src/App.stories.tsx`, over `zenBridge.ts`, on `app/src/stories/` answering Tauri's IPC), never the Rust app. No story is tagged `!test`; a play checks behaviour, never layout. Needs Playwright's Chromium once (`npx playwright install chromium`) | a change under `app/src/ui/`, to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin |
 | `npm run storybook`, `npm run build-storybook` | Storybook with hot reload on port 6006 (or `PORT`), or built into `storybook-static/`: the UI's parts and the whole app, with zen's toolbar (theme pack, mode, facets) and a Desk menu. Agents add `-- --ci --no-open --host 127.0.0.1`, run it in the background with a `trap` that stops it, and check `ps` afterwards | to look at a component's states; `build-storybook` after a change to `.storybook/` |
-| `ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`STORYBOOK_PORT` for another port than 6006) | the UI and zen's source together, hot-reloaded, in one Storybook window with zen's composed in (see "Working on the app and zen together" above). Leaves node_modules linked to the checkout: run a plain `npm install` afterwards | designing across the app and zen; agents run it in the background, stop it, check `ps`, then `npm install` |
 | `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks), so nothing outside `Lab.tsx` may import `app/src/ui/lab.ts`, `Editor/`, `StageGraph/`, `StageInspector/` or `ui/model/lab.ts` | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
 | `npm run app:build-ui:lab` | the lab page (with the editor, as its own `Lab-*` chunk) builds into `dist-app/` | changes to `app/src`, `app/index.html` or `vite.app.config.ts`; run it before `app:build-ui`, which leaves the app's page in `dist-app/` |
 | `npm run check:no-dev-code` (add `-- --bin target/debug/visuals` after a plain `cargo build -p visuals-app`) | none of `npm run dev`'s bridge is in what ships: not in the app's page in `dist-app/` (no `app/src/dev/`, and no Storybook, `mockIPC` or `app/src/stories/` either), nor in a binary built without `dev-bridge` (no `bridge.rs`); exit 1 naming what it found, 2 without `dist-app/` (CI runs both) | after `npm run app:build-ui`, and after a change to `app/src/dev/`, `bridge.rs`, `vite.dev.config.ts` or `.storybook/` |
-| `npm run dev` (`npm run dev:lab` for the editor) | the app's page in a normal browser with HMR, driving the real app headless over its dev bridge: real commands, events, deck, library, audio and Link, and the bench's frames streamed into the preview. It also starts Storybook on `STORYBOOK_PORT` (6006, or a free port when taken; it ending by itself is reported and the rest keeps running); the page's port is `PORT`. Prints the URLs to open, with the bridge's token; opens it when run from a terminal (`VISUALS_DEV_OPEN=0` doesn't). Exits 1, stopping everything, when the app fails to build or quits | designing the page; agents load the URL with Playwright (`compare/`'s), then stop the run and check `ps` that no vite or `target/debug/visuals` is left |
+| `npm run dev` (`npm run dev:lab` for the editor) | the app's page in a normal browser with HMR, driving the real app headless over its dev bridge: real commands, events, deck, library, audio and Link, and the bench's frames streamed into the preview, against the local zen (`app/dev-zen.sh`: `npm install --no-save "$ZEN_SOURCE"`, `~/Code/satoramoto/zen` by default; `ZEN_SOURCE=` or no checkout uses the pinned zen and says so). It also starts zen's launcher (zen's Storybook on `ZEN_STORYBOOK_PORT` 6022, its app on `ZEN_PREVIEW_PORT` 4191) unless a Storybook already answers on that port, and this Storybook on `STORYBOOK_PORT` (6006, or a free port when taken) with zen's composed in under "zen"; either Storybook ending by itself is reported and the rest keeps running; the page's port is `PORT`. Prints the URLs to open, with the bridge's token; opens it when run from a terminal (`VISUALS_DEV_OPEN=0` doesn't). Exits 1, stopping everything it started, when the app fails to build or quits. Leaves node_modules linked to zen: a plain `npm install` restores the pin | designing the page or zen; agents use their own ports (never 6006, 6022, 4191), load the URL with Playwright (`compare/`'s), then stop the run, check `ps` that no vite, Storybook or `target/debug/visuals` is left, and run `npm install` |
+| `npm run dev:app` (`npm run dev:app:lab` for the editor) | `app/run.sh` with `VISUALS_DEV_APP=1`: links the local zen and starts both Storybooks as `npm run dev` does, then `cargo tauri dev`, the real window with hot reload of the page and zen's source. Prints what runs and the Storybook URL; quitting the app stops the Storybooks too. Leaves node_modules linked to zen | working in the real window with zen, pointing at parts in Storybook; agents use their own ports, stop it, check `ps` that no vite, Storybook, `cargo-tauri` or `target/debug/visuals` is left, then `npm install` |
+| `npm run app` (`npm run app:lab` for the editor) | `app/run.sh`: `cargo tauri dev` against whatever zen node_modules holds (the pin after a plain `npm install`); no link step | captures (below) and running the app as people get it |
 | `VISUALS_HEADLESS=1 VISUALS_CAPTURE=<file.png> npm run app` (add `VISUALS_LIVE=1 VISUALS_CAPTURE_OUTPUT=<out.png>` for live mode, `VISUALS_FX=…` for effects) | the app runs and draws: pictures of the main window and the live output, with nothing shown on screen. It quits once the pictures are written, so the command ends by itself (exit 0) | after a change to the app or the page you want to see working: look at the pictures, then check with `ps` that no vite, `cargo-tauri` or `target/debug/visuals` is left |
 | `cargo run --release -p visuals-engine --bin record -- <audio> <out.mp4> --cut <s> <preset> …` | presets drawn from an audio file into a video, frame by frame — the teaser's footage (see `teaser/README.md`) | after a change to `record.rs`: record a few seconds and look at them |
 | `npm run typecheck` in `teaser/` | the teaser's Remotion edit compiles (the root typecheck doesn't reach it) | any change under `teaser/src/` |

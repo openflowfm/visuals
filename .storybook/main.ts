@@ -10,10 +10,11 @@ import app, { zenSourceConfig } from '../vite.app.config.ts';
 // imports a story or a fixture, so none of it ships (`npm run app:build-ui` then
 // `npm run check:no-dev-code`, which also looks for Storybook).
 //
-// With `ZEN_SOURCE` set (`npm run design`), zen resolves to that checkout's
-// source, hot-reloaded (`vite.app.config.ts`'s `zenSourceConfig`), and zen's own
-// Storybook is composed in from `ZEN_STORYBOOK_URL` (http://localhost:6022 by
-// default): one window, the visuals stories beside zen's. Without it, no ref.
+// With `ZEN_SOURCE` set (`npm run dev` and `dev:app`, `app/dev-zen.sh`), zen resolves
+// to that checkout's source, hot-reloaded (`vite.app.config.ts`'s `zenSourceConfig`), and
+// zen's own Storybook is composed in from `ZEN_STORYBOOK_URL` (dev-zen.sh sets it from
+// `ZEN_STORYBOOK_PORT`; http://localhost:6022 by default): one window, the visuals
+// stories beside zen's. Without it, no ref.
 const zenStorybook = process.env.ZEN_SOURCE ? (process.env.ZEN_STORYBOOK_URL ?? 'http://localhost:6022') : null;
 
 const config: StorybookConfig = {
