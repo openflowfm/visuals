@@ -1056,7 +1056,7 @@ export function firstPane(lists: Lists): Pane {
 }
 
 /** The library's index with the user's data over it, read again as either changes; null until read. `apply` takes a change's answer at once. */
-function useLibraryRows() {
+export function useLibraryRows() {
   const [index, setIndex] = useState<LibraryRow[] | null>(null);
   const [data, setData] = useState<LibraryData | null>(null);
   useEffect(() => {
@@ -1087,7 +1087,7 @@ function usePlayed() {
 }
 
 /** A playlist's presets as its grid shows them, in play order: while it plays shuffled, the deck's own order, which the page can't work out itself. */
-function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] | null, played: string[]): { tiles: StripTile[]; total: number } {
+export function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] | null, played: string[]): { tiles: StripTile[]; total: number } {
   const deck = lists?.deck ?? pl.EMPTY_DECK;
   const active = !!list && deck.playlist === list.id;
   const [order, setOrder] = useState<string[] | null>(null);

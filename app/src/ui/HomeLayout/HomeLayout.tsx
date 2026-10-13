@@ -333,7 +333,7 @@ const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled), select:
  * one turns into it, the window narrowing), focus moves into it, and when it
  * goes, back to where it was, if it was in the panel then.
  */
-function useOverlayFocus(panel: RefObject<HTMLElement | null>, mode: 'docked' | 'overlay' | null) {
+export function useOverlayFocus(panel: RefObject<HTMLElement | null>, mode: 'docked' | 'overlay' | null) {
   const was = useRef(mode);
   const opener = useRef<Element | null>(null);
   const overlay = mode === 'overlay';
@@ -360,7 +360,7 @@ function useOverlayFocus(panel: RefObject<HTMLElement | null>, mode: 'docked' | 
 }
 
 /** Escape, or a press outside every panel laid over the column (and their toggles), calls `dismiss`. */
-function useDismiss(side: RefObject<HTMLElement | null>, insp: RefObject<HTMLElement | null>, ids: string[], dismiss: (() => void) | undefined) {
+export function useDismiss(side: RefObject<HTMLElement | null>, insp: RefObject<HTMLElement | null>, ids: string[], dismiss: (() => void) | undefined) {
   const latest = useRef(dismiss);
   latest.current = dismiss;
   const on = ids.length > 0 && !!dismiss;
