@@ -6,13 +6,13 @@ import {
   AXES,
   axisOf,
   bandPaths,
+  BOX,
   COLOURINGS,
   DEFAULT_AXES,
   dotOf,
   dotsOf,
   endsOf,
   groupColour,
-  H,
   M,
   nearest,
   step,
@@ -21,10 +21,10 @@ import {
   trailPoints,
   tunedPath,
   tunedSays,
-  W,
   withAxis,
   xOf,
   yOf,
+  type Box,
   type Direction,
   type Dot,
   type MapAxes,
@@ -43,6 +43,8 @@ export interface FieldProps {
   onAxes?(next: MapAxes): void;
   /** Presets played, by path (`LibraryRow.path`), oldest first: a dashed line runs through their dots, older segments fainter. */
   trail?: readonly string[];
+  /** The plot's shape, in the box's units (about a CSS px each: `boxOf(w, h)`): its viewBox and aspect follow it; the default 4:3 box (`BOX`, 240 by 180) when left out. */
+  shape?: Box;
   /** The listbox's accessible name; "The library by speed and brightness" (the axes, in lower case) when left out. */
   name?: string;
   /** The preset playing (lit), or null: the only one the field marks, whatever a panel beside it is about. */
@@ -59,7 +61,7 @@ export interface FieldProps {
 
 /** The ticks along an edge: five, the middle one longer, like a scale's markings. */
 const TICKS = [0, 0.25, 0.5, 0.75, 1];
-/** How near the pointer, in the box's units (about a px each in the panel), a dot must be to be the one under it. */
+/** How near the pointer, in the box's units (about a px each, at any shape), a dot must be to be the one under it. */
 const REACH = 6;
 const ARROWS: Record<string, Direction> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
 
@@ -92,9 +94,13 @@ const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
  * caption `Text`; the edges' words are `Text`s in capitals on a tight line. The markings'
  * hairline is the ink at a fifth rather than a literal white, so it follows the palette. Classes
  * are `vs-field-*`. The axes, the colouring, the trail and the pickers are new (`axes`, `onAxes`,
- * `trail`, `name`; `ColourPicker` for a title row); the edges' words follow the axes.
+ * `trail`, `name`; `ColourPicker` for a title row); the edges' words follow the axes. The plot's
+ * shape is a choice (`shape`, 4:3 when left out): the dots, the ticks, the lit cursor, the tip and
+ * the pointer follow it, and a caller that sizes the svg to another shape (the library's Map view)
+ * gets a plot that fills its room. Where the svg's box isn't the shape's, the pointer reads it as
+ * the svg draws it (centred, scaled to fit).
  *
- * **Kept.** Its other props, the drawing (box, ticks, dots, ring, cursor), hover's tip,
+ * **Kept.** Its other props, the drawing (default box, ticks, dots, ring, cursor), hover's tip,
  * the arrows' cursor, the roles, and with the default axes its names and words.
  *
  * **Tuning knobs**
@@ -102,8 +108,10 @@ const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
  * - `--vs-field-at`: the tip's place across, 0–1 (set inline from the dot).
  * - `--vs-field-tip-width`: the tip's widest.
  */
-export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, name, playing, intensity, hue, description, onPick }: FieldProps) {
-  const dots = useMemo(() => dotsOf(library, mine, axes), [library, mine, axes]);
+export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape = BOX, name, playing, intensity, hue, description, onPick }: FieldProps) {
+  const { w: W, h: H } = shape;
+  const box = useMemo(() => ({ w: W, h: H }), [W, H]);
+  const dots = useMemo(() => dotsOf(library, mine, axes, box), [library, mine, axes, box]);
   const paths = useMemo(() => bandPaths(dots), [dots]);
   const tuned = useMemo(() => tunedPath(dots), [dots]);
   const needStyles = axes.colour === 'style' || axes.across === 'style' || axes.up === 'style';
@@ -121,13 +129,16 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, name,
   const id = useId();
 
   const lit = dotOf(dots, playing);
-  const start = () => (lit >= 0 ? lit : nearest(dots, xOf(0.5), yOf(0.5), Infinity));
+  const start = () => (lit >= 0 ? lit : nearest(dots, xOf(0.5, box), yOf(0.5, box), Infinity));
 
-  /** Where the pointer is, in the box's units: the svg keeps the box's 4:3, so its rectangle maps straight on. */
+  /** Where the pointer is, in the box's units: the svg draws the box scaled to fit and centred (its own aspect, unless a caller sizes it), so this undoes that. */
   const at = (ev: MouseEvent<SVGSVGElement>) => {
     const r = ev.currentTarget.getBoundingClientRect();
     if (!r.width || !r.height) return -1;
-    return nearest(dots, ((ev.clientX - r.left) / r.width) * W, ((ev.clientY - r.top) / r.height) * H, REACH);
+    const s = Math.min(r.width / W, r.height / H);
+    const x = (ev.clientX - r.left - (r.width - W * s) / 2) / s;
+    const y = (ev.clientY - r.top - (r.height - H * s) / 2) / s;
+    return nearest(dots, x, y, REACH);
   };
   const pick = (i: number) => {
     if (dots[i]) onPick(dots[i].row);
@@ -196,12 +207,12 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, name,
         >
           <g className="vs-field-ticks">
             {TICKS.map((t) => (
-              <path key={`x${t}`} d={`M${xOf(t)} ${H} v${t === 0.5 ? -5 : -3}`} />
+              <path key={`x${t}`} d={`M${xOf(t, box)} ${H} v${t === 0.5 ? -5 : -3}`} />
             ))}
             {TICKS.map((t) => (
-              <path key={`y${t}`} d={`M0 ${yOf(t)} h${t === 0.5 ? 5 : 3}`} />
+              <path key={`y${t}`} d={`M0 ${yOf(t, box)} h${t === 0.5 ? 5 : 3}`} />
             ))}
-            <path className="vs-field-centre" d={`M${xOf(0.5) - 2.5} ${yOf(0.5)} h5 M${xOf(0.5)} ${yOf(0.5) - 2.5} v5`} />
+            <path className="vs-field-centre" d={`M${xOf(0.5, box) - 2.5} ${yOf(0.5, box)} h5 M${xOf(0.5, box)} ${yOf(0.5, box) - 2.5} v5`} />
           </g>
           <g className="vs-field-dots" data-dim={lit >= 0 ? '' : undefined}>
             {paths.map((p) => (
@@ -210,7 +221,7 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, name,
           </g>
           {tuned && <path className="vs-field-tuned" d={tuned} />}
           {trailAt.length > 1 && <Trail points={trailAt} />}
-          {lit >= 0 && <Lit dot={dots[lit]} ring={ring} hue={hue} />}
+          {lit >= 0 && <Lit dot={dots[lit]} box={box} ring={ring} hue={hue} />}
           {tip && <circle className="vs-field-hot" cx={tip.x} cy={tip.y} r={4} />}
         </svg>
         {tip && (
@@ -302,7 +313,7 @@ function optionName(d: Dot, playing: string | null): string {
   return `${nameOf(d.row)}${by ? `, by ${by}` : ''}${d.tuned ? `, at ${timesOf(d.tuned.speed)} speed` : ''}${d.row.key === playing ? ', playing' : ''}`;
 }
 /** The preset playing: a fine cursor through it to the edges' ticks, a ring as wide as it is intense, a point in its hue. */
-function Lit({ dot: { x, y }, ring, hue }: { dot: Dot; ring: number; hue: string }) {
+function Lit({ dot: { x, y }, box: { w: W, h: H }, ring, hue }: { dot: Dot; box: Box; ring: number; hue: string }) {
   return (
     <g className="vs-field-lit" style={{ color: hue }}>
       <path className="vs-field-cursor" d={`M${x} ${M - 4} V${H - M + 4} M${M - 4} ${y} H${W - M + 4}`} />

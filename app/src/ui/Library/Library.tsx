@@ -35,7 +35,7 @@ import {
 } from '../model/librarySearch';
 import { LibraryGrid, pickInto, rangeAnchor, type Pick } from '../LibraryGrid/LibraryGrid';
 import { Say, say } from '../model/words';
-import { paneQuery } from '../model/libraryView';
+import { drawnOf, paneQuery } from '../model/libraryView';
 import { PresetDrawer, hiddenCount } from '../PresetDrawer/PresetDrawer';
 import { Credits } from '../Credits/Credits';
 import { PackBar, useCreditsMenu, useDropToAdd } from '../Pack/Pack';
@@ -98,8 +98,11 @@ export interface HomeLibrary {
   selected?: readonly string[];
   /** The id of what the grid's picks show (the inspector), for the grid's `aria-controls`: a press in it doesn't put that panel away. */
   controls?: string;
-  /** The bare pane's head row (Home's `LibraryHead`), given how many it shows: `shown` as filtered, `total` with no filter of the viewer's. */
-  head?(counts: { shown: number; total: number; filtered: boolean }): ReactNode;
+  /**
+   * The bare pane's head row (Home's `LibraryHead`), given how many it shows: `shown` as filtered,
+   * `total` with no filter of the viewer's, `drawn` of those shown, how many the map draws (measured).
+   */
+  head?(counts: { shown: number; total: number; filtered: boolean; drawn: number }): ReactNode;
   /**
    * Map view: what goes in the grid's room instead of the grid, given what the grid would show
    * (the source, the search and the filter) and how to play one of them as its tile would play.
@@ -461,8 +464,9 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   // The filter or the library changed what the grid shows since: follow the grid as
   // it is now, from what is playing; while a step is in flight, wait for it.
   const grid = useMemo(() => gridKey(shown.map((p) => p.row.path)), [shown]);
-  // What Map view draws: the rows the grid shows.
+  // What Map view draws: the rows the grid shows, of which the measured ones are dots.
   const mapShown = useMemo(() => shown.map((p) => p.row), [shown]);
+  const drawn = useMemo(() => drawnOf(mapShown), [mapShown]);
   useEffect(() => {
     if (!following.current) return;
     let t: ReturnType<typeof setTimeout>;
@@ -830,7 +834,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   return (
     <div ref={root} className={bare ? 'vs-library vs-library-home vs-library-bare' : home ? 'vs-library vs-library-home' : 'vs-library'} data-drop={drop.over ? '' : undefined}>
       {toolbar}
-      {bare && home?.head?.({ shown: shown.length, total: paneTotal, filtered })}
+      {bare && home?.head?.({ shown: shown.length, total: paneTotal, filtered, drawn })}
       {!bare && (title || searchBox)}
       {chipsShown && chips}
       {chipsShown && values}

@@ -1,15 +1,21 @@
 /* The library's head row on Home (LibraryHead.tsx): the source's name and count at the left, the
    Grid | Map switch (the theme's tabs material) and, in Map view, the colour picker at the right.
-   No fill, no rule: it sits on the column's padding, as the grid does. Contract variables and
-   visuals.css tokens only. */
+   No fill, no rule: it sits on the column's padding, as the grid does. On Home it is as tall as
+   Home's `--vs-libhead-h` (Home.css), which the grid reaches up behind, and it is drawn over the
+   grid, so the tiles scroll up under it; elsewhere, as tall as its content. Contract variables
+   and visuals.css tokens only. */
 
 .vs-libhead {
   --vs-library-head-pad: var(--space-2);
+  position: relative;
+  z-index: 1;
   flex: none;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
+  box-sizing: border-box;
+  block-size: var(--vs-libhead-h, auto);
   padding: var(--vs-library-head-pad) var(--vs-home-pad, var(--mat-plate-inset));
 }
 .vs-libhead-title {

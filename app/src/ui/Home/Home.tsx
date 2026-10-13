@@ -52,12 +52,13 @@ import { LibraryHead } from '../Library/LibraryHead';
 import { LibraryMapView } from '../Field/LibraryMapView';
 import { ColourPicker } from '../Field/Field';
 import { useMapAxes } from '../model/mapPrefs';
-import { inspectorShowsMap, listRows, roomShowsMap, useLibraryView } from '../model/libraryView';
+import { drawnOf, inspectorShowsMap, listPlace, listRows, mapRoom, NO_DOTS_NOTE, roomShowsMap, useLibraryView } from '../model/libraryView';
 import { Icon } from '../Icon/Icon';
 import { INSPECTOR_KEY, modesFor, offersQuickAdd, paneName, SIDEBAR_KEY, type QuickAdd, type Selection, type SidebarActions } from '../model/home-model';
 import { Header, NoticeBanner, openSheet, Preview, type View } from '../Views/Views';
 import { problemKey, useSettingsProblems } from '../model/survive';
 import { say, Say } from '../model/words';
+import { CLAIM_MS } from '../model/claim';
 import { useElapsed } from '../model/useElapsed';
 import './Home.css';
 
@@ -86,8 +87,6 @@ const SOURCE: Selection = { kind: 'source' };
 /** The keys a selection picks. */
 const keysOf = (s: Selection): readonly string[] => (s.kind === 'presets' ? s.keys : NONE);
 const NONE: readonly string[] = [];
-/** How long after a tile is played live events naming another preset are taken as the deck catching up, not news. */
-const CLAIM_MS = 2000;
 
 /** Whether a key went to something that moves with the arrows itself (the grid, the sidebar, the inspector's field, a switch): ← → R leave it alone. */
 const ownsArrows = (target: EventTarget | null): boolean => {
@@ -133,9 +132,12 @@ const ownsArrows = (target: EventTarget | null): boolean => {
  * row (`LibraryHead`: the source, how many it shows, **Grid | Map**); the choice is the app's
  * (`useLibraryView`, kept like the map's axes). In Map view (wireframe B) the room shows the map
  * (`LibraryMapView`) of what the grid would show: the library or Starred as searched and filtered,
- * a playlist's presets; a dot plays as its tile would; the inspector leaves its map section out
- * (`inspectorShowsMap`). Quick add keeps the grid. The hero keeps its size; with the head row the
- * grid starts under it rather than reaching up behind the preview.
+ * a playlist's presets; a dot plays as its tile would (a playlist's from its place in it, past the
+ * grid's last tile too: `listPlace`); the inspector leaves its map section out
+ * (`inspectorShowsMap`). With no dots the map's place holds a note (`NO_DOTS_NOTE`), or an empty
+ * playlist's own note, and the head no colour picker (`mapRoom`). Quick add keeps the grid. The
+ * hero keeps its size; the head row stays put under the preview and the grid still reaches up
+ * behind both (Home.css's `--vs-grid-head`).
  *
  * **Kept.** Every piece of state, the optimistic play and its undo, the deck's word and
  * the click's claim, the keys (⌃⌘S, ⌘I, ⌘F, Esc's order, ?, ← → R H with the isTyping and
@@ -662,8 +664,8 @@ export function Home({
     if (modes.inspector === null) choose('inspector', true);
   };
 
-  // A dot played (the inspector's map, or a playlist's map with no tile for it): at once and on its own (not from a playlist
-  // shown); what was picked is let go, so the details, the map's ring and the grid follow what plays from here on.
+  // A dot of the inspector's map played: at once and on its own (not from a playlist shown); what was picked is let go,
+  // so the details, the map's ring and the grid follow what plays from here on.
   const playDot = (row: LibraryRow) => {
     const p = byKey.get(row.key);
     if (!p) return;
@@ -681,7 +683,8 @@ export function Home({
   const [view, setView] = useLibraryView();
   const [axes, setAxes] = useMapAxes();
   const roomMap = roomShowsMap(view, quickAdd !== null);
-  const libraryHead = (title: string, count: number | null, countTitle?: string) => (
+  // The head's colour picker shows only over a map with dots (`mapRoom`): never over a note or the grid.
+  const libraryHead = (title: string, count: number | null, countTitle?: string, dots = false) => (
     <LibraryHead
       title={title}
       count={count}
@@ -689,17 +692,28 @@ export function Home({
       view={view}
       onView={setView}
       switchable={quickAdd === null}
-      aside={roomMap ? <ColourPicker axes={axes} onAxes={setAxes} /> : null}
+      aside={roomMap && dots ? <ColourPicker axes={axes} onAxes={setAxes} /> : null}
     />
   );
-  // A playlist's map: its presets as dots; one played from its place in the playlist, as its tile would.
+  // In Map view with no dots: the note in the map's place (an empty source keeps its own empty note).
+  const noDots = (
+    <Text as="p" className="vs-home-note vs-home-grid-empty">
+      {NO_DOTS_NOTE}
+    </Text>
+  );
+  // A playlist's map: its presets as dots. Empty, its pane says so; presets but no dots, the note; read, the map.
   const listMapRows = useMemo(() => (list && roomMap ? listRows(list, rows ?? [], played.paths) : []), [list, roomMap, rows, played.paths]);
+  // Until the library is read, the pane (its tiles, or "Reading the library…").
+  const listRoom = roomMap && rows ? mapRoom(total, drawnOf(listMapRows)) : null;
+  // A dot of a playlist's map played: from its place in the playlist (`listPlace`, as the strip numbers it, so a preset past
+  // the grid's last tile too), the inspector showing it at once; a place the page can't name (a smart playlist playing
+  // shuffled) opens it on its own.
   const playListDot = (row: LibraryRow) => {
-    if (row.path === current?.path) return;
-    const t = tiles.find((x) => x.path === row.path);
-    if (!t) return playDot(row);
+    if (!list || row.path === current?.path) return;
     if (tilesPicked.length) pickInList([]);
-    playTile(t);
+    const name = byKey.get(row.key)?.title ?? row.title;
+    const undo = showPlayed(library.find((e) => e.path === row.path) ?? { path: row.path, name, group: '' });
+    playAt(listPlace(list, row, rows ?? [], played.paths, deck.playlist === list.id), row.path, name, undo);
   };
 
   const sourceName = paneName(shown, lists);
@@ -903,10 +917,20 @@ export function Home({
                           selected: keysOf(sel),
                           controls: INSPECTOR_ID,
                           adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
-                          head: ({ shown: n, total: all, filtered }) =>
-                            libraryHead(sourceName, filtered ? n : all, filtered ? `${n.toLocaleString('en-US')} of ${all.toLocaleString('en-US')} presets shown` : undefined),
+                          head: ({ shown: n, total: all, filtered, drawn }) =>
+                            libraryHead(
+                              sourceName,
+                              filtered ? n : all,
+                              filtered ? `${n.toLocaleString('en-US')} of ${all.toLocaleString('en-US')} presets shown` : undefined,
+                              mapRoom(n, drawn) === 'map',
+                            ),
                           map: roomMap
-                            ? (dots, play) => <LibraryMapView rows={dots} mine={data?.presets} playing={playingShown} source={shown.kind === 'library' ? undefined : sourceName} onPick={play} />
+                            ? (dots, play) =>
+                                mapRoom(dots.length, drawnOf(dots)) === 'map' ? (
+                                  <LibraryMapView rows={dots} mine={data?.presets} playing={playingShown} source={shown.kind === 'library' ? undefined : sourceName} onPick={play} />
+                                ) : (
+                                  noDots
+                                )
                             : null,
                         }}
                       />
@@ -916,9 +940,11 @@ export function Home({
               </>
             ) : list && lists ? (
               <>
-                {libraryHead(list.name, total)}
-                {roomMap && tiles.length > 0 ? (
+                {libraryHead(list.name, total, undefined, listRoom === 'map')}
+                {listRoom === 'map' ? (
                   <LibraryMapView rows={listMapRows} mine={data?.presets} playing={playingShown} source={list.name} onPick={playListDot} />
+                ) : listRoom === 'undrawn' ? (
+                  noDots
                 ) : (
                   <PlaylistPane
                     key={list.id}

@@ -9,6 +9,7 @@ import { setMapAxes } from '../model/mapPrefs';
 import { resetTrail, useSessionTrail } from '../model/trail';
 import { useLive } from '../model/useLive';
 import { LIVE_MAP_LABEL, LiveMap } from './LiveMap';
+import { resetLiveMapScope } from './scope';
 
 /** The trail the stories start with: a few of Warm-up's presets, played before the one playing (its third). */
 const TRAIL = [0, 5, 1, 7].map((i) => WARM_UP.items[i].path);
@@ -45,8 +46,10 @@ const meta = {
   component: Window,
   decorators: [withVisualsFrame, withLibraryTheme],
   globals: VISUALS_GLOBALS,
+  // The trail and the scope are the page's session's (module state): each story starts them over.
   beforeEach: (ctx) => {
     resetTrail(TRAIL);
+    resetLiveMapScope();
     return visualsBeforeEach(ctx);
   },
   parameters: { layout: 'fullscreen' },
@@ -91,8 +94,6 @@ export const Library: Story = {
     await userEvent.click(p.getByRole('radio', { name: 'Library' }));
     await waitFor(() => expect(panel).toHaveTextContent(`library · ${ROWS.length}`));
     await expect(p.getByRole('listbox')).toHaveAccessibleName(/^The library by /);
-    // Back to this set for the next story: the scope is the page's session's.
-    await userEvent.click(p.getByRole('radio', { name: 'This set' }));
   },
 };
 

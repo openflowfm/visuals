@@ -2,7 +2,9 @@
  * **Job.** The library's view on Home: Grid (its tiles) or Map (the Field in the grid's room),
  * the rule for where the map shows, and what the map draws. The choice is the page's, kept as
  * `mapPrefs` keeps the map's axes: in the page's storage, one for the app (not per source or
- * playlist), every mounted `useLibraryView` following a change.
+ * playlist), every mounted `useLibraryView` following a change, made here or in another window
+ * (the page's `storage` event). Also: what the room shows in Map view when there are no dots
+ * (`mapRoom`), and where a dot of a playlist's map plays from (`listPlace`).
  */
 import { useSyncExternalStore } from 'react';
 import type { LibraryQuery, LibraryRow } from './api';
@@ -53,9 +55,21 @@ export function setLibraryView(next: LibraryView): void {
   for (const l of [...listeners]) l();
 }
 
+// Another window kept a choice (or cleared storage): what storage holds is the choice again, and every view follows it.
+function onStorage(e: StorageEvent): void {
+  if (e.key !== null && e.key !== LIBRARY_VIEW_KEY) return;
+  saved = true;
+  for (const l of [...listeners]) l();
+}
+
+/** Listen while anything does: the first listener starts following other windows, the last one stops. */
 function subscribe(l: () => void): () => void {
+  if (listeners.size === 0 && typeof window !== 'undefined') window.addEventListener('storage', onStorage);
   listeners.add(l);
-  return () => listeners.delete(l);
+  return () => {
+    listeners.delete(l);
+    if (listeners.size === 0 && typeof window !== 'undefined') window.removeEventListener('storage', onStorage);
+  };
 }
 
 /** The library's view and the way to change it, shared by everything on the page. */
@@ -100,3 +114,38 @@ export function listRows(list: Playlist, rows: readonly Prepared[], played: read
   }
   return out;
 }
+
+/**
+ * Where a dot of a playlist's map plays from, numbered as `strip` numbers its tiles (so a place
+ * past `STRIP_CAP`, which has no tile, plays from the playlist too): a manual playlist's first
+ * item that is the row (by path, else by hash; a missing item never), a smart one's index among
+ * its matches. Null when the page can't name the place (a smart playlist playing shuffled, whose
+ * order is the deck's) or the row isn't in it: `playAt` then opens it on its own.
+ * `playing` is whether this playlist is the one the deck plays.
+ */
+export function listPlace(list: Playlist, row: LibraryRow, rows: readonly Prepared[], played: readonly string[], playing: boolean): number | null {
+  if (list.kind === 'manual') {
+    const at = list.items.findIndex((i) => !i.missing && i.path === row.path);
+    if (at >= 0) return at;
+    const moved = row.hash ? list.items.findIndex((i) => !i.missing && i.hash === row.hash) : -1;
+    return moved >= 0 ? moved : null;
+  }
+  if ((playing && list.settings.order === 'shuffle') || !list.query) return null;
+  const at = matches(list.query, rows, played).findIndex((p) => p.row.key === row.key);
+  return at >= 0 ? at : null;
+}
+
+/** How many of `rows` the map draws: those measured (with a `look`). */
+export const drawnOf = (rows: readonly LibraryRow[]): number => rows.reduce((n, r) => (r.look ? n + 1 : n), 0);
+
+/**
+ * What the room shows in Map view: `map` while any preset is a dot (and the head shows the map's
+ * colour picker); else no map and no picker: `empty` when the source holds no presets (its own
+ * empty note, as the grid shows it), `undrawn` when it holds some but none is a dot (none measured
+ * yet, or all gone from the library): `NO_DOTS_NOTE` in the map's place.
+ */
+export type MapRoom = 'map' | 'empty' | 'undrawn';
+export const mapRoom = (held: number, drawn: number): MapRoom => (drawn > 0 ? 'map' : held > 0 ? 'undrawn' : 'empty');
+
+/** What Map view says in the map's place when none of the presets is a dot. */
+export const NO_DOTS_NOTE = 'None of these presets is on the map yet: not drawn, or gone from the library. Grid shows them all.';

@@ -1,32 +1,54 @@
 /**
  * **Job.** The inspector's field (Field.tsx) without the drawing: every measured preset in the
  * library placed by two axes the user picks (`MapAxes`: across and up, each one of `AXES`) in a
- * 4:3 box, coloured by a third choice (`COLOURINGS`) and grouped by that colour so the whole
+ * box, coloured by a third choice (`COLOURINGS`) and grouped by that colour so the whole
  * library draws as a dozen SVG paths rather than a node per preset; the two ways to reach one
  * (the dot nearest the pointer, and the nearest dot in an arrow key's direction); and a trail
- * through the presets played (`trailPoints`).
+ * through the presets played (`trailPoints`). The box is any shape (`boxOf`), 4:3 (`BOX`) unless
+ * the caller measures another; the dots, the trail and the tuned marks are placed in it, and the
+ * two ways to reach a dot work in its units whatever its shape.
  *
  * **Changed.** The axes were fixed (speed across, brightness up) and the colour was always the
  * hue band; now any two of speed, brightness, intensity, hue, colourfulness, my rating and style,
  * and colour by hue, style or rating. `Dot.band` is the dot's colour group under the colouring
  * (`groupColour` paints it). A preset's own speed (`tunedAt`) moves it on whichever axis shows
- * speed, and only then is it marked tuned. The trail is new.
+ * speed, and only then is it marked tuned. The trail is new. The box was a fixed 4:3; now it is a
+ * `Box` (`boxOf(w, h)`) that `xOf`, `yOf` and `dotsOf` take, so the library's Map view fills a
+ * wide room.
  *
- * **Kept.** The box (`W`, `H`, `M`, `xOf`, `yOf`), `placeOf`'s reading of speed and brightness,
+ * **Kept.** The default box (`W`, `H`, `M`; `xOf`, `yOf` and `dotsOf` without one), its units
+ * (about a CSS px), `placeOf`'s reading of speed and brightness,
  * the hue bands, `nearest`, `step`, `dotOf`, `tunedPath`, `tunedSays`.
  */
 import type { LibraryRow, Mine, Overrides } from './api';
 import { placeOf, scaleOf } from './inspector-model';
 
-/** The field's drawing box, in its own units: 4:3, the plot inset by a margin that holds the ticks. */
+/**
+ * The field's drawing box, in its own units, about a CSS px each (the 4:3 panel draws it at
+ * about its size, and the library's Map view measures its room in px), so the dots, the rings
+ * and the pointer's reach look the same at any shape. The plot is inset by a margin that holds
+ * the ticks.
+ */
+export interface Box {
+  w: number;
+  h: number;
+}
+/** The default box's width and height: 4:3, the inspector's and live mode's panels. */
 export const W = 240;
 export const H = 180;
 export const M = 8;
-const PW = W - 2 * M;
-const PH = H - 2 * M;
-/** Where a 0–1 place across and up land in the box. */
-export const xOf = (at: number) => M + at * PW;
-export const yOf = (at: number) => M + (1 - at) * PH;
+/** A box is at least this each way: room for the margins and a little plot. */
+const MIN = 4 * M;
+/** A box `w` by `h`, rounded, at least `MIN` each way; a non-number side takes the default's. */
+export const boxOf = (w: number, h: number): Box => ({
+  w: Number.isFinite(w) ? Math.max(MIN, Math.round(w)) : W,
+  h: Number.isFinite(h) ? Math.max(MIN, Math.round(h)) : H,
+});
+/** The default box: 240 by 180. */
+export const BOX: Box = { w: W, h: H };
+/** Where a 0–1 place across and up land in the box (the default's when left out). */
+export const xOf = (at: number, box: Box = BOX) => M + at * (box.w - 2 * M);
+export const yOf = (at: number, box: Box = BOX) => M + (1 - at) * (box.h - 2 * M);
 
 /** A measure the map can lay out along an axis. */
 export type AxisId = 'speed' | 'brightness' | 'intensity' | 'hue' | 'colourfulness' | 'rating' | 'style';
@@ -189,9 +211,10 @@ function axisAt(id: AxisId, row: LibraryRow, m: Mine | undefined, styles: readon
  * Every preset the index has measured, as a dot where the two axes place it, its group the
  * colouring's; on an axis showing speed it is moved by the user's own speed for it (`tunedAt`),
  * so it sits at its speed as it plays, and marked tuned. A preset not drawn yet, or with no place
- * on either axis (a grey one on a hue axis), has no dot.
+ * on either axis (a grey one on a hue axis), has no dot. The dots are placed in `box` (the
+ * default 4:3 one when left out).
  */
-export function dotsOf(library: readonly LibraryRow[], mine?: Readonly<Record<string, Mine>>, axes: MapAxes = DEFAULT_AXES): Dot[] {
+export function dotsOf(library: readonly LibraryRow[], mine?: Readonly<Record<string, Mine>>, axes: MapAxes = DEFAULT_AXES, box: Box = BOX): Dot[] {
   const styles = axes.across === 'style' || axes.up === 'style' || axes.colour === 'style' ? stylesOf(library, mine) : [];
   const dots: Dot[] = [];
   for (const row of library) {
@@ -203,12 +226,12 @@ export function dotsOf(library: readonly LibraryRow[], mine?: Readonly<Record<st
     if (ax === null || ay === null) continue;
     const band =
       axes.colour === 'hue' ? bandOf((o?.hues ?? row.look.hues)[0]) : axes.colour === 'style' ? Math.max(0, styles.indexOf(styleOf(row, o))) : Math.max(0, Math.min(5, Math.round(m?.rating ?? 0)));
-    const dot: Dot = { row, x: xOf(ax), y: yOf(ay), band };
+    const dot: Dot = { row, x: xOf(ax, box), y: yOf(ay, box), band };
     const k = m?.tune?.speed;
     if (k !== undefined && k > 0 && k !== 1 && (axes.across === 'speed' || axes.up === 'speed')) {
       dot.tuned = { speed: k, madeX: dot.x, madeY: dot.y };
-      if (axes.across === 'speed') dot.x = xOf(tunedAt(ax, k));
-      else dot.y = yOf(tunedAt(ay, k));
+      if (axes.across === 'speed') dot.x = xOf(tunedAt(ax, k), box);
+      else dot.y = yOf(tunedAt(ay, k), box);
     }
     dots.push(dot);
   }

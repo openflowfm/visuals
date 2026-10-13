@@ -212,7 +212,8 @@ export const gridHint = (use: GridUse, into: string | null): string =>
  * **Tuning knobs** (LibraryGrid.css): `--vs-grid-reach` (unitless px, set by Home.css): how far
  * the grid reaches up behind the home's pinned preview; the first row starts below it, and
  * keeping a tile in view (`scrollFor`, `centreFor`) counts that much of the top as covered.
- * `--vs-grid-reach-down` likewise: how far it reaches down behind the home's pinned transport
+ * `--vs-grid-head` (a length, set by Home.css): the library's head row laid over the grid's top
+ * under the preview, counted with the reach. `--vs-grid-reach-down` likewise: how far it reaches down behind the home's pinned transport
  * bar; the last row comes to rest above it, and that much of the bottom counts as covered.
  */
 export function LibraryGrid({ rows, active, selected, current, into, onMove, onPick, onAdd, onClear, reveal, onPress, tileMin, home: homeGrid = false, adding = null, controls }: LibraryGridProps) {
@@ -239,9 +240,11 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       const pad = Number.isFinite(read) ? read : HOME_PAD;
       // A scrollbar that takes room (none when it overlays): the home's grid gives it from its right padding.
       const bar = Math.max(0, el.offsetWidth - el.clientWidth);
-      // How far it reaches up behind the home's pinned preview (`--vs-grid-reach`, unitless px; Home.css).
+      // How far it reaches up behind the home's pinned preview (`--vs-grid-reach`, unitless px; Home.css), and behind the
+      // library's head row over it (`--vs-grid-head`, a length Home.css registers, so it reads as px).
       const reached = home ? parseFloat(getComputedStyle(el).getPropertyValue('--vs-grid-reach')) : NaN;
-      const under = Number.isFinite(reached) && reached > 0 ? reached : 0;
+      const headed = home ? parseFloat(getComputedStyle(el).getPropertyValue('--vs-grid-head')) : NaN;
+      const under = (Number.isFinite(reached) && reached > 0 ? reached : 0) + (Number.isFinite(headed) && headed > 0 ? headed : 0);
       // And down behind its pinned transport bar (`--vs-grid-reach-down`).
       const down = home ? parseFloat(getComputedStyle(el).getPropertyValue('--vs-grid-reach-down')) : NaN;
       const over = Number.isFinite(down) && down > 0 ? down : 0;

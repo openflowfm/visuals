@@ -4,6 +4,8 @@ import {
   BANDS,
   bandOf,
   bandPaths,
+  BOX,
+  boxOf,
   DEFAULT_AXES,
   dotOf,
   dotsOf,
@@ -156,6 +158,69 @@ describe('moving on other axes', () => {
   });
   it('finds the nearest dot to a point', () => {
     expect(nearest(dots, xOf(0), yOf(250 / 360), Infinity)).toBe(2);
+  });
+});
+
+describe('the box', () => {
+  // Intensity across and hue up place exactly: 0 and 60 intensity are the ends, hue 180 the middle.
+  const lib = [row('low', { look: look({ intensity: 0, hues: [0] }) }), row('high', { look: look({ intensity: 60, hues: [359.999999] }) }), row('mid', { look: look({ intensity: 15, hues: [180] }) })];
+  const byKey = (dots: Dot[]) => Object.fromEntries(dots.map((d) => [d.row.key, d]));
+
+  it('keeps the default 240 by 180, with or without a box', () => {
+    expect(BOX).toEqual({ w: 240, h: 180 });
+    expect([W, H]).toEqual([240, 180]);
+    expect(xOf(0)).toBe(M);
+    expect(xOf(1)).toBe(W - M);
+    expect(yOf(0)).toBe(H - M);
+    expect(yOf(1)).toBe(M);
+    expect(dotsOf(lib, undefined, axes('intensity', 'hue'))).toEqual(dotsOf(lib, undefined, axes('intensity', 'hue'), BOX));
+  });
+
+  it.each([
+    ['wide', boxOf(1200, 400)],
+    ['tall', boxOf(300, 900)],
+  ])('places the corners at the margins and the middle centred in a %s box', (_, box) => {
+    const d = byKey(dotsOf(lib, undefined, axes('intensity', 'hue'), box));
+    expect(d.low.x).toBeCloseTo(M);
+    expect(d.low.y).toBeCloseTo(box.h - M);
+    expect(d.high.x).toBeCloseTo(box.w - M);
+    expect(d.high.y).toBeCloseTo(M, 3);
+    expect(d.mid.y).toBeCloseTo(box.h / 2);
+    expect(xOf(0.5, box)).toBeCloseTo(box.w / 2);
+  });
+
+  it('rounds a measured box and keeps room for the margins', () => {
+    expect(boxOf(812.4, 433.6)).toEqual({ w: 812, h: 434 });
+    expect(boxOf(3, 0)).toEqual({ w: 4 * M, h: 4 * M });
+    expect(boxOf(NaN, Infinity)).toEqual(BOX);
+  });
+
+  it('marks a tuned dot in the box it is placed in', () => {
+    const box = boxOf(1000, 300);
+    const [d] = dotsOf([row('a')], { a: { tune: { speed: 4 } } }, DEFAULT_AXES, box);
+    expect(d.tuned!.madeX).toBeCloseTo(xOf(0.5, box));
+    expect(d.x).toBeGreaterThan(d.tuned!.madeX);
+    expect(tunedPath([d])).toContain(`H${d.tuned!.madeX.toFixed(1)}`);
+  });
+
+  it('finds the nearest dot and steps among dots in a wide box', () => {
+    const box = boxOf(1200, 300);
+    // Speed across, brightness up: a at the left, b right of it, c above a.
+    const wide = dotsOf(
+      [row('a', { look: look({ speed: 0.5, brightness: 0.2 }) }), row('b', { look: look({ speed: 4, brightness: 0.25 }) }), row('c', { look: look({ speed: 0.6, brightness: 0.9 }) })],
+      undefined,
+      DEFAULT_AXES,
+      box,
+    );
+    const [a, b, c] = wide;
+    expect(b.x - a.x).toBeGreaterThan(W);
+    expect(nearest(wide, b.x + 3, b.y - 3, 6)).toBe(1);
+    expect(nearest(wide, (a.x + b.x) / 2, a.y, 6)).toBe(-1);
+    expect(nearest(wide, c.x, c.y + 1, Infinity)).toBe(2);
+    expect(step(wide, 0, 'right')).toBe(1);
+    expect(step(wide, 0, 'up')).toBe(2);
+    expect(step(wide, 1, 'left')).toBe(0);
+    expect(step(wide, 0, 'down')).toBe(0);
   });
 });
 

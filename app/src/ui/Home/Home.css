@@ -8,6 +8,9 @@
 .vs-root .vs-home-grid-pane {
   /* home.css --pad: one padding for the main column, so its notes and grid share the hero's edge. */
   --vs-home-pad: var(--mat-plate-inset);
+  /* The library's head row's height (LibraryHead): a control and a step above and below. Fixed, so
+     the grid can reach up behind it by exactly that much (`--vs-grid-head`). */
+  --vs-libhead-h: calc(var(--control-h) + 2 * var(--space-2));
 }
 /* With small tiles (the pane's `small` form, HomeLayout's PANE_FORMS) the padding tightens too. */
 .vs-root [data-region='pane'][data-form='small'] .vs-home-grid-pane {
@@ -72,10 +75,37 @@
    grid, the grid's scroller reaches up into the preview's room (`--vs-grid-reach`, unitless px:
    the slot's --lib-under), its tiles starting below the preview and scrolling up behind it.
    A note (a notice, a settings problem, quick add's strip, the library's save or drop line)
-   or the library's head row (LibraryHead: the source, its count, Grid | Map) sits under the
-   preview instead, and the grid starts under it. */
-.vs-home-grid-pane:not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary, .vs-libhead)) {
+   sits under the preview instead, and the grid starts under it. */
+.vs-home-grid-pane:not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
   --vs-grid-reach: var(--lib-under, 0);
+}
+/* The library's head row (LibraryHead: the source, its count, Grid | Map), the library's and a
+   playlist's alike, doesn't stop the reach: it stays put under the preview, drawn over the grid
+   (LibraryHead.css), and the grid reaches up behind it too (`--vs-grid-head`, its height), so the
+   tiles start below the head and scroll up behind it and the preview. A length registered as one,
+   so LibraryGrid reads it in px. */
+@property --vs-grid-head {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
+  --vs-grid-head: var(--vs-libhead-h);
+}
+/* The head has no fill (the ground is a gradient), so the tiles go out under it rather than show
+   through its words: the scroller is masked clear across the head's band (from the reach down by
+   the head's height) and fades back in over the first row's padding; above the band, in the gap
+   over the preview's edge, they show and pass behind the preview as before. The mask's black is
+   only its alpha, not a colour. */
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) :is(.vs-lib-grid, .vs-home-grid) {
+  --vs-grid-band: calc(var(--vs-grid-reach, 0) * 1px);
+  mask-image: linear-gradient(
+    to bottom,
+    black var(--vs-grid-band),
+    transparent var(--vs-grid-band),
+    transparent calc(var(--vs-grid-band) + var(--vs-grid-head)),
+    black calc(var(--vs-grid-band) + var(--vs-grid-head) + var(--space-2))
+  );
 }
 /* The pane also ends above the pinned transport bar (HomeLayout's `over: 'bar'`): the grid's
    scroller always reaches down into the bar's room (`--vs-grid-reach-down`, unitless px: the
@@ -84,14 +114,14 @@
 .vs-home-grid-pane {
   --vs-grid-reach-down: var(--lib-over, 0);
 }
-/* A playlist's grid, reaching up and down: its first row below the preview and its last above
-   the bar at rest, focus scrolled clear of both. */
+/* A playlist's grid, reaching up and down: its first row below the head (and the preview) and its
+   last above the bar at rest, focus scrolled clear of them. */
 .vs-home-grid-pane .vs-home-grid {
-  margin-top: calc(var(--vs-grid-reach, 0) * -1px);
+  margin-top: calc(var(--vs-grid-reach, 0) * -1px - var(--vs-grid-head, 0px));
   margin-bottom: calc(var(--vs-grid-reach-down, 0) * -1px);
-  padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px);
+  padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px + var(--vs-grid-head, 0px));
   padding-bottom: calc(var(--mat-plate-inset) + var(--vs-grid-reach-down, 0) * 1px);
-  scroll-padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px);
+  scroll-padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px + var(--vs-grid-head, 0px));
   scroll-padding-bottom: calc(var(--space-2) + var(--vs-grid-reach-down, 0) * 1px);
   /* No scrollbar: it still scrolls by trackpad, wheel and keys. */
   scrollbar-width: none;

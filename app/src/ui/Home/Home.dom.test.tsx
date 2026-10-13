@@ -2,8 +2,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { install } from '../fixtures/backend';
-import { LISTS, PLAYING_DECK, WARM_UP } from '../fixtures/fixtures';
+import { LISTS, MOOD_DECK, PLAYING_DECK, PLAYLISTS, ROWS, WARM_UP } from '../fixtures/fixtures';
 import { INSPECTOR_LABEL } from '../HomeLayout/HomeLayout';
+import { NO_DOTS_NOTE } from '../model/libraryView';
+import type { Playlist } from '../model/playlists';
 import { Home } from './Home';
 
 /** The field in the inspector's library map: the listbox its dots are reached by from the keyboard. */
@@ -11,6 +13,8 @@ const fieldOf = (panel: HTMLElement) => within(panel).getByRole('listbox', { nam
 const panelOf = () => screen.getByRole('complementary', { name: INSPECTOR_LABEL });
 /** The inspector's name for what it is about. */
 const shownName = (panel: HTMLElement) => within(panel).getByRole('heading', { level: 2 }).textContent ?? '';
+/** The map's colour picker in the library's head row, if it has one. */
+const colourPicker = () => document.querySelector('.vs-libhead .vs-field-pick-colour');
 /** What the transport bar says plays. */
 const transportName = () => document.querySelector('.vs-transport-now')?.textContent ?? '';
 
@@ -126,5 +130,47 @@ describe("the library's Map view", () => {
     render(<Home start={null} onMode={() => {}} />);
     expect(await screen.findByRole('listbox', { name: warmUpMap })).toBeTruthy();
     expect(within(await waitFor(panelOf)).queryByRole('listbox')).toBeNull();
+    // Over a map with dots, the head has the map's colour picker.
+    expect(colourPicker()).not.toBeNull();
+  });
+});
+
+describe('Map view with no dots', () => {
+  const map = () => screen.queryByRole('listbox');
+  const gone = (i: number) => ({ path: `/gone/${i}.milk`, name: `gone ${i}`, group: '', missing: true, hash: null });
+  const ALL_GONE: Playlist = { ...WARM_UP, id: 'p-all-gone', name: 'All gone', items: [gone(1), gone(2)] };
+  const EMPTY: Playlist = { ...WARM_UP, id: 'p-empty', name: 'Nothing yet', items: [] };
+  const open = async (name: string) => fireEvent.click(await screen.findByRole('button', { name: new RegExp(`^${name}, playlist`) }));
+
+  beforeEach(() => {
+    localStorage.setItem('visuals.library.view', 'map');
+    undo();
+    undo = install({ lists: { playlists: [...PLAYLISTS, ALL_GONE, EMPTY], deck: LISTS.deck }, resume: null });
+  });
+
+  it("a playlist whose presets are all gone: the note in the map's place, no colour picker", async () => {
+    render(<Home start={null} onMode={() => {}} />);
+    await open(ALL_GONE.name);
+    expect(await screen.findByText(NO_DOTS_NOTE)).toBeTruthy();
+    expect(map()).toBeNull();
+    expect(colourPicker()).toBeNull();
+  });
+
+  it('an empty playlist: its own empty note where the map would be, no colour picker', async () => {
+    render(<Home start={null} onMode={() => {}} />);
+    await open(EMPTY.name);
+    expect(await screen.findByText(new RegExp(`^${EMPTY.name} is empty`))).toBeTruthy();
+    expect(screen.queryByText(NO_DOTS_NOTE)).toBeNull();
+    expect(map()).toBeNull();
+    expect(colourPicker()).toBeNull();
+  });
+
+  it('the library with none of its presets measured: the note, no colour picker', async () => {
+    undo();
+    undo = install({ rows: ROWS.map((r) => ({ ...r, look: null })), lists: { playlists: PLAYLISTS, deck: MOOD_DECK }, resume: null });
+    render(<Home start={null} onMode={() => {}} />);
+    expect(await screen.findByText(NO_DOTS_NOTE)).toBeTruthy();
+    expect(map()).toBeNull();
+    expect(colourPicker()).toBeNull();
   });
 });
