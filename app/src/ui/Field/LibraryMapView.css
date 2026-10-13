@@ -1,25 +1,34 @@
-/* The library's Map view (LibraryMapView.tsx): the Field in the grid's room, as large as the room
-   lets its 4:3 plot be, centred across. The room is a size container, so the Field's width can be
-   worked out from the room's height. Contract variables and visuals.css tokens only. */
+/* The library's Map view (LibraryMapView.tsx): the Field filling the grid's room. The Field's
+   grid gives the plot all the room's height above the across picker and all its width right of
+   the up picker; the plot's svg fills that cell, and LibraryMapView measures it and hands the
+   Field that shape, so the drawing is the room's own shape rather than a 4:3 box. Contract
+   variables and visuals.css tokens only. */
 
 .vs-map-room {
-  /* What the across picker and the gaps take under the plot. */
-  --vs-map-room-pickers: calc(var(--control-h) + var(--space-3));
-  /* The up picker's column left of the plot. */
-  --vs-map-room-up: calc(var(--control-h) + var(--space-1));
   flex: 1;
   min-width: 0;
   min-height: 0;
-  container-type: size;
   display: flex;
-  justify-content: center;
   padding: 0 var(--vs-home-pad, var(--mat-plate-inset)) var(--mat-plate-inset);
   box-sizing: border-box;
 }
 .vs-map-room-field {
-  width: min(100cqw, calc((100cqh - var(--vs-map-room-pickers)) * 4 / 3 + var(--vs-map-room-up)));
+  flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 .vs-map-room-field > .vs-field {
+  box-sizing: border-box;
+  height: 100%;
   margin-top: 0;
+  /* The plot's row takes what the across picker leaves. */
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+.vs-map-room-field .vs-field-plot {
+  min-height: 0;
+}
+/* The svg fills the plot's cell (the Field's own rule sizes it by its viewBox); until the cell is
+   measured the 4:3 box is drawn centred in it. */
+.vs-map-room-field .vs-field-scope {
+  height: 100%;
 }

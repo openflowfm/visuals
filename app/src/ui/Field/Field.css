@@ -57,6 +57,8 @@
   outline: 2px solid var(--vs-focus-ring);
   outline-offset: var(--space-1);
 }
+/* The width given, the height the viewBox's aspect (the Field's `shape`, 4:3 by default); a caller
+   may size both (LibraryMapView.css). */
 .vs-field-scope {
   display: block;
   width: 100%;
