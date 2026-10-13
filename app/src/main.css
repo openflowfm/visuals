@@ -1,5 +1,6 @@
-/* The page's frame around zen's VisualsApp, and its type. Everything inside
-   is zen's (`@satoramoto/zen/zen.css`, `@satoramoto/zen/visuals.css`). */
+/* The page's frame around the UI's VisualsApp (`ui/`), and its type. Everything
+   inside is styled by zen (`@satoramoto/zen/zen.css`), each UI part's own CSS
+   and `ui/visuals.css`. */
 
 /* Instrument Sans (decision 69): one humane sans for UI, titles and numbers, as
    zen's `instrument` faces name it. One variable file, weights 400–700 and
