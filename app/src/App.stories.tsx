@@ -70,7 +70,7 @@ const meta = {
     };
   },
   // Picked up where the app left off, as at a launch: without a resume the home opens a random preset.
-  parameters: { tauri: { resume: { playlist: WARM_UP.id, index: PLAYING_DECK.index, current: PLAYING_DECK.current, source: null } } },
+  parameters: { layout: 'fullscreen', tauri: { resume: { playlist: WARM_UP.id, index: PLAYING_DECK.index, current: PLAYING_DECK.current, source: null } } },
 } satisfies Meta<typeof VisualsApp>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -83,11 +83,13 @@ export const Launch: Story = {
   },
 };
 
-/** Started in live mode in the window (`VISUALS_VIEW=live-windowed`): the output waits for a display to be picked. */
+/** Started in live mode in the window (`VISUALS_VIEW=live-windowed`): the output waits for a display to be picked, offered in the Output popover. */
 export const StartLive: Story = {
   parameters: { tauri: { start: 'live-windowed' } },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole('button', { name: 'Go full screen on Projector (HDMI)' })).toBeVisible();
+    await userEvent.click(await canvas.findByRole('button', { name: 'Output, in this window' }));
+    const pop = await canvas.findByRole('dialog', { name: 'Output, in this window' });
+    await expect(await within(pop).findByRole('button', { name: 'Go full screen on Projector (HDMI)' })).toBeInTheDocument();
   },
 };
 

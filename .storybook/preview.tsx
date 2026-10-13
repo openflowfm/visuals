@@ -20,8 +20,9 @@ import './preview.css';
  * frost (`desk`), which both kinds read.
  */
 const preview: Preview = {
+  // As zen's Storybook: padded, unless a story says fullscreen (the App stories and the UI's whole views do).
   parameters: {
-    layout: 'fullscreen',
+    layout: 'padded',
     backgrounds: { disable: true },
   },
   globalTypes: {
