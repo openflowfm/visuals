@@ -98,7 +98,7 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
           </Text>
         )}
       </div>
-      {map && <LibraryMap library={library} mine={mine} playing={lit} onPick={pick} />}
+      {map && <LibraryMap library={library} mine={mine} playing={lit} onPick={pick} marked={many?.map((c) => c.row.key)} />}
     </div>
   );
 }
