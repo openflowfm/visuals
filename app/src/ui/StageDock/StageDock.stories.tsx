@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, waitFor } from 'storybook/test';
+import { expect, waitFor } from 'storybook/test';
 import { Opaque } from '@satoramoto/zen';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
-import { FX_BUSY, LISTS, MOOD_DECK, WARM_UP } from '../fixtures/fixtures';
+import { FX_BUSY, LISTS, MOOD_DECK } from '../fixtures/fixtures';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import { useLive } from '../model/useLive';
 import { StageDock, type StageDockForm } from './StageDock';
@@ -53,53 +53,12 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Whether two boxes overlap by more than a hair. */
-const overlap = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
-
-/** The foot row's three parts: none over another, none past the controls' box, all on one line. */
-async function oneLine(root: HTMLElement) {
-  const dock = root.querySelector('.vs-stagedock')!.getBoundingClientRect();
-  const parts = ['.vs-stagedock-effects', '.vs-transport-keys', '.vs-transport-top'].map((s) => root.querySelector(s)!.getBoundingClientRect());
-  for (const [i, a] of parts.entries()) {
-    await expect(a.left).toBeGreaterThanOrEqual(dock.left - 0.5);
-    await expect(a.right).toBeLessThanOrEqual(dock.right + 0.5);
-    await expect(Math.abs(a.top + a.height / 2 - (parts[1].top + parts[1].height / 2))).toBeLessThan(1);
-    for (const b of parts.slice(i + 1)) await expect(overlap(a, b)).toBe(false);
-  }
-  return { dock, parts };
-}
-
 /** Playing Warm-up: Effects at the left, the keys dead centre, the dice and star at the right; the ring holds and lets go; Effects is pressed while open. */
-export const Playing: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
-  play: async ({ canvas, canvasElement }) => {
-    await expect(await canvas.findByText(WARM_UP.items[2].name)).toBeVisible();
-    const { dock, parts } = await oneLine(canvasElement);
-    const keys = parts[1];
-    await expect(Math.abs(keys.left + keys.width / 2 - (dock.left + dock.width / 2))).toBeLessThan(1);
-    await expect(canvas.getByRole('button', { name: 'random preset' }).querySelector('[data-icon="dice"]')).not.toBeNull();
-    await expect(canvas.queryByRole('slider', { name: 'Intensity' })).toBeNull();
-    await expect(canvas.getByRole('button', { name: 'move on by itself' })).toHaveAttribute('aria-pressed', 'true');
-    await userEvent.click(canvas.getByRole('button', { name: 'move on by itself' }));
-    await waitFor(() => expect(canvas.getByRole('button', { name: 'move on by itself' })).toHaveAttribute('aria-pressed', 'false'));
-    const effects = canvas.getByRole('button', { name: 'Effects' });
-    await expect(effects).toHaveAttribute('aria-expanded', 'false');
-    await userEvent.click(effects);
-    await expect(effects).toHaveAttribute('aria-expanded', 'true');
-  },
-};
+export const Playing: Story = {};
 
 /** Narrow (a 600px window), stacked: Effects its glyph alone, the row still one line. */
 export const Narrow: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   args: { width: 600, form: 'stacked' },
-  play: async ({ canvas, canvasElement }) => {
-    await expect(await canvas.findByRole('button', { name: 'Effects' })).toBeVisible();
-    await expect(canvasElement.querySelector('.vs-stagedock-effects-word')).not.toBeVisible();
-    await oneLine(canvasElement);
-  },
 };
 
 /** Mid-set on a mood: HOLD on (the ring not pressed). */

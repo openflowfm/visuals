@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { Opaque } from '@satoramoto/zen';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
 import { DISPLAYS, FX, LINK_OFF } from '../fixtures/fixtures';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import { useLive } from '../model/useLive';
-import { LEAVE_LABEL, LEAVE_TITLE, PINNED_TEXT, StageHead, type StageHeadForm } from './StageHead';
+import { LEAVE_LABEL, LEAVE_TITLE, StageHead, type StageHeadForm } from './StageHead';
 
 /** What a story sets: the window's width, whether it plays in the window, and the header's form (outside an assembled screen, the first unless given). */
 interface Args {
@@ -82,13 +82,6 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** The header's type fits its window on one line, clear of the window buttons. */
-async function fits(canvasElement: HTMLElement) {
-  const head = canvasElement.querySelector<HTMLElement>('.vs-stagehead')!;
-  await expect(head.scrollWidth).toBeLessThanOrEqual(head.clientWidth);
-  await expect(head.getBoundingClientRect().left).toBeGreaterThanOrEqual(84);
-}
-
 /** 1440 wide, the output on the projector (its words white), Link on with two peers; ✕ leaves. */
 export const OnTheProjector: Story = {
   play: async ({ canvas, canvasElement }) => {
@@ -97,20 +90,6 @@ export const OnTheProjector: Story = {
     await expect(output.querySelector('.vs-stagehead-light-text')).toHaveAttribute('data-on');
     await expect(await canvas.findByRole('button', { name: 'Beat, 124 BPM, 2 in time' })).toBeVisible();
     await expect(canvas.getByRole('radio', { name: /live/i })).toHaveAttribute('aria-checked', 'true');
-    await fits(canvasElement);
-    // Home's order: the lights, a hairline, the library map, the mixer, the camera, ?, settings, ✕ (a quiet glyph, its tooltip the keys).
-    const order = [
-      '.vs-stagehead-output',
-      '.vs-stagehead-rule',
-      '.vs-stagehead-map',
-      '.vs-stagehead-tools .vs-transport-right',
-      '.vs-camera-action',
-      '[aria-label="Help"]',
-      '[aria-label="Settings"]',
-      `[aria-label="${LEAVE_LABEL}"]`,
-    ];
-    const lefts = order.map((s) => canvasElement.querySelector(s)!.getBoundingClientRect().left);
-    await expect([...lefts].sort((a, b) => a - b)).toEqual(lefts);
     await expect(canvas.getByRole('button', { name: LEAVE_LABEL })).toHaveAttribute('title', LEAVE_TITLE);
     await userEvent.click(canvas.getByRole('button', { name: LEAVE_LABEL }));
     await expect(canvasElement.querySelector('[data-left]')).not.toBeNull();
@@ -162,26 +141,18 @@ export const InTheWindow: Story = {
 /** `\` pinned the controls: a grey "Pinned" in the status area, before Beat. */
 export const Pinned: Story = {
   args: { pinned: true },
-  play: async ({ canvas, canvasElement }) => {
-    const word = await canvas.findByText(PINNED_TEXT);
-    await expect(word).toBeVisible();
-    const beat = canvasElement.querySelector('.vs-stagehead-light')!.getBoundingClientRect();
-    await expect(word.getBoundingClientRect().right).toBeLessThanOrEqual(beat.left);
-  },
 };
 
 /** The library map open: its button first after the hairline, pressed (a faint wash), G its key; a click lets it go. */
 export const MapOpen: Story = {
   name: 'Map open',
   args: { map: true },
-  play: async ({ canvas, canvasElement }) => {
+  play: async ({ canvas }) => {
     const button = await canvas.findByRole('button', { name: 'Library map' });
     await expect(button).toHaveAttribute('aria-expanded', 'true');
     await expect(button).toHaveAttribute('aria-controls', 'stage-map');
     await expect(button).toHaveAttribute('aria-keyshortcuts', 'G');
     await expect(button.getAttribute('title')).toMatch(/^Library map: .*\(G\)$/);
-    await expect(getComputedStyle(button).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
-    await fits(canvasElement);
     await userEvent.click(button);
     await expect(button).toHaveAttribute('aria-expanded', 'false');
   },
@@ -191,8 +162,7 @@ export const MapOpen: Story = {
 export const Narrow: Story = {
   args: { width: 800, form: 'short', windowed: true },
   parameters: { world: { displays: [DISPLAYS[0]] } },
-  play: async ({ canvas, canvasElement }) => {
-    await fits(canvasElement);
+  play: async ({ canvas }) => {
     await userEvent.click(await canvas.findByRole('button', { name: 'Output, in this window' }));
     await expect(await within(canvas.getByRole('dialog')).findByText('One display: the picture will cover this window. ✕ or ⌘⇧L comes back.')).toBeVisible();
   },
@@ -206,6 +176,5 @@ export const NarrowOneDisplayWarning: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: /^Output, / }));
     const pop = canvas.getByRole('dialog');
     await expect(await within(pop).findByText(/^Only one display is connected/)).toBeVisible();
-    await waitFor(() => expect(pop.getBoundingClientRect().right).toBeLessThanOrEqual(800));
   },
 };

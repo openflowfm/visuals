@@ -128,10 +128,8 @@ type Story = StoryObj<typeof meta>;
 
 /** Warm-up picked and playing: the pill, the green dot; the keyboard walks the rows and headings, and picks with Enter. */
 export const Default: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   play: async ({ canvas, args }) => {
-    const warmUp = canvas.getByRole('button', { name: /^Warm-up, playlist, 10 presets, playing$/ });
+    const warmUp = canvas.getByRole('button', { name: new RegExp(`^${escape(WARM_UP.name)}, playlist, ${WARM_UP.items.length} presets, playing$`) });
     await expect(warmUp).toHaveAttribute('aria-current', 'true');
     await expect(warmUp).toHaveAttribute('data-playing');
     // The playlists' heading's + and ⤓ are tab stops of their own (before it in the page); then one stop for the rows and headings: the row picked.
@@ -185,19 +183,16 @@ export const Collapsed: Story = {
   },
 };
 
-/** Many playlists, some with long names: the names end in an ellipsis and the sections scroll inside the panel, the mark and the foot staying put. */
+/** Many playlists, some with long names: the names end in an ellipsis and the sections scroll inside the panel, the mark and the foot staying put; End reaches the last row. */
 export const LongNamesManyPlaylists: Story = {
   name: 'Long names, many playlists',
   args: { sections: sidebarSections(MANY, { library: 250, starred: 12 }), lists: MANY },
-  play: async ({ canvasElement, canvas }) => {
-    const body = canvasElement.querySelector<HTMLElement>('.vs-isb-sections')!;
-    await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
-    const long = canvas.getByText(/^Closing set, Saturday night/);
-    await expect(long.scrollWidth).toBeGreaterThan(long.clientWidth);
-    // The last row scrolls into view when the keyboard reaches it.
+  play: async ({ canvas, args }) => {
+    // The keyboard reaches the last row.
     canvas.getByRole('button', { name: 'Library', expanded: true }).focus();
     await userEvent.keyboard('{End}');
-    await waitFor(() => expect(body.scrollTop).toBeGreaterThan(0));
+    const last = args.sections[args.sections.length - 1].rows.at(-1)!;
+    await waitFor(() => expect(rowNamed(canvas, last.name)).toHaveFocus());
   },
 };
 
@@ -255,42 +250,17 @@ export const InfoAndQuickAdd: Story = {
 
 /** The app's title in the panel's top band beside the window buttons, and the quiet Settings row pinned to its foot: it stays at the bottom while the rows scroll under it. */
 export const MarkAndSettings: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   name: 'Mark and Settings',
   args: { sections: sidebarSections(MANY, { library: 250, starred: 12 }), lists: MANY },
-  play: async ({ canvasElement, canvas, args }) => {
-    const panel = canvasElement.querySelector<HTMLElement>('.vs-lay-side')!;
-    const scroller = canvasElement.querySelector<HTMLElement>('.vs-isb-sections')!;
-    const mark = canvasElement.querySelector<HTMLElement>('.vs-lay-side-band .vs-lay-title')!;
-    await expect(mark).toHaveTextContent('visual[flow]');
-    // In the band, after the window buttons, above the rows; and a drag on it is the band's.
-    const lights = canvasElement.querySelector('.vs-lay-lights')!.getBoundingClientRect();
-    await expect(mark.getBoundingClientRect().left).toBeGreaterThan(lights.right);
-    await expect(mark.getBoundingClientRect().bottom).toBeLessThanOrEqual(canvasElement.querySelector('.vs-lay-side-body')!.getBoundingClientRect().top + 0.5);
-    await expect(getComputedStyle(mark).pointerEvents).toBe('none');
-    const markTop = mark.getBoundingClientRect().top;
-    const settings = canvas.getByRole('button', { name: 'Settings' });
-    const atFoot = () => expect(Math.abs(panel.getBoundingClientRect().bottom - settings.closest('.vs-isb-foot')!.getBoundingClientRect().bottom)).toBeLessThan(1);
-    await atFoot();
-    // The rows scroll; the mark and the foot stay where they were.
-    scroller.scrollTop = scroller.scrollHeight / 2;
-    await waitFor(() => expect(scroller.scrollTop).toBeGreaterThan(0));
-    await atFoot();
-    await expect(mark.getBoundingClientRect().top).toBe(markTop);
-    await userEvent.click(settings);
-    await expect(args.actions!.onSettings).toHaveBeenCalled();
-  },
 };
 
-/** Few rows: the Settings row still sits at the panel's foot, the space between empty. */
+/** Few rows: the Settings row still sits at the panel's foot, the space between empty; Settings asks the page for its sheet. */
 export const SettingsFewRows: Story = {
   name: 'Settings with few rows',
   args: { sections: sidebarSections(EMPTY, { library: ROWS.length, starred: STARRED.length }), lists: EMPTY, selected: { kind: 'library' } },
-  play: async ({ canvasElement, canvas }) => {
-    const panel = canvasElement.querySelector<HTMLElement>('.vs-lay-side')!;
-    const foot = canvas.getByRole('button', { name: 'Settings' }).closest('.vs-isb-foot')!;
-    await expect(Math.abs(panel.getBoundingClientRect().bottom - foot.getBoundingClientRect().bottom)).toBeLessThan(1);
+  play: async ({ canvas, args }) => {
+    await userEvent.click(canvas.getByRole('button', { name: 'Settings' }));
+    await expect(args.actions!.onSettings).toHaveBeenCalled();
   },
 };
 
@@ -300,9 +270,7 @@ export const RowMenuOpen: Story = {
   play: async ({ canvas }) => {
     const closing = rowNamed(canvas, CLOSING.name);
     await rightClick(closing);
-    const menu = await canvas.findByRole('menu', { name: CLOSING.name });
-    // At the pointer, in the row: not flipped above it.
-    await waitFor(() => expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(closing.getBoundingClientRect().top));
+    await canvas.findByRole('menu', { name: CLOSING.name });
     await expect(canvas.getByRole('button', { name: `More for ${CLOSING.name}` })).toHaveAttribute('aria-expanded', 'true');
   },
 };

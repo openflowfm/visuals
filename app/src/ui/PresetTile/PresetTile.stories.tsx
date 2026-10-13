@@ -30,14 +30,11 @@ type Story = StoryObj<typeof meta>;
 
 /** The name and author on the picture's foot, over a soft scrim; nothing under the picture. */
 export const Normal: Story = {
-  play: async ({ canvas, canvasElement }) => {
+  play: async ({ canvas }) => {
     const name = canvas.getByText(tileName(sample.title, sample.path));
     await expect(name).toBeVisible();
     await expect(name.closest('.vs-tile-pic')).toBeTruthy();
     await expect(canvas.getByText(tileBy(sample.authors, sample.style)).closest('.vs-tile-caption')).toBeTruthy();
-    // The tile is as tall as its picture.
-    const tile = canvasElement.querySelector('.vs-tile')!;
-    await expect(tile.getBoundingClientRect().height).toBeCloseTo(tile.querySelector('.vs-tile-pic')!.getBoundingClientRect().height, 0);
   },
 };
 

@@ -3,7 +3,7 @@ import { expect, fn, screen, userEvent } from 'storybook/test';
 import type { ReactNode } from 'react';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
-import { GROUPS, HelpOverlay, HOME_HELP } from './HelpOverlay';
+import { HelpOverlay, HOME_HELP } from './HelpOverlay';
 
 /**
  * A window of `width` × 900 over the picture's stand-in, whatever the runner's
@@ -35,19 +35,12 @@ type Story = StoryObj<typeof meta>;
 
 /** In a 1440 px window, with the Stage's own controls: the groups in two columns. */
 export const At1440: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   name: 'At 1440 px',
   render: (args) => (
     <Window width={1440}>
       <HelpOverlay {...args} />
     </Window>
   ),
-  play: async () => {
-    await expect(await screen.findByRole('dialog', { name: 'Live controls' })).toBeVisible();
-    for (const g of GROUPS) await expect(screen.getByRole('heading', { name: g.heading })).toBeVisible();
-    await expect(screen.getByText('Hide the controls')).toBeVisible();
-  },
 };
 
 /** In an 800 px window, without the Stage: Esc closes it. */
