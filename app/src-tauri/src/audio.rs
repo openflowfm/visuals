@@ -4,7 +4,7 @@ use crate::{listen, App};
 use engine::live::{Ring, Sink, WINDOW};
 use std::collections::VecDeque;
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU8, Ordering},
     Arc, Mutex,
 };
 use std::time::{Duration, Instant};
@@ -47,6 +47,8 @@ pub struct Preferences {
 #[derive(Default)]
 pub struct Runtime {
     pub operation: Mutex<()>,
+    /// Lanes reserved for the startup worker, cleared by a successful user choice.
+    pub startup: AtomicU8,
     pub preferences: Mutex<Preferences>,
     pub mic: Mutex<Option<listen::Listening>>,
     mixer: Arc<Mixer>,
