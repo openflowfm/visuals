@@ -13,6 +13,7 @@ import { StoryGrid } from '../fixtures/StoryGrid';
 import { TransportBar } from '../TransportBar/TransportBar';
 import { Icon } from '../Icon/Icon';
 import { modesFor, type LayoutPrefs } from '../model/home-model';
+import { mark } from '../model/access';
 import { NOW, SIDEBAR, STARRED } from '../fixtures/layout';
 import { ROWS, WARM_UP } from '../fixtures/fixtures';
 
@@ -218,5 +219,26 @@ export const Narrow: Story = {
     fireEvent.pointerDown(canvas.getByRole('region', { name: 'Library' }));
     await waitFor(() => expect(canvas.queryByRole('navigation', { name: 'sources' })).toBeNull());
     await expect(canvas.queryByRole('complementary')).toBeNull();
+  },
+};
+
+/**
+ * macOS's Reduce transparency on (the document marked as access.ts marks it from the app's
+ * `reduced_motion`, since a page can't switch the system's setting): the window's material solid,
+ * and the sidebar, the inspector and the bar opaque, with no blur.
+ */
+export const ReduceTransparency: Story = {
+  name: 'Reduce transparency',
+  args: { prefs: { sidebar: null, inspector: true } },
+  parameters: { desk: 'solid' },
+  beforeEach: () => {
+    mark({ reduced: false, system: true, transparency: true });
+    return () => mark({ reduced: false, system: true, transparency: false });
+  },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(document.documentElement).toHaveAttribute('data-transparency', 'reduced');
+    await expect(canvas.getByRole('navigation', { name: 'sources' })).toBeVisible();
+    await expect(canvas.getByRole('complementary', { name: 'about the preset' })).toBeVisible();
+    await expect(root(canvasElement)).toHaveAttribute('data-inspector', 'docked');
   },
 };

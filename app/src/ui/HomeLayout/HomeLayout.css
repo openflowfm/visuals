@@ -170,6 +170,48 @@
   outline: none;
   color: var(--text-2);
 }
+/* Reduce transparency, or more contrast: Home's layers draw their solids with no backdrop (the
+   Opaque scope's, zen's `lib-opaque`, over the whole layout), so the panels and the bar paint
+   opaque. WKWebView doesn't answer the media query, so access.ts marks the document from macOS's
+   own setting (data-transparency="reduced"); the queries stay for a WebKit that does. */
+:root[data-transparency='reduced'] :is(.vs-lay, .vs-lay-panel) {
+  --layer-ground-fill: var(--layer-ground-solid);
+  --layer-base-fill: var(--layer-base-solid);
+  --layer-raised-fill: var(--layer-raised-solid);
+  --layer-float-fill: var(--layer-float-solid);
+  --layer-overlay-fill: var(--layer-overlay-solid);
+  --layer-top-fill: var(--layer-top-solid);
+  --layer-ground-backdrop: none;
+  --layer-base-backdrop: none;
+  --layer-raised-backdrop: none;
+  --layer-float-backdrop: none;
+  --layer-overlay-backdrop: none;
+  --layer-top-backdrop: none;
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .vs-lay,
+  .vs-lay-panel {
+    --layer-ground-fill: var(--layer-ground-solid);
+    --layer-base-fill: var(--layer-base-solid);
+    --layer-raised-fill: var(--layer-raised-solid);
+    --layer-float-fill: var(--layer-float-solid);
+    --layer-overlay-fill: var(--layer-overlay-solid);
+    --layer-top-fill: var(--layer-top-solid);
+    --layer-ground-backdrop: none;
+    --layer-base-backdrop: none;
+    --layer-raised-backdrop: none;
+    --layer-float-backdrop: none;
+    --layer-overlay-backdrop: none;
+    --layer-top-backdrop: none;
+  }
+}
+/* More contrast: the panels' captions take the full ink, as the original's inspector did. */
+@media (prefers-contrast: more) {
+  .vs-lay-panel {
+    --vs-caption-raised: var(--text-1);
+  }
+}
+
 /* On its own in a story, with no cell around it: in from the frame's edges, at its width. */
 .vs-lay-panel:not(.vs-lay .vs-lay-panel) {
   margin: var(--space-2);

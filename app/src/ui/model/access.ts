@@ -9,7 +9,9 @@ import * as api from './api';
  * `fx.rs`; presets' own flashing is theirs) and the page
  * calms its own motion: the document is marked `data-reduced-motion`, which
  * `access.css` reads. `access.css` also gives every control a visible keyboard
- * focus ring.
+ * focus ring. `reduced_motion` also answers macOS's Reduce transparency, which
+ * marks the document `data-transparency="reduced"` (WKWebView doesn't answer
+ * `prefers-reduced-transparency`).
  */
 
 /**
@@ -21,14 +23,25 @@ export const REDUCE_WHAT = 'Calms the app’s strobe, flashes and blackout. Pres
 /** The media query WebKit answers from macOS's Reduce motion. */
 export const SYSTEM_QUERY = '(prefers-reduced-motion: reduce)';
 
+/** The media query for less transparency; WKWebView doesn't answer it, so the app's word (`transparency`) is what counts, but a WebKit that does is listened to as well. */
+export const TRANSPARENCY_QUERY = '(prefers-reduced-transparency: reduce)';
+
 let motion: api.Motion | null = null;
 const listeners = new Set<(m: api.Motion) => void>();
 
-/** Mark the document (or `root`) for `m`: `data-reduced-motion` while motion is reduced. */
+/**
+ * Mark the document (or `root`) for `m`: `data-reduced-motion` while motion is
+ * reduced, and `data-transparency="reduced"` while macOS's Reduce transparency
+ * is on (Home's panels go opaque, `HomeLayout.css`). `reduced_motion_set`
+ * answers the motion alone, so with `transparency` missing the mark it last set
+ * stays.
+ */
 export function mark(m: api.Motion, root: { dataset: DOMStringMap } | undefined = typeof document === 'undefined' ? undefined : document.documentElement) {
   if (!root) return;
   if (m.reduced) root.dataset.reducedMotion = '';
   else delete root.dataset.reducedMotion;
+  if (m.transparency === true) root.dataset.transparency = 'reduced';
+  else if (m.transparency === false) delete root.dataset.transparency;
 }
 
 /** Take `m` as the setting now: mark the document and tell every `useMotion`. */
@@ -71,7 +84,7 @@ export function useMotion(): api.Motion | null {
 
 /**
  * Mounted once by `App`: reads the setting, marks the document, and reads it
- * again whenever macOS's Reduce motion changes (WebKit says so through the
+ * again whenever macOS's Reduce motion (or a WebKit's reduced transparency) changes (WebKit says so through the
  * media query) or the window comes back to the front.
  */
 export function useAccessibility(): void {
@@ -80,11 +93,12 @@ export function useAccessibility(): void {
       refresh().catch(() => {});
     };
     again();
-    const query = typeof window.matchMedia === 'function' ? window.matchMedia(SYSTEM_QUERY) : null;
-    query?.addEventListener('change', again);
+    // Reduce transparency changed in System Settings: the window comes back to the front after, and is read again then.
+    const queries = typeof window.matchMedia === 'function' ? [window.matchMedia(SYSTEM_QUERY), window.matchMedia(TRANSPARENCY_QUERY)] : [];
+    for (const q of queries) q.addEventListener('change', again);
     window.addEventListener('focus', again);
     return () => {
-      query?.removeEventListener('change', again);
+      for (const q of queries) q.removeEventListener('change', again);
       window.removeEventListener('focus', again);
     };
   }, []);
