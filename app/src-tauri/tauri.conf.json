@@ -21,7 +21,7 @@
         "transparent": true,
         "theme": "Dark",
         "titleBarStyle": "Overlay",
-        "hiddenTitle": false,
+        "hiddenTitle": true,
         "trafficLightPosition": { "x": 24, "y": 28 },
         "windowEffects": {
           "effects": ["hudWindow"],
