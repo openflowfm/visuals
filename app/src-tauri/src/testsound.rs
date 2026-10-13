@@ -33,7 +33,7 @@ static PLAYING: Mutex<Option<Playing>> = Mutex::new(None);
 /// Play the test sound into the bench, or stop it and go back to listening to
 /// what was chosen before. Starting it while it plays, or stopping it when it
 /// doesn't, does nothing.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn test_sound(on: bool, handle: AppHandle) -> Result<(), String> {
     let mut playing = PLAYING.lock().unwrap();
     if on {

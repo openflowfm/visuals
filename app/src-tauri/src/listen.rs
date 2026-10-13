@@ -253,6 +253,7 @@ pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>,
     }
     let source = source.or_else(|| name.map(|name| SourceId::Device { name, size: size.unwrap_or(0), uid: None }));
     let (name, saved) = choose(&Mac, &app, source, left, right)?;
+    chosen_since_startup(&app, Lane::Main);
     app.audio.preferences.lock().unwrap().main_off = false;
     crate::settings::save_json("audio-lanes.json", &*app.audio.preferences.lock().unwrap());
     crate::settings::save_json(SAVED, &saved);
@@ -409,6 +410,57 @@ fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &
     listen_on(world, app, slot, None, None, None).map(|(c, _)| c)
 }
 
+const START_MAIN: u8 = 1;
+const START_MIC: u8 = 2;
+
+/// Reserve the saved routes before the page can poll, but never acquire audio on
+/// the main thread. The worker owns an AppHandle for the lifetime of its work.
+pub fn start(handle: &tauri::AppHandle) {
+    use tauri::Manager;
+    if !Mac.acquisition_allowed() {
+        return;
+    }
+    let saved = crate::settings::load::<SavedFile>(SAVED).map(Saved::from);
+    let first_run = crate::settings::first_run();
+    let app = handle.state::<App>();
+    prepare_startup(&app, crate::settings::load("audio-lanes.json").unwrap_or_default(), saved.clone());
+    let handle = handle.clone();
+    if let Err(error) = spawn_startup(move || resume_startup_with(&Mac, &handle.state::<App>(), saved, first_run)) {
+        app.audio.startup.store(0, Ordering::Release);
+        eprintln!("couldn't start saved audio in the background: {error}");
+    }
+}
+fn spawn_startup(work: impl FnOnce() + Send + 'static) -> std::io::Result<std::thread::JoinHandle<()>> {
+    std::thread::Builder::new().name("saved audio startup".into()).spawn(work)
+}
+fn prepare_startup(app: &App, preferences: crate::audio::Preferences, saved: Option<Saved>) {
+    let _operation = app.audio.operation.lock().unwrap();
+    *app.audio.preferences.lock().unwrap() = preferences;
+    *WANTED.lock().unwrap() = saved;
+    app.audio.startup.store(START_MAIN | START_MIC, Ordering::Release);
+}
+fn resume_startup_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bool) {
+    let _operation = app.audio.operation.lock().unwrap();
+    let lanes = app.audio.startup.swap(0, Ordering::AcqRel);
+    // A choice that beat this worker to the operation lock owns that lane. A
+    // choice made later runs after startup, so it remains the final selection.
+    if lanes & START_MAIN != 0 {
+        resume_with(world, app, saved, first_run);
+    }
+    if lanes & START_MIC != 0 {
+        follow_mic(world, app);
+    }
+}
+fn chosen_since_startup(app: &App, lane: Lane) {
+    app.audio.startup.fetch_and(
+        !match lane {
+            Lane::Main => START_MAIN,
+            Lane::Mic => START_MIC,
+        },
+        Ordering::AcqRel,
+    );
+}
+
 /// Come back listening to what was chosen last, or what stands in for it when
 /// it is gone. Nothing chosen during the first run: nothing is opened, so macOS
 /// asks nothing about the microphone before the welcome's "Listen to" step has
@@ -416,6 +468,7 @@ fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &
 /// install from before the welcome): the system's default input, as before.
 pub fn resume(app: &App) {
     let _operation = app.audio.operation.lock().unwrap();
+    app.audio.startup.store(0, Ordering::Release);
     *app.audio.preferences.lock().unwrap() = crate::settings::load("audio-lanes.json").unwrap_or_default();
     resume_with(&Mac, app, crate::settings::load::<SavedFile>(SAVED).map(Saved::from), crate::settings::first_run());
     follow_mic(&Mac, app);
@@ -449,6 +502,9 @@ fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bo
 /// and nothing chosen, the system's default input opens once `first_run` says
 /// the welcome is over (it was skipped without picking a source).
 fn follow(world: &dyn World, app: &App, first_run: impl Fn() -> bool) {
+    if app.audio.startup.load(Ordering::Acquire) & START_MAIN != 0 {
+        return;
+    }
     if !world.acquisition_allowed() || app.audio.preferences.lock().unwrap().main_off || app.audio.suspended.load(Ordering::Relaxed) {
         return;
     }
@@ -611,6 +667,115 @@ mod tests {
         choose_lane_with(&world, &app, Lane::Mic, None, None, None).unwrap();
         follow_mic(&world, &app);
         assert!(app.audio.mic.lock().unwrap().is_none());
+    }
+    struct Gated {
+        entered: Mutex<std::sync::mpsc::Sender<()>>,
+        release: Mutex<std::sync::mpsc::Receiver<()>>,
+    }
+    impl World for Gated {
+        fn open(&self, source: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+            self.entered.lock().unwrap().send(()).unwrap();
+            self.release.lock().unwrap().recv().unwrap();
+            let source = source.cloned().unwrap_or(SourceId::System);
+            Ok(Listening { stream: Stream::Fake, source, name: "startup fixture".into(), rate: 48000.0, channels: 2, left: 0, right: 1 })
+        }
+        fn gone(&self, _: &SourceId) -> bool {
+            false
+        }
+        fn processes(&self) -> Vec<Process> {
+            vec![]
+        }
+        fn taps_allowed(&self) -> bool {
+            false
+        }
+    }
+    #[test]
+    fn dispatching_startup_returns_while_hardware_is_blocked_and_later_manual_choice_wins() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = std::sync::Arc::new(app());
+        let saved = Saved { source: device("saved main"), left: 1, right: 1 };
+        prepare_startup(&app, Default::default(), Some(saved.clone()));
+        let (entered, opening) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let worker_app = app.clone();
+        let worker = spawn_startup(move || resume_startup_with(&Gated { entered: Mutex::new(entered), release: Mutex::new(wait) }, &worker_app, Some(saved), false)).unwrap();
+        // This thread can continue before native acquisition returns.
+        opening.recv_timeout(std::time::Duration::from_secs(1)).unwrap();
+        assert!(!worker.is_finished());
+        let (finished, chosen) = std::sync::mpsc::channel();
+        let manual_app = app.clone();
+        let manual = std::thread::spawn(move || {
+            let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+            let status = choose_lane_transaction(&world, &manual_app, Lane::Main, Some(device("manual main")), None, None, |_, _| {}).unwrap();
+            finished.send(status.main.source).unwrap();
+        });
+        assert!(chosen.try_recv().is_err());
+        release.send(()).unwrap();
+        worker.join().unwrap();
+        manual.join().unwrap();
+        assert_eq!(chosen.recv().unwrap(), Some(device("manual main")));
+        assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, device("manual main"));
+    }
+    #[test]
+    fn polls_cannot_open_default_input_before_reserved_saved_routes() {
+        struct NoOpen;
+        impl World for NoOpen {
+            fn open(&self, _: Option<&SourceId>, _: (usize, usize), _: Sink) -> Result<Listening, String> {
+                panic!("poll opened before saved startup")
+            }
+            fn gone(&self, _: &SourceId) -> bool {
+                panic!("poll inspected before saved startup")
+            }
+            fn processes(&self) -> Vec<Process> {
+                vec![]
+            }
+            fn taps_allowed(&self) -> bool {
+                false
+            }
+        }
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        prepare_startup(
+            &app,
+            crate::audio::Preferences { main_off: false, mic: Some(Saved { source: device("saved mic"), left: 1, right: 1 }) },
+            Some(Saved { source: device("saved main"), left: 1, right: 1 }),
+        );
+        follow(&NoOpen, &app, || false);
+        follow_mic(&NoOpen, &app);
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(app.audio.mic.lock().unwrap().is_none());
+    }
+    #[test]
+    fn early_manual_choices_own_only_their_lane_and_the_other_saved_lane_resumes() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        for lane in [Lane::Main, Lane::Mic] {
+            let app = app();
+            let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+            let saved = Saved { source: device("saved main"), left: 1, right: 1 };
+            prepare_startup(&app, crate::audio::Preferences { main_off: false, mic: Some(Saved { source: device("saved mic"), left: 1, right: 1 }) }, Some(saved.clone()));
+            choose_lane_transaction(&world, &app, lane, Some(device("manual")), None, None, |_, _| {}).unwrap();
+            resume_startup_with(&world, &app, Some(saved), false);
+            let (main, mic) = match lane {
+                Lane::Main => ("manual", "saved mic"),
+                Lane::Mic => ("saved main", "manual"),
+            };
+            assert_eq!(app.listening.lock().unwrap().as_ref().unwrap().source, device(main));
+            assert_eq!(app.audio.mic.lock().unwrap().as_ref().unwrap().source, device(mic));
+        }
+    }
+    #[test]
+    fn early_explicit_off_is_not_undone_by_startup() {
+        let _turn = WANTS.lock().unwrap_or_else(|e| e.into_inner());
+        let app = app();
+        let world = Fake { gone: Mutex::new(vec![]), fail: Mutex::new(false) };
+        let saved = Saved { source: device("saved main"), left: 1, right: 1 };
+        prepare_startup(&app, crate::audio::Preferences { main_off: false, mic: Some(Saved { source: device("saved mic"), left: 1, right: 1 }) }, Some(saved.clone()));
+        choose_lane_transaction(&world, &app, Lane::Main, None, None, None, |_, _| {}).unwrap();
+        choose_lane_transaction(&world, &app, Lane::Mic, None, None, None, |_, _| {}).unwrap();
+        resume_startup_with(&world, &app, Some(saved), false);
+        assert!(app.listening.lock().unwrap().is_none());
+        assert!(app.audio.mic.lock().unwrap().is_none());
+        assert!(app.audio.preferences.lock().unwrap().main_off);
     }
     #[test]
     fn timed_out_microphone_transaction_preserves_main_drops_late_stream_and_can_retry() {
@@ -942,6 +1107,9 @@ fn mic_on(world: &dyn World, app: &App, saved: &Saved) -> Result<Listening, Stri
     Ok(l)
 }
 fn follow_mic(world: &dyn World, app: &App) {
+    if app.audio.startup.load(Ordering::Acquire) & START_MIC != 0 {
+        return;
+    }
     if !world.acquisition_allowed() || app.audio.suspended.load(Ordering::Relaxed) {
         return;
     }
@@ -1010,6 +1178,7 @@ fn choose_lane_transaction(
 ) -> Result<Status, String> {
     let _operation = app.audio.operation.lock().unwrap();
     choose_lane_with(world, app, lane, source, left, right)?;
+    chosen_since_startup(app, lane);
     let preferences = app.audio.preferences.lock().unwrap().clone();
     let wanted = WANTED.lock().unwrap().clone();
     persist(&preferences, wanted.as_ref());
