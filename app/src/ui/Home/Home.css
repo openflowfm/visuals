@@ -92,6 +92,21 @@
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
   --vs-grid-head: var(--vs-libhead-h);
 }
+/* The head has no fill (the ground is a gradient), so the tiles go out under it rather than show
+   through its words: the scroller is masked clear across the head's band (from the reach down by
+   the head's height) and fades back in over the first row's padding; above the band, in the gap
+   over the preview's edge, they show and pass behind the preview as before. The mask's black is
+   only its alpha, not a colour. */
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) :is(.vs-lib-grid, .vs-home-grid) {
+  --vs-grid-band: calc(var(--vs-grid-reach, 0) * 1px);
+  mask-image: linear-gradient(
+    to bottom,
+    black var(--vs-grid-band),
+    transparent var(--vs-grid-band),
+    transparent calc(var(--vs-grid-band) + var(--vs-grid-head)),
+    black calc(var(--vs-grid-band) + var(--vs-grid-head) + var(--space-2))
+  );
+}
 /* The pane also ends above the pinned transport bar (HomeLayout's `over: 'bar'`): the grid's
    scroller always reaches down into the bar's room (`--vs-grid-reach-down`, unitless px: the
    slot's --lib-over), its last row coming to rest above the bar and scrolling down behind it.
