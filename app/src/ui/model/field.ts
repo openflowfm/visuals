@@ -248,6 +248,23 @@ export function tunedSays(d: Dot): string {
 }
 
 /**
+ * The rings round several presets picked together, as one path: a small circle
+ * round each one's dot, `r` box units out. Nothing unless two or more different
+ * keys are given (one pick is the inspector's subject, not a set); a key with no
+ * dot (no look yet) is skipped, and a key given twice is ringed once.
+ */
+export function marksPath(dots: readonly Dot[], keys: readonly string[] | undefined, r = 3.6): string {
+  const want = new Set(keys);
+  if (want.size < 2) return '';
+  let d = '';
+  for (const { row, x, y } of dots) {
+    if (!want.delete(row.key)) continue;
+    d += `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+  }
+  return d;
+}
+
+/**
  * The marks of the presets the user has sped up or slowed down, as one path: a
  * fine ring round each, and a hairline back along the speed axis to where it
  * sits as made, stopping at the ring, ending in a small tick across it, so the
