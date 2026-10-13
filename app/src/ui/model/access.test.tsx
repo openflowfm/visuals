@@ -3,7 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setBridge, type InvokeArgs } from './ipc';
 import type { Motion } from './api';
-import { SYSTEM_QUERY, setMotion, useAccessibility, useMotion } from './access';
+import { SYSTEM_QUERY, TRANSPARENCY_QUERY, mark, refresh, setMotion, useAccessibility, useMotion } from './access';
 
 let calls: [string, InvokeArgs | undefined][];
 let restore: () => void;
@@ -17,8 +17,10 @@ beforeEach(() => {
     invoke: <T,>(cmd: string, args?: InvokeArgs) => {
       calls.push([cmd, args]);
       if (cmd === 'reduced_motion_set') {
+        // `reduced_motion_set` answers the motion alone, never macOS's Reduce transparency.
         const on = (args as { on: boolean | null }).on;
-        app = { reduced: on ?? false, system: on === null };
+        app = { ...app, reduced: on ?? false, system: on === null };
+        return Promise.resolve({ reduced: app.reduced, system: app.system } as T);
       }
       return Promise.resolve({ ...app } as T);
     },
@@ -28,6 +30,7 @@ afterEach(() => {
   restore();
   vi.unstubAllGlobals();
   delete document.documentElement.dataset.reducedMotion;
+  delete document.documentElement.dataset.transparency;
 });
 
 /** A MediaQueryList for `SYSTEM_QUERY` whose changes the test sends. */
@@ -65,11 +68,43 @@ describe('useMotion', () => {
   });
 });
 
+describe('Reduce transparency', () => {
+  const marked = () => document.documentElement.dataset.transparency;
+
+  it('marks the document while macOS’s Reduce transparency is on, and unmarks it once off', async () => {
+    app = { reduced: false, system: true, transparency: true };
+    await refresh();
+    expect(marked()).toBe('reduced');
+    app = { reduced: false, system: true, transparency: false };
+    await refresh();
+    expect(marked()).toBeUndefined();
+  });
+
+  it('keeps the mark through a motion choice, which answers without transparency', async () => {
+    app = { reduced: false, system: true, transparency: true };
+    await refresh();
+    await setMotion(true);
+    expect(document.documentElement.dataset.reducedMotion).toBe('');
+    expect(marked()).toBe('reduced');
+    await setMotion(null);
+    expect(marked()).toBe('reduced');
+  });
+
+  it('leaves the document unmarked when the app never says', () => {
+    const root = { dataset: {} as DOMStringMap };
+    mark({ reduced: true, system: false }, root);
+    expect(root.dataset.transparency).toBeUndefined();
+    mark({ reduced: false, system: true, transparency: true }, root);
+    expect(root.dataset).toEqual({ transparency: 'reduced' });
+  });
+});
+
 describe('useAccessibility', () => {
   it('reads the setting at mount, and again when macOS’s changes or the window comes back', async () => {
     const q = fakeQuery();
     renderHook(() => useAccessibility());
     expect(q.matchMedia).toHaveBeenCalledWith(SYSTEM_QUERY);
+    expect(q.matchMedia).toHaveBeenCalledWith(TRANSPARENCY_QUERY);
     await waitFor(() => expect(asked()).toBe(1));
     app = { reduced: true, system: true };
     q.change();
@@ -77,6 +112,19 @@ describe('useAccessibility', () => {
     await waitFor(() => expect(document.documentElement.dataset.reducedMotion).toBe(''));
     window.dispatchEvent(new Event('focus'));
     await waitFor(() => expect(asked()).toBe(3));
+  });
+
+  it('marks the document for Reduce transparency when the window comes back, as macOS’s setting changed', async () => {
+    fakeQuery();
+    renderHook(() => useAccessibility());
+    await waitFor(() => expect(asked()).toBe(1));
+    expect(document.documentElement.dataset.transparency).toBeUndefined();
+    app = { reduced: false, system: true, transparency: true };
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(document.documentElement.dataset.transparency).toBe('reduced'));
+    app = { reduced: false, system: true, transparency: false };
+    window.dispatchEvent(new Event('focus'));
+    await waitFor(() => expect(document.documentElement.dataset.transparency).toBeUndefined());
   });
 
   it('stops listening once unmounted', async () => {
