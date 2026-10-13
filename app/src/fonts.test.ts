@@ -1,8 +1,7 @@
 // The page's type (decision 69): Instrument Sans for UI, titles and numbers,
 // bundled beside main.css with its licence so it loads offline, under the name
-// zen's `instrument` faces use; in the lab's own look (lab.css) the suite's
-// tokens point at it, numbers take tabular figures rather than a monospace, and
-// a monospace is left only where the look is code (the lab's .milk text).
+// zen's `instrument` faces use; numbers take tabular figures rather than a
+// monospace. The lab editor is zen's now, so no sheet here sets a monospace.
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,19 +37,13 @@ describe('Instrument Sans', () => {
     expect(main).toMatch(/import '@satoramoto\/zen\/zen\.css';/);
   });
 
-  it('is what the lab look names', () => {
-    const root = rules(read('lab.css')).find((r) => r.selector === 'html:root')!.body;
-    expect(root).toMatch(/--sans:\s*'Instrument Sans'/);
-    expect(root).toMatch(/--mono:\s*var\(--sans\)/);
-  });
-
   it('sets numbers in tabular figures wherever a rule picks the numbers face', () => {
     for (const f of sheets)
       for (const r of rules(read(f)).filter((r) => /font-family:\s*var\(--(font-num|mono)\)/.test(r.body))) expect(r.body, `${f}: ${r.selector}`).toMatch(/font-variant-numeric:\s*tabular-nums/);
   });
 
-  it('leaves a monospace only where the look is code', () => {
+  it('sets no monospace of its own: the lab editor and its code are zen’s', () => {
     const mono = sheets.filter((f) => /font-family:\s*(var\(--code\)|[^;]*monospace)/.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '')));
-    expect(mono.filter((f) => f !== 'lab.css').sort()).toEqual(['graph.css']);
+    expect(mono).toEqual([]);
   });
 });

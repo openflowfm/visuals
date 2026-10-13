@@ -11,13 +11,25 @@ import { emit } from '@tauri-apps/api/event';
 import type * as api from '../api.ts';
 import { validateCameraFrame, type CameraFrame } from '../camera/api.ts';
 import type { AudioStatus, AudioLane } from '../audio-api.ts';
-import { sameSource } from '../SourcePicker.tsx';
 import type * as fx from '../fx.ts';
 import type * as link from '../link.ts';
 import type * as output from '../output.ts';
 import type * as pack from '../pack.ts';
 import type * as pl from '../playlists.ts';
 import * as F from './fixtures.ts';
+
+/** Two sources are the same by identity, never by display name (zen's SourcePicker matches the same way). */
+function sameSource(a: api.SourceId | null, b: api.SourceId | null): boolean {
+  if (!a || !b || a.kind !== b.kind) return a === b;
+  if (a.kind === 'system') return true;
+  if (a.kind === 'app' && b.kind === 'app') return a.bundle === b.bundle;
+  if (a.kind === 'device' && b.kind === 'device') {
+    const auid = (a as typeof a & { uid?: string }).uid;
+    const buid = (b as typeof b & { uid?: string }).uid;
+    return auid && buid ? auid === buid : a.name === b.name && a.size === b.size;
+  }
+  return false;
+}
 
 /** The app's state, as the commands read it. */
 export interface World {

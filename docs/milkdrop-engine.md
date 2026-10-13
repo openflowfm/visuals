@@ -80,7 +80,7 @@ npm run app          # the player: cargo tauri dev in app/src-tauri; the page's 
 npm run app:lab      # the lab build: the same with the editor
 ```
 
-`app/` is the Tauri shell; its page is `app/src` (React and the widgets). The player's
+`app/` is the Tauri shell; its page is `app/src` (React, the UI from zen: `@satoramoto/zen/visuals`). The player's
 views are *library | live*. The sections below are the app's reference as built.
 
 **Audio in.** `listen.rs` offers what there is to listen to: running DAWs (by bundle

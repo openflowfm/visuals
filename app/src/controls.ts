@@ -1,9 +1,9 @@
-import type { Param } from '@openflow/widgets/param/param.ts';
+import type { Param } from '@satoramoto/zen';
 import type { Spec } from './params.ts';
 
 /**
  * What the editor's controls share, the graph's settings and the live effects
- * alike: how a range becomes a widgets `Param`, how a value reads, and the log
+ * alike: how a range becomes a zen `Param`, how a value reads, and the log
  * taper the multiplier sliders run on.
  */
 
