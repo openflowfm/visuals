@@ -22,8 +22,6 @@ Ableton Link ──> the app (Tauri) <──> its page (React, app/src)
 visual[flow] is a signed, notarised disk image for Macs with Apple silicon. There's no
 stable release yet (1.0 is planned; see [the plan](docs/milkdrop-engine.md#the-plan-03-to-10)).
 Until then, there's the
-[beta](https://github.com/openflowfm/visuals/releases/download/beta/visual-flow-beta_aarch64.dmg)
-(release candidates) and the
 [latest build](https://github.com/openflowfm/visuals/releases/download/latest/visual-flow-latest_aarch64.dmg),
 built from every push to `main`. Open the DMG and drag visual[flow] to
 Applications.
@@ -184,7 +182,8 @@ the sidebar shown or hidden, and `VITE_HOME_PICK=<path in the pack>` with that p
 picked and shown in the inspector. `AGENTS.md` lists the rest.
 
 At build time, `VISUALS_CHANNEL=latest` makes `latest` the update channel the app follows
-until one is chosen in Settings (otherwise `release`), and `VISUALS_BUILD=<n>` is the
+until one is chosen in zen's Settings sheet (the Updates choice, `satoramoto/zen` branch
+`visuals/update-channel`, arriving with the next zen pin; otherwise `release`), and `VISUALS_BUILD=<n>` is the
 build's number; `release.yml` sets both. [`docs/releasing.md`](docs/releasing.md) says
 how the channels work and how to cut a release.
 
@@ -208,9 +207,10 @@ story rendered in headless Chromium), `npm run format:check`,
 
 `.github/workflows/release.yml` builds the Tauri app signed and notarised on macOS. A
 `vX.Y.Z-rc.N` or `vX.Y.Z` tag matching `app/src-tauri/tauri.conf.json`'s version opens a
-draft release with the disk image and the update bundle; publishing the draft feeds the
-stable and beta channels (a release candidate only beta). Every push to `main` replaces
-the `latest` prerelease, always at the same link. Running the workflow by hand on any
+draft release with the disk image and the update bundle; publishing a final `vX.Y.Z`
+draft feeds the `release` channel, while an rc tag makes a draft prerelease that no
+channel reads. Every push to `main` replaces the `latest` prerelease, always at the same
+link, and feeds the `latest` channel. Running the workflow by hand on any
 branch builds the same image as a build artifact, without a release. It needs the
 signing secrets listed at the top of the file; [`docs/releasing.md`](docs/releasing.md)
 says how a release goes out.

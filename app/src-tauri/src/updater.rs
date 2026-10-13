@@ -1,6 +1,7 @@
 //! Updates: checking for a newer version and installing it, with the Tauri
 //! updater. Two channels (see `docs/releasing.md`), and the app follows the one
-//! chosen in Settings, kept in `updates.json`:
+//! chosen in zen's Settings sheet (the Updates choice, `satoramoto/zen` branch
+//! `visuals/update-channel`, arriving with the next zen pin), kept in `updates.json`:
 //!
 //! - release follows final releases: `latest.json` on GitHub's latest release,
 //!   which is never a draft or a prerelease, so it moves only when a `vX.Y.Z`
@@ -196,7 +197,7 @@ fn set_up(app: &tauri::AppHandle) -> bool {
 
 /// The update `update_check` last found, for `update_install`.
 #[derive(Default)]
-struct Found(Mutex<Option<tauri_plugin_updater::Update>>);
+struct Found(Mutex<Option<(Channel, tauri_plugin_updater::Update)>>);
 
 /// The channel followed now. Its lock is held while [`FILE`] is written, so
 /// the file ends with the channel followed.
@@ -269,7 +270,7 @@ pub async fn update_check(app: tauri::AppHandle) -> Result<Option<Update>, Strin
         return Ok(None);
     }
     let shown = found.as_ref().map(|u| Update { version: u.version.clone(), notes: u.body.clone().unwrap_or_default(), date: u.date.map(|d| d.to_string()) });
-    *app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()) = found;
+    *app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()) = found.map(|u| (channel, u));
     drop(now);
     Ok(shown)
 }
@@ -277,9 +278,21 @@ pub async fn update_check(app: tauri::AppHandle) -> Result<Option<Update>, Strin
 /// Download and install the newer release, then restart into it.
 #[tauri::command]
 pub async fn update_install(app: tauri::AppHandle) -> Result<(), String> {
-    let update = app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("no update to install")?;
+    let (channel, update) = app.state::<Found>().0.lock().unwrap_or_else(|e| e.into_inner()).clone().ok_or("no update to install")?;
     update.download_and_install(|_, _| {}, || {}).await.map_err(|e| format!("Couldn't install the update: {e}"))?;
+    if !same_channel(channel, following(&app)) {
+        return Err(CHANNEL_CHANGED.into());
+    }
     app.restart()
+}
+
+/// Said when the channel changed while an update downloaded.
+const CHANNEL_CHANGED: &str = "The update channel changed while the update downloaded, so it wasn't applied. Check again.";
+
+/// Whether an update found on `found` may still be restarted into now that
+/// the app follows `now`.
+fn same_channel(found: Channel, now: Channel) -> bool {
+    found == now
 }
 
 #[cfg(test)]
@@ -322,6 +335,13 @@ mod tests {
         assert_eq!(serde_json::from_str::<Kept>(r#"{"version":1,"channel":"release"}"#).unwrap(), Kept { channel: Channel::Release });
         // A channel this build doesn't know isn't a choice: settings moves it aside.
         assert!(serde_json::from_str::<Kept>(r#"{"channel":"beta"}"#).is_err());
+    }
+
+    #[test]
+    fn updater_install_needs_the_same_channel() {
+        assert!(same_channel(Channel::Release, Channel::Release));
+        assert!(!same_channel(Channel::Release, Channel::Latest));
+        assert!(!same_channel(Channel::Latest, Channel::Release));
         assert!(serde_json::from_str::<Kept>(r#"{}"#).is_err());
     }
 

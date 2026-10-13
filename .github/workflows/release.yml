@@ -1,6 +1,7 @@
 # The signed, notarised macOS build of the Tauri app (`app/`), for the two
 # update channels (`docs/releasing.md` says how a release goes out). The app
-# follows the one chosen in its Settings; until then, the one it was built for.
+# follows the one chosen in zen's Settings sheet (the Updates choice,
+# satoramoto/zen branch visuals/update-channel, arriving with the next zen pin); until then, the one it was built for.
 #
 # - latest: every push to `main` builds it and puts it on the `latest`
 #   prerelease in place of the one before, so its link never changes:
@@ -110,7 +111,8 @@ jobs:
                 exit 1 ;;
             esac
           fi
-          # The channel the app follows until one is chosen in its Settings.
+          # The channel the app follows until one is chosen in zen's Settings sheet
+          # (the Updates choice, arriving with the next zen pin).
           case "$kind" in
             latest) channel=latest ;;
             *) channel=release ;;
