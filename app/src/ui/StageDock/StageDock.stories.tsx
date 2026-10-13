@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
-import { expect, waitFor } from 'storybook/test';
+import { expect, userEvent, waitFor } from 'storybook/test';
 import { Opaque } from '@satoramoto/zen';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
-import { FX_BUSY, LISTS, MOOD_DECK } from '../fixtures/fixtures';
+import { FX_BUSY, LISTS, MOOD_DECK, WARM_UP } from '../fixtures/fixtures';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import { useLive } from '../model/useLive';
 import { StageDock, type StageDockForm } from './StageDock';
@@ -54,7 +54,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 /** Playing Warm-up: Effects at the left, the keys dead centre, the dice and star at the right; the ring holds and lets go; Effects is pressed while open. */
-export const Playing: Story = {};
+export const Playing: Story = {
+  play: async ({ canvas }) => {
+    await expect(await canvas.findByText(WARM_UP.items[2].name)).toBeVisible();
+    const ring = canvas.getByRole('button', { name: 'move on by itself' });
+    await expect(ring).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(ring);
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'move on by itself' })).toHaveAttribute('aria-pressed', 'false'));
+    const effects = canvas.getByRole('button', { name: 'Effects' });
+    await expect(effects).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(effects);
+    await expect(effects).toHaveAttribute('aria-expanded', 'true');
+  },
+};
 
 /** Narrow (a 600px window), stacked: Effects its glyph alone, the row still one line. */
 export const Narrow: Story = {
