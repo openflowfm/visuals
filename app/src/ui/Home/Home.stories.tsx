@@ -4,7 +4,28 @@ import { withLibraryTheme, withStoryFrame } from '@satoramoto/zen/storybook';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import { PLAYING_DECK, row, WARM_UP } from '../fixtures/fixtures';
 import { INSPECTOR_ID, SIDEBAR_ID } from '../HomeLayout/HomeLayout';
+import { DEFAULT_AXES } from '../model/field';
+import { setMapAxes } from '../model/mapPrefs';
+import { LIBRARY_VIEW_KEY } from '../model/libraryView';
 import { Home } from './Home';
+
+/** Map view's stories start on the map's default axes (the choice is the page's, shared by every map) and leave them so. */
+const defaultAxes = () => {
+  setMapAxes(DEFAULT_AXES);
+  return () => setMapAxes(DEFAULT_AXES);
+};
+
+/** The room's map: the listbox its dots are reached by, outside the inspector. */
+const roomMap = (canvasElement: HTMLElement) => canvasElement.querySelector<HTMLElement>('.vs-map-room [role="listbox"]');
+
+/** How many dots the room's map draws: one `M…h0` per preset in its paths. */
+const dotsIn = (canvasElement: HTMLElement) => [...canvasElement.querySelectorAll('.vs-map-room .vs-field-dots path')].reduce((n, p) => n + (p.getAttribute('d')?.match(/M/g)?.length ?? 0), 0);
+
+/** The inspector, where it shows, has no map section of its own while the room shows the map. */
+const noInspectorMap = async (canvasElement: HTMLElement) => {
+  const inspector = canvasElement.querySelector<HTMLElement>(`#${INSPECTOR_ID}`);
+  if (inspector) await expect(within(inspector).queryByRole('group', { name: 'Library map' })).toBeNull();
+};
 
 /** The preset the deck plays: Warm-up's third, `row(7)`. */
 const PLAYING = row(7);
@@ -158,5 +179,75 @@ export const QuickAdd: Story = {
           .some((o) => o.hasAttribute('data-added')),
       ).toBe(true),
     );
+  },
+};
+
+/**
+ * The library in Map view (wireframe B): the hero as ever, the library's head with Grid | Map and
+ * the colour picker, and the map in the grid's room, of what the grid would show. A search thins
+ * the dots and the head's count follows; the inspector's own map section is gone.
+ */
+export const MapView: Story = {
+  name: 'Map view',
+  args: { library: true },
+  beforeEach: defaultAxes,
+  parameters: { frame: 'fill', storage: { [LIBRARY_VIEW_KEY]: 'map' } },
+  play: async ({ canvas, canvasElement }) => {
+    const views = await canvas.findByRole('radiogroup', { name: 'Show the library as' });
+    await expect(within(views).getByRole('radio', { name: 'Map' })).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(roomMap(canvasElement)).not.toBeNull());
+    await expect(roomMap(canvasElement)!.getAttribute('aria-label')).toBe('The library by speed and brightness');
+    await expect(canvas.queryByRole('listbox', { name: 'presets' })).toBeNull();
+    await noInspectorMap(canvasElement);
+    await waitFor(() => expect(dotsIn(canvasElement)).toBeGreaterThan(20));
+    const all = dotsIn(canvasElement);
+    const count = () => Number(canvasElement.querySelector('.vs-libhead-count')?.textContent?.replace(/,/g, '') ?? NaN);
+    const allCount = count();
+
+    // A search narrows the dots, and the head's count follows.
+    const search = canvasElement.querySelector<HTMLInputElement>('.vs-header .vs-home-toolbar input')!;
+    await userEvent.type(search, PLAYING.style);
+    await waitFor(() => expect(dotsIn(canvasElement)).toBeLessThan(all));
+    await expect(dotsIn(canvasElement)).toBeGreaterThan(0);
+    await waitFor(() => expect(count()).toBeLessThan(allCount));
+    await expect(count()).toBeGreaterThanOrEqual(dotsIn(canvasElement));
+  },
+};
+
+/** Map view on a playlist (Warm-up, playing): its presets as dots, the one playing lit. */
+export const MapViewPlaylist: Story = {
+  name: 'Map view, a playlist',
+  beforeEach: defaultAxes,
+  parameters: { frame: 'fill', storage: { [LIBRARY_VIEW_KEY]: 'map' } },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(roomMap(canvasElement)?.getAttribute('aria-label')).toBe(`${WARM_UP.name} by speed and brightness`));
+    // Its presets, once each: no more dots than it lists.
+    await waitFor(() => expect(dotsIn(canvasElement)).toBeGreaterThan(0));
+    await expect(dotsIn(canvasElement)).toBeLessThanOrEqual(new Set(WARM_UP.items.map((i) => i.path)).size);
+    await waitFor(() => expect(canvasElement.querySelector('.vs-map-room .vs-field-lit')).not.toBeNull());
+    await expect(canvasElement.querySelector('.vs-libhead-title')?.textContent).toBe(WARM_UP.name);
+    await noInspectorMap(canvasElement);
+  },
+};
+
+/** The switch: Grid (the room's grid, the inspector's map), Map (the room's map, none in the inspector), and Grid again. */
+export const GridMapSwitch: Story = {
+  name: 'Grid | Map switch',
+  beforeEach: defaultAxes,
+  parameters: { frame: 'fill' },
+  play: async ({ canvas, canvasElement }) => {
+    await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` });
+    const views = canvas.getByRole('radiogroup', { name: 'Show the library as' });
+    await expect(within(views).getByRole('radio', { name: 'Grid' })).toHaveAttribute('aria-checked', 'true');
+    await expect(roomMap(canvasElement)).toBeNull();
+    await userEvent.click(within(views).getByRole('radio', { name: 'Map' }));
+    await waitFor(() => expect(roomMap(canvasElement)).not.toBeNull());
+    await expect(canvas.queryByRole('list', { name: `${WARM_UP.name}, in the order it plays` })).toBeNull();
+    await noInspectorMap(canvasElement);
+    await userEvent.click(within(views).getByRole('radio', { name: 'Grid' }));
+    await canvas.findByRole('list', { name: `${WARM_UP.name}, in the order it plays` });
+    await expect(roomMap(canvasElement)).toBeNull();
+    const inspector = canvasElement.querySelector<HTMLElement>(`#${INSPECTOR_ID}`);
+    if (inspector) await expect(within(inspector).getByRole('group', { name: 'Library map' })).toBeTruthy();
   },
 };

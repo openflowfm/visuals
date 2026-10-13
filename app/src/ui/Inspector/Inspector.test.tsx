@@ -96,6 +96,14 @@ describe('the library map in the inspector', () => {
     expect((p.onPick as ReturnType<typeof vi.fn>).mock.calls[0][0].key).not.toBe(PLAYING.key);
   });
 
+  it("leaves its map section out while the library's room shows the map (map={false})", () => {
+    render(<Inspector {...props()} map={false} />);
+    expect(screen.queryByRole('group', { name: 'Library map' })).toBeNull();
+    expect(screen.queryByRole('listbox')).toBeNull();
+    // The details are all there.
+    expect(screen.getByRole('heading', { level: 2 }).textContent).toBe(prep(PLAYING).title);
+  });
+
   it('does nothing for the dot playing while the details show it', () => {
     const p = props();
     render(<Inspector {...p} />);

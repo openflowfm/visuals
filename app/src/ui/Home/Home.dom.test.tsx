@@ -88,3 +88,43 @@ describe('the field in the Home', () => {
     expect(panel.querySelectorAll('.vs-field-lit')).toHaveLength(1);
   });
 });
+
+describe("the library's Map view", () => {
+  const viewSwitch = () => screen.getByRole('radiogroup', { name: 'Show the library as' });
+  const warmUpGrid = `${WARM_UP.name}, in the order it plays`;
+  const warmUpMap = `${WARM_UP.name} by speed and brightness`;
+
+  it("swaps the room's grid for the map, the inspector's map goes, and Grid puts both back", async () => {
+    render(<Home start={null} onMode={() => {}} />);
+    const panel = await waitFor(panelOf);
+    // Warm-up plays, so its grid is the room; the inspector has its map.
+    await screen.findByRole('list', { name: warmUpGrid });
+    expect(fieldOf(panel)).toBeTruthy();
+
+    fireEvent.click(within(viewSwitch()).getByRole('radio', { name: 'Map' }));
+    const room = await screen.findByRole('listbox', { name: warmUpMap });
+    expect(panel.contains(room)).toBe(false);
+    expect(within(panel).queryByRole('listbox')).toBeNull();
+    expect(screen.queryByRole('list', { name: warmUpGrid })).toBeNull();
+    expect(localStorage.getItem('visuals.library.view')).toBe('map');
+
+    // A dot played from the room: the transport follows it.
+    act(() => room.focus());
+    fireEvent.keyDown(room, { key: 'ArrowRight' });
+    const name = (within(room).getByRole('option').textContent ?? '').split(', by ')[0].split(', at ')[0];
+    fireEvent.keyDown(room, { key: 'Enter' });
+    await waitFor(() => expect(transportName()).toContain(name));
+
+    fireEvent.click(within(viewSwitch()).getByRole('radio', { name: 'Grid' }));
+    await screen.findByRole('list', { name: warmUpGrid });
+    expect(fieldOf(panel)).toBeTruthy();
+    expect(localStorage.getItem('visuals.library.view')).toBe('grid');
+  });
+
+  it('opens on the view chosen last', async () => {
+    localStorage.setItem('visuals.library.view', 'map');
+    render(<Home start={null} onMode={() => {}} />);
+    expect(await screen.findByRole('listbox', { name: warmUpMap })).toBeTruthy();
+    expect(within(await waitFor(panelOf)).queryByRole('listbox')).toBeNull();
+  });
+});

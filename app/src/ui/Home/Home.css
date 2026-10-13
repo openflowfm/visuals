@@ -72,8 +72,9 @@
    grid, the grid's scroller reaches up into the preview's room (`--vs-grid-reach`, unitless px:
    the slot's --lib-under), its tiles starting below the preview and scrolling up behind it.
    A note (a notice, a settings problem, quick add's strip, the library's save or drop line)
-   sits under the preview instead, and the grid starts under it. */
-.vs-home-grid-pane:not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
+   or the library's head row (LibraryHead: the source, its count, Grid | Map) sits under the
+   preview instead, and the grid starts under it. */
+.vs-home-grid-pane:not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary, .vs-libhead)) {
   --vs-grid-reach: var(--lib-under, 0);
 }
 /* The pane also ends above the pinned transport bar (HomeLayout's `over: 'bar'`): the grid's

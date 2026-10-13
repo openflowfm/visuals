@@ -17,7 +17,6 @@ import {
   SWATCH,
   activeGroups,
   browseOrder,
-  STARRED,
   debounced,
   facet,
   facetSummary,
@@ -36,6 +35,7 @@ import {
 } from '../model/librarySearch';
 import { LibraryGrid, pickInto, rangeAnchor, type Pick } from '../LibraryGrid/LibraryGrid';
 import { Say, say } from '../model/words';
+import { paneQuery } from '../model/libraryView';
 import { PresetDrawer, hiddenCount } from '../PresetDrawer/PresetDrawer';
 import { Credits } from '../Credits/Credits';
 import { PackBar, useCreditsMenu, useDropToAdd } from '../Pack/Pack';
@@ -98,6 +98,14 @@ export interface HomeLibrary {
   selected?: readonly string[];
   /** The id of what the grid's picks show (the inspector), for the grid's `aria-controls`: a press in it doesn't put that panel away. */
   controls?: string;
+  /** The bare pane's head row (Home's `LibraryHead`), given how many it shows: `shown` as filtered, `total` with no filter of the viewer's. */
+  head?(counts: { shown: number; total: number; filtered: boolean }): ReactNode;
+  /**
+   * Map view: what goes in the grid's room instead of the grid, given what the grid would show
+   * (the source, the search and the filter) and how to play one of them as its tile would play.
+   * Left out, or null, the grid.
+   */
+  map?: ((rows: readonly LibraryRow[], play: (row: LibraryRow) => void) => ReactNode) | null;
 }
 
 /**
@@ -246,7 +254,11 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * filter's glass take the lighter step (`--vs-caption-raised`). Every word is a `Text`: titles
  * in the display role, counts in the numeral role, notes and lines at caption size; a button's
  * words are a Text inside it, and the inputs take their type from the caption Text around them
- * (the app's `font: inherit` reset on controls outranks a Text on the control itself).
+ * (the app's `font: inherit` reset on controls outranks a Text on the control itself). Bare, the
+ * home's `head` (its `LibraryHead`: the source, the count as filtered, Grid | Map) tops the pane,
+ * and in Map view the home's `map` takes the grid's room, given the rows the grid would show (the
+ * same query: `paneQuery`), a dot played as its tile would be (claimed, the deck following the
+ * grid); the empty states and notes stay as they are.
  *
  * **Kept.** Every export, prop and behaviour (following the grid, the resumed filter, the index
  * re-read, the save as a smart playlist, the dev start), every accessible name, title and string.
@@ -331,13 +343,13 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   // The home's grid browses (decision 68): curated picks first, utility presets only when asked for; the
   // deck following it is sent the same query. The lab editor's column lists the library as before.
   const browse = !!home;
-  const query: LibraryQuery = useMemo(() => ({ groups: starred ? { ...groups, star: [STARRED] } : groups, text: search, ...(browse ? { browse } : {}) }), [groups, search, starred, browse]);
+  const query: LibraryQuery = useMemo(() => paneQuery(starred, groups, search, browse), [groups, search, starred, browse]);
   const rows = useMemo(() => index ?? rowsFromEntries(entries), [index, entries]);
   const prepared = useMemo(() => (browse ? browseOrder(prepare(rows, data)) : prepare(rows, data)), [rows, data, browse]);
   const faceted = useMemo(() => facet(prepared, query), [prepared, query]);
   const shown = faceted.shown;
   // What the pane holds with no filter of the viewer's: what the grid can show then (Starred's star stays picked), by the grid's own rule.
-  const paneTotal = useMemo(() => facet(prepared, { groups: starred ? { star: [STARRED] } : {}, text: '', ...(browse ? { browse } : {}) }).shown.length, [prepared, starred, browse]);
+  const paneTotal = useMemo(() => facet(prepared, paneQuery(starred, {}, '', browse)).shown.length, [prepared, starred, browse]);
   const at = active === null ? -1 : shown.findIndex((p) => p.row.key === active);
   const byKey = useMemo(() => new Map(prepared.map((p) => [p.row.key, p])), [prepared]);
   const selectedSet = useMemo(() => new Set(selection), [selection]);
@@ -449,6 +461,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   // The filter or the library changed what the grid shows since: follow the grid as
   // it is now, from what is playing; while a step is in flight, wait for it.
   const grid = useMemo(() => gridKey(shown.map((p) => p.row.path)), [shown]);
+  // What Map view draws: the rows the grid shows.
+  const mapShown = useMemo(() => shown.map((p) => p.row), [shown]);
   useEffect(() => {
     if (!following.current) return;
     let t: ReturnType<typeof setTimeout>;
@@ -484,6 +498,17 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     else if (from !== h.anchor) setAnchor(from);
     if (how === 'load') play(p);
   }, []);
+  // A dot in Map view plays as its tile would: claimed, the picks let go, and the deck following what the grid shows.
+  const playRow = useCallback(
+    (row: LibraryRow) => {
+      const h = handlers.current;
+      // The dot playing does nothing, as the other maps' doesn't.
+      if (row.path === h.current) return;
+      const i = h.shown.findIndex((p) => p.row.key === row.key);
+      if (i >= 0) pick(i, 'load');
+    },
+    [pick],
+  );
   const add = useCallback((i: number) => {
     const h = handlers.current;
     if (h.shown[i]) h.onAdd(h.entryOf(h.shown[i]));
@@ -805,6 +830,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
   return (
     <div ref={root} className={bare ? 'vs-library vs-library-home vs-library-bare' : home ? 'vs-library vs-library-home' : 'vs-library'} data-drop={drop.over ? '' : undefined}>
       {toolbar}
+      {bare && home?.head?.({ shown: shown.length, total: paneTotal, filtered })}
       {!bare && (title || searchBox)}
       {chipsShown && chips}
       {chipsShown && values}
@@ -835,6 +861,8 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
         <Note className="vs-library-note vs-library-first-run">No presets yet. Drop .milk files or a folder of them here, or use Add a folder… {home ? 'in Settings (⌘,)' : 'below'}.</Note>
       ) : home && !shown.length && (filtered || starred) ? (
         emptyState
+      ) : home?.map ? (
+        home.map(mapShown, playRow)
       ) : (
         <LibraryGrid
           rows={shown}
