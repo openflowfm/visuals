@@ -9,7 +9,7 @@ import { setBridge, type Bridge } from './ui';
  * The UI (`./ui`, `model/ipc.ts`) reaches its backend only through the one
  * `Bridge` installed with `setBridge`; with none it rejects every command.
  * This is the app's: every part of it is the Tauri module the UI imported
- * directly before it moved onto zen (`@tauri-apps/api`'s core, event, window and webview,
+ * before zen (`@tauri-apps/api`'s core, event, window and webview,
  * and the opener plugin), so commands, events, the window's full-screen state,
  * files dropped on the page and opened links behave as they did. In
  * `npm run dev` the same calls go over the dev bridge (`dev/`), which stands

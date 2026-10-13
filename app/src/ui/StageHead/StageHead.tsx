@@ -6,6 +6,7 @@ import { Text } from '@satoramoto/zen';
 import { titleOf } from '../HelpOverlay/HelpOverlay';
 import { Icon } from '../Icon/Icon';
 import { LinkPanel } from '../LinkPanel/LinkPanel';
+import { LIVE_MAP_ID, LIVE_MAP_LABEL } from '../LiveMap/LiveMap';
 import * as api from '../model/api';
 import type { LiveState } from '../model/live-model';
 import { notice } from '../model/shell';
@@ -26,10 +27,10 @@ const TITLEBAR: Length = { space: [6, 4, 1] };
 
 /** what the header's type needs, in the shell's header row */
 export const STAGE_HEAD_FORMS: Forms<StageHeadForm> = [
-  // full: the switch, the lights with their whole words, the mixer and its meter, the four glyphs — 808px, the original's 900px window less the 84px lights room and 8px right inset
-  { id: 'full', min: { w: { unit: 202 }, h: TITLEBAR }, ideal: { w: { unit: 202 }, h: TITLEBAR }, grow: { w: true } },
-  // short: the lights' words and the notes cut shorter, so the row keeps to one line
-  { id: 'short', min: { w: { control: 10 }, h: TITLEBAR }, ideal: { w: { control: 10 }, h: TITLEBAR }, grow: { w: true } },
+  // full: the switch, the lights with their whole words, the library map, the mixer and its meter, the four glyphs — 808px (the original's 900px window less the 84px lights room and 8px right inset) and a control for the map's glyph
+  { id: 'full', min: { w: { unit: 202, control: 1 }, h: TITLEBAR }, ideal: { w: { unit: 202, control: 1 }, h: TITLEBAR }, grow: { w: true } },
+  // short: the lights' words and the notes cut shorter, so the row keeps to one line (a control more for the map's glyph)
+  { id: 'short', min: { w: { control: 11 }, h: TITLEBAR }, ideal: { w: { control: 11 }, h: TITLEBAR }, grow: { w: true } },
 ];
 
 /** What ✕ is called, and its tooltip: it leaves at once, as ⌘⇧L does; Esc held does too. */
@@ -45,10 +46,14 @@ export const SILENT_TEXT = 'No sound';
 /** What the Output light shows beside its glyph: the display the picture is on, or "In this window" while it is on none. */
 export const outputWords = (live: Pick<LiveState, 'status'>): string => live.status.display?.name ?? 'In this window';
 
-/** The header's props: Home | Live, the notes, the lights, the mixer, the camera, ?, settings and ✕ (the crate's toggle is gone with the crate). */
+/** The header's props: Home | Live, the notes, the lights, the library map, the mixer, the camera, ?, settings and ✕ (the crate's toggle is gone with the crate). */
 export type StageHeadOwnProps = Omit<StageHeadProps, 'crateOpen' | 'onCrate'> & {
   /** ✕: leave live at once. */
   onLeave(): void;
+  /** Whether the library map is open: its button is pressed (expanded). */
+  mapOpen?: boolean;
+  /** The library map's button (G): open the map, or close it. No button without it. */
+  onMap?(): void;
   /** `\` pins the controls shown: the status area says "Pinned". */
   pinned?: boolean;
   form?: StageHeadForm;
@@ -204,7 +209,8 @@ function Notes({ live, pinned }: { live: LiveState; pinned: boolean }) {
  * On the right the status area: quiet notes when there are any (skipped presets, a low frame rate,
  * no sound, a failure, "Pinned" while `\` pins the controls), the Beat and Output lights (a dot and
  * words; Home's popovers, not modal: live's keys keep working while one is open); a hairline; then
- * the app's icons in Home's order: the mixer with its level meter (Home's folded audio input, the
+ * the library map's toggle (G: pressed, a faint wash, while the map is open at the right), then the
+ * app's icons in Home's order: the mixer with its level meter (Home's folded audio input, the
  * source chosen in its popover), the camera, ? and settings, and a quiet ✕ that leaves live. The
  * empty line between them is the title bar: a drag there moves the window. It shows and fades with
  * the controls (the shell's one overlay, StageLayout).
@@ -213,12 +219,13 @@ function Notes({ live, pinned }: { live: LiveState; pinned: boolean }) {
  * the notices are quiet words in the status area. The Output light has a dot, as Beat does. The
  * mixer (`TransportAudio folded`, its slow warning left to the notes) moved up from the transport.
  * The narrow window's shorter words are a form (`STAGE_HEAD_FORMS`: full → short) the assembled
- * screen picks, or the `form` prop.
+ * screen picks, or the `form` prop. Wireframe D: the library map's button (`onMap`, `mapOpen`),
+ * first after the rule; without `onMap` there is none.
  *
  * **Kept.** Every name, label, tooltip and key shortcut of the lights, ?, settings and ✕; the drag
  * region; how far the words shorten when narrow.
  */
-export function StageHead({ live, help, onHelp, onView, onLeave, pinned = false, form }: StageHeadOwnProps) {
+export function StageHead({ live, help, onHelp, onView, onLeave, pinned = false, mapOpen = false, onMap, form }: StageHeadOwnProps) {
   const f = useForm(STAGE_HEAD_FORMS, form);
   return (
     <Text as="header" className="vs-stagehead" data-form={f} data-tauri-drag-region>
@@ -231,6 +238,20 @@ export function StageHead({ live, help, onHelp, onView, onLeave, pinned = false,
       <OutputLight live={live} />
       <span className="vs-stagehead-rule" aria-hidden="true" />
       <span className="vs-stagehead-tools">
+        {onMap && (
+          <ButtonFace
+            tone="quiet"
+            className="vs-stagehead-tool vs-stagehead-map"
+            aria-label={LIVE_MAP_LABEL}
+            aria-expanded={mapOpen}
+            aria-controls={LIVE_MAP_ID}
+            aria-keyshortcuts="G"
+            title={titleOf('map')}
+            onClick={onMap}
+          >
+            <Icon name="map" />
+          </ButtonFace>
+        )}
         <TransportAudio onAudioError={(e) => live.setError(notice("Couldn't use that audio input.", e))} folded slow={false} />
         <CameraAction className="vs-stagehead-tool" />
         <ButtonFace tone="quiet" className="vs-stagehead-tool" aria-label="Help" aria-haspopup="dialog" aria-expanded={help} aria-keyshortcuts="?" title={titleOf('help')} onClick={onHelp}>

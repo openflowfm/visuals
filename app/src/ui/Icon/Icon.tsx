@@ -61,6 +61,7 @@ export const ICON_NAMES = [
   'audio',
   'mood',
   'intensity',
+  'map',
   // Home's transport: the deck moving on by itself, preset after preset.
   'loop',
   'dice',
@@ -252,6 +253,16 @@ const GLYPHS: Record<IconName, ReactNode> = {
     <>
       <path d="M2.25 8H5.25M10.75 8H13.75" />
       <rect x="5.25" y="5.25" width="5.5" height="5.5" rx="1.25" />
+    </>
+  ),
+  // Two axes with a few dots on them: the library map, presets laid out by what they look like.
+  map: (
+    <>
+      <path d="M2.75 2.75V13.25H13.25" />
+      <circle {...solid} stroke="none" cx="6" cy="9.5" r="1" />
+      <circle {...solid} stroke="none" cx="9" cy="6.5" r="1" />
+      <circle {...solid} stroke="none" cx="11.5" cy="9" r="1" />
+      <circle {...solid} stroke="none" cx="7.5" cy="5" r="1" />
     </>
   ),
   // A ring that comes round to its start: moving on by itself, preset after preset, with no end.

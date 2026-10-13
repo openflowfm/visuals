@@ -50,13 +50,15 @@ export const LEAVING_TEXT = 'Keep holding Esc to leave live';
 
 /**
  * The shell's props: the contract's `StageLayoutProps` less the crate, the hidden panels and the
- * window's size (Live has no crate, nothing hides now, and the screen fills its box), plus the pin, the effects panel and the ambient light.
+ * window's size (Live has no crate, nothing hides now, and the screen fills its box), plus the pin, the effects panel, the library map and the ambient light.
  */
 export type StageProps = Pick<StageLayoutProps, 'warning' | 'inWindow' | 'leaving' | 'head' | 'dock' | 'centre' | 'children'> & {
   /** `\`: the controls stay shown, hovered or not. */
   pinned?: boolean;
   /** The effects panel (`EffectsPanel`) while it is open, docked at the left under the header, over the controls' room; null or left out: none. */
   panel?: ReactNode;
+  /** The library map (`LiveMap`) while it is open, at the right under the header, as tall as it needs down to the controls' foot row; null or left out: none. */
+  side?: ReactNode;
   /** The picture the panel's and popovers' surfaces take their light from (the playing preset's thumbnail). */
   ambient?: AmbientSource;
 };
@@ -90,8 +92,12 @@ function Leaving() {
  * of its popovers is open (or the effects panel: its Effects button is expanded), while `pinned`
  * (`\`), and always with no hover (touch). The effects panel (`panel`) docks at the left in the
  * overlay, 20px in from the window's left and under the header, ending above the controls' foot
- * row, so the Effects button under it stays in sight. With the warning owed the picture is dark (the preview isn't mounted), the controls inert
- * and dimmed, and `centre` (the warning) centred over the window. While Esc is held to leave live
+ * row, so the Effects button under it stays in sight. The library map (`side`) sits the same way
+ * at the right: 20px in from the window's right, 64px down, 380px wide and as tall as its content,
+ * never past the panel's foot line. With both open they never overlap: each is at most what the
+ * other and three insets leave of the window's width. Tab goes to the panel, then the map, then
+ * the header and the controls. With the warning owed the picture is dark (the preview isn't
+ * mounted), the controls and both panels inert, the controls dimmed, and `centre` (the warning) centred over the window. While Esc is held to leave live
  * (`leaving`), its progress shows over everything; the output never shows it. The whole Stage is
  * an `Ambient` lit by `ambient`, so the float surfaces over it take the picture's colours.
  *
@@ -100,7 +106,8 @@ function Leaving() {
  * the controls any more, so `\` pins them shown; the peek hint is gone. Design C: no corner toasts
  * ("Go full screen on…" is in the Output light's popover, the notices quiet words in the header);
  * the controls keep a 40px margin at the sides (their 32px room and the keys' own 8px) and sit
- * 36px over the foot; the effects panel is the overlay's one solid. The window is still an
+ * 36px over the foot; the effects panel and the library map are the overlay's solids, one at
+ * either side (the root says `data-panel` and `data-side` while they show). The window is still an
  * assembled `Screen` (`stageSpec`, docs/assembly.md) over the picture: the header and the
  * controls take their forms from the room they are given. Everything sits in one `Opaque` scope,
  * so each layer over the picture draws its solid and no backdrop.
@@ -115,13 +122,17 @@ function Leaving() {
  * - `--vs-stagelayout-panel` (340px): the effects panel's width; `--vs-stagelayout-panel-inset`
  *   (20px): its inset from the window's left; `--vs-stagelayout-panel-top` (64px) and
  *   `--vs-stagelayout-panel-foot` (100px): where it starts under the header and ends over the foot row.
+ * - `--vs-stagelayout-side` (380px): the library map's width; it takes the panel's inset (from the
+ *   window's right), top and foot (the lowest its content may reach).
  * - `--vs-stagelayout-z-*`: the parts' stacking over the picture.
  * - `--vs-stagelayout-hold`: Esc's hold (`LEAVE_HOLD_MS`), set inline on the progress.
  * - `--vs-hole-radius`: Views' `Preview` knob, set to 0 here (the picture is square; macOS rounds the window).
  */
-export function StageLayout({ pinned = false, warning = false, inWindow, leaving = false, head, dock, centre, panel, ambient, children }: StageProps) {
+export function StageLayout({ pinned = false, warning = false, inWindow, leaving = false, head, dock, centre, panel, side, ambient, children }: StageProps) {
   const principles = useLayoutPrinciples();
   const spec = useMemo(() => stageSpec(), []);
+  const hasPanel = panel != null && panel !== false;
+  const hasSide = side != null && side !== false;
   return (
     <Ambient
       source={ambient}
@@ -130,7 +141,8 @@ export function StageLayout({ pinned = false, warning = false, inWindow, leaving
       data-pinned={pinned ? '' : undefined}
       data-warning={warning ? '' : undefined}
       data-windowed={inWindow ? '' : undefined}
-      data-panel={panel != null && panel !== false ? '' : undefined}
+      data-panel={hasPanel ? '' : undefined}
+      data-side={hasSide ? '' : undefined}
     >
       <Opaque className="vs-stagelayout-opaque">
         {/* The picture: the whole window under everything, whatever shows over it. */}
@@ -139,10 +151,15 @@ export function StageLayout({ pinned = false, warning = false, inWindow, leaving
         {/* The one overlay: the scrim, the header and the controls, fading together. */}
         <div className="vs-stagelayout-reveal" data-pinned={pinned ? '' : undefined}>
           <Surface radius="none" className="vs-stagelayout-scrim" aria-hidden="true" />
-          {/* The panel first in the tab order: opened by E with focus on the picture, Tab reaches it next. */}
-          {panel != null && panel !== false && (
+          {/* The panels first in the tab order, the effects then the map: opened by E or G with focus on the picture, Tab reaches them next. */}
+          {hasPanel && (
             <div className="vs-stagelayout-panel" inert={warning || undefined}>
               {panel}
+            </div>
+          )}
+          {hasSide && (
+            <div className="vs-stagelayout-side" inert={warning || undefined}>
+              {side}
             </div>
           )}
           <Screen

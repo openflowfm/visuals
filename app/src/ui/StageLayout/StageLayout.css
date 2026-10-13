@@ -1,7 +1,8 @@
 /* Live's Stage (StageLayout.tsx): the picture full-bleed across the main window, and over it one
    overlay (the header and the controls on a scrim) that fades in on hover as Home's preview
    controls do (Hero.css: the same scrim and fade). The effects panel docks at the left in the
-   overlay (no corner toasts); the warning and Esc's hold over everything.
+   overlay and the library map at the right (no corner toasts); the warning and Esc's hold over
+   everything.
 
    Where the header and the controls sit and how big they are is the solver's (stageSpec in
    StageLayout.tsx): nothing here sizes the screen, and no query decides it.
@@ -27,6 +28,8 @@
   --vs-stagelayout-panel-inset: calc(var(--space-4) + var(--space-1));
   --vs-stagelayout-panel-top: calc(var(--space-6) * 2);
   --vs-stagelayout-panel-foot: calc(var(--space-6) * 3 + var(--space-1));
+  /* The library map: 380px wide, at the right with the panel's inset, top and foot. */
+  --vs-stagelayout-side: calc(var(--space-6) * 11 + var(--space-5) + var(--space-1));
   --vs-stagelayout-z-reveal: 1;
   --vs-stagelayout-z-centre: 2;
   --vs-stagelayout-z-overlay: 10;
@@ -186,6 +189,38 @@
 .vs-stagelayout-panel > * {
   flex: 1 1 auto;
   min-width: 0;
+}
+
+/* The library map, in the overlay as the panel is (its button expanded keeps the overlay shown):
+   at the right under the header, as tall as its content, never past the panel's foot line. */
+.vs-stagelayout-side {
+  position: absolute;
+  top: var(--vs-stagelayout-panel-top);
+  right: var(--vs-stagelayout-panel-inset);
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--vs-stagelayout-side), calc(100% - 2 * var(--vs-stagelayout-panel-inset)));
+  max-height: calc(100% - var(--vs-stagelayout-panel-top) - var(--vs-stagelayout-panel-foot));
+  pointer-events: auto;
+}
+.vs-stagelayout-side > * {
+  flex: 0 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Both open: never overlapping. The panel keeps its width while the map's and three insets fit
+   beside it, and the map takes what the panel and three insets leave, up to its own (both resolve
+   against the overlay, so 100% is the same window width for each). */
+.vs-stagelayout[data-panel][data-side] {
+  --vs-stagelayout-panel-both: max(0px, min(var(--vs-stagelayout-panel), 100% - var(--vs-stagelayout-side) - 3 * var(--vs-stagelayout-panel-inset)));
+}
+.vs-stagelayout[data-panel][data-side] .vs-stagelayout-panel {
+  width: var(--vs-stagelayout-panel-both);
+}
+.vs-stagelayout[data-panel][data-side] .vs-stagelayout-side {
+  width: max(0px, min(var(--vs-stagelayout-side), 100% - var(--vs-stagelayout-panel-both) - 3 * var(--vs-stagelayout-panel-inset)));
 }
 
 /* Esc held to leave live: over everything in this window (never the output), an opaque card in

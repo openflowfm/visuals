@@ -1,15 +1,22 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fireEvent, waitFor, within } from 'storybook/test';
+import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
 import type { LibraryRow } from '../model/api';
-import { dotsOf, H, W } from '../model/field';
+import { DEFAULT_AXES, dotsOf, H, W } from '../model/field';
+import { setMapAxes } from '../model/mapPrefs';
 import { prepareRow } from '../model/librarySearch';
 import { DATA, ROWS } from '../fixtures/fixtures';
 import { NOW } from '../fixtures/layout';
 import { InspectorPanel, INSPECTOR_LABEL } from '../HomeLayout/HomeLayout';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
-import { LibraryMap, MAP_AXES } from './LibraryMap';
+import { LibraryMap, mapAxes } from './LibraryMap';
+
+/** Every story starts on the default axes (the choice is the page's, shared by every map) and leaves them so. */
+const defaultAxes = () => {
+  setMapAxes(DEFAULT_AXES);
+  return () => setMapAxes(DEFAULT_AXES);
+};
 
 /** The map on its own in the inspector's panel, at its width: a dot played lights up, as the Home's would. */
 function Story({ nothing }: { nothing: boolean }) {
@@ -36,7 +43,14 @@ const meta = {
   component: Story,
   decorators: [withVisualsFrame, withLibraryTheme],
   globals: VISUALS_GLOBALS,
-  beforeEach: visualsBeforeEach,
+  beforeEach: (ctx) => {
+    const undoStorage = visualsBeforeEach(ctx);
+    const undoAxes = defaultAxes();
+    return () => {
+      undoAxes();
+      undoStorage();
+    };
+  },
   args: { nothing: false },
   parameters: { scope: 'bare', layout: 'fullscreen' },
 } satisfies Meta<typeof Story>;
@@ -52,7 +66,7 @@ export const Playing: S = {
   play: async ({ canvasElement }) => {
     const map = mapOf(canvasElement);
     const drawn = ROWS.filter((r) => r.look).length;
-    await expect(map).toHaveTextContent(`${drawn} presets · ${MAP_AXES}`);
+    await expect(map).toHaveTextContent(`${drawn} presets · ${mapAxes(DEFAULT_AXES)}`);
     await expect(map.querySelector('.vs-field-lit')).not.toBeNull();
     // The field keeps its 4:3 at the panel's width.
     const svg = map.querySelector<SVGSVGElement>('.vs-field-scope')!;
@@ -78,5 +92,25 @@ export const NothingPlaying: S = {
     const map = mapOf(canvasElement);
     await expect(within(map).getByText(/each dot is a preset/i)).toBeVisible();
     await expect(map.querySelector('.vs-field-lit')).toBeNull();
+  },
+};
+
+/** Choosing the axes: the across picker under the field set to Intensity; the heading's axes, the field's name and the help line follow. */
+export const PickAxes: S = {
+  name: 'Pick axes',
+  args: { nothing: true },
+  play: async ({ canvasElement }) => {
+    const map = mapOf(canvasElement);
+    const aside = map.querySelector<HTMLElement>('.vs-map-aside')!;
+    await expect(aside).toHaveTextContent('Speed × Brightness');
+    const across = within(map).getByRole('combobox', { name: 'Across' });
+    if (across instanceof HTMLSelectElement) await userEvent.selectOptions(across, 'Intensity');
+    else {
+      await userEvent.click(across);
+      await userEvent.click(await within(canvasElement.ownerDocument.body).findByRole('option', { name: 'Intensity' }));
+    }
+    await waitFor(() => expect(aside).toHaveTextContent('Intensity × Brightness'));
+    await expect(within(map).getByRole('listbox', { name: 'The library by intensity and brightness' })).toBeInTheDocument();
+    await expect(within(map).getByText(/how intense it is and how bright it is/i)).toBeVisible();
   },
 };

@@ -1,6 +1,6 @@
 /* The inspector's field (Field.tsx), read like an instrument's XY display: every measured preset
-   a faint dot by speed (across, slow to fast) and brightness (up, dark to bright), tinted by its
-   strongest hue's band; the preset playing lit in its own hue, with a fine cursor through it and
+   a faint dot by two axes (speed across and brightness up by default, or what the pickers choose),
+   tinted by its colour group (hue band, style or rating); the preset playing lit in its own hue, with a fine cursor through it and
    a ring as wide as it is intense. No frame and no grid: the edges carry a scale's markings (five hairline ticks, the
    middle one longer, a small cross at the centre) and four words in tiny type, as an
    oscilloscope's graticule is engraved. The dot under the pointer, or the keyboard's cursor, gets
@@ -20,6 +20,33 @@
   /* field.css: 6px above, 16px over the plot and 18px under it for the axis words. */
   margin: calc(var(--space-1) * 1.5) 0 0;
   padding: var(--space-4) 0 calc(var(--space-3) * 1.5);
+}
+/* With pickers (Field's `onAxes`): up's picker in a column left of the plot, spanning its height;
+   across's under it, spanning its width. The pickers carry the ends' words, so no padding holds
+   the engraved ones. */
+.vs-field[data-pickers] {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--space-1);
+  row-gap: var(--space-1);
+  padding: var(--space-2) 0 0;
+}
+.vs-field[data-pickers] > .vs-field-pick-up {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: stretch;
+  min-height: 0;
+}
+.vs-field[data-pickers] > .vs-field-plot {
+  grid-column: 2;
+  grid-row: 1;
+  min-width: 0;
+}
+.vs-field[data-pickers] > .vs-field-pick-x {
+  grid-column: 2;
+  grid-row: 2;
+  min-width: 0;
 }
 .vs-field-plot {
   position: relative;
@@ -92,6 +119,18 @@
   fill: none;
   stroke: var(--vs-field-hair);
   stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* The presets played: a dashed hairline in the ink through their dots, each segment's opacity set
+   inline from its age (Field.tsx's Trail). */
+.vs-field-trail path {
+  fill: none;
+  stroke: var(--text-1);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
   pointer-events: none;
 }

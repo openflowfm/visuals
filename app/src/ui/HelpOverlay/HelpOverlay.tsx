@@ -29,6 +29,7 @@ export type ControlId =
   | 'tempo'
   | 'intensity'
   | 'effects' /* the Stage's effects panel (it replaced More effects…) */
+  | 'map' /* the Stage's library map, at the right */
   | 'rate'
   | 'favourite'
   | 'punch'
@@ -60,6 +61,14 @@ export const CONTROLS: readonly Control[] = [
   { id: 'beat', where: 'status', name: 'Beat', keys: '', does: `The tempo, flashing on each beat. Click to tap the tempo or ${say('Ableton Link')}` },
   { id: 'output', where: 'status', name: 'Output', keys: '', does: 'Where the picture shows: this window until you pick a display. Click to pick one' },
   { id: 'fps', where: 'status', name: 'Frames per second', keys: '', does: 'Only shown when the picture runs slow, under 50' },
+  {
+    id: 'map',
+    where: 'status',
+    stage: true,
+    name: 'Library map',
+    keys: 'G',
+    does: "Opens the map at the right, and closes it: the set's presets (or the library) as dots, laid out by the axes you pick. Click a dot to play it; the dashed trail is what played this session",
+  },
   { id: 'help', where: 'status', name: 'Help', keys: '?', does: 'This list of every live control' },
   { id: 'settings', where: 'status', name: 'Settings', keys: '', does: 'How the app looks, listens and draws' },
   { id: 'leave', where: 'status', name: '✕ Leave live', keys: '⌘⇧L, hold Esc', does: 'Back to your playlists and the library: the ✕ in the header or ⌘⇧L at once, or hold Esc for 3 seconds' },

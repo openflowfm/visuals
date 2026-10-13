@@ -78,10 +78,6 @@ trap 'stop; exit 143' TERM
 trap 'stop; exit 129' HUP
 
 if up "$ZEN_STORYBOOK_PORT"; then
-	if ! curl -fsS "http://127.0.0.1:$ZEN_STORYBOOK_PORT/index.json" 2>/dev/null | grep -q '"entries"'; then
-		echo "app/design.sh: port $ZEN_STORYBOOK_PORT is taken by something that is not a Storybook; stop it first" >&2
-		exit 1
-	fi
 	echo "app/design.sh: zen's Storybook is already on $ZEN_STORYBOOK_PORT; using it"
 else
 	echo "app/design.sh: PREVIEW_LABEL=Zen PREVIEW_PORT=4191 STORYBOOK_PORT=$ZEN_STORYBOOK_PORT npm --prefix $ZEN_SOURCE run dev"
@@ -98,14 +94,12 @@ check() {
 	if [ -n "$zen" ] && ! kill -0 "$zen" 2>/dev/null; then
 		wait "$zen"
 		echo "app/design.sh: zen's launcher ended (exit $?; see above), stopping" >&2
-		stop_group "$zen"
 		zen=
 		exit 1
 	fi
 	if ! kill -0 "$storybook" 2>/dev/null; then
 		wait "$storybook"
 		echo "app/design.sh: Storybook ended (exit $?; see above), stopping" >&2
-		stop_group "$storybook"
 		storybook=
 		exit 1
 	fi

@@ -15,6 +15,8 @@ interface Args {
   form?: StageHeadForm;
   /** `\` pinned the controls: "Pinned" in the status area. */
   pinned?: boolean;
+  /** The library map open at start: its button pressed. */
+  map?: boolean;
 }
 
 /**
@@ -24,9 +26,10 @@ interface Args {
  * macOS puts them. The picture is the frame's still (`--vs-still`); everything over it
  * is in the Stage's `Opaque` scope, as the shell puts it.
  */
-function Window({ width, windowed, form, pinned = false }: Args) {
+function Window({ width, windowed, form, pinned = false, map: mapAtStart = false }: Args) {
   const live = useLive({ start: null, windowed });
   const [help, setHelp] = useState(false);
+  const [map, setMap] = useState(mapAtStart);
   const [left, setLeft] = useState(false);
   return (
     <Opaque>
@@ -38,7 +41,17 @@ function Window({ width, windowed, form, pinned = false }: Args) {
         </span>
         {/* The shell's header row: 52px, 84px kept for the window buttons, 16px at the right. */}
         <div style={{ position: 'absolute', top: 0, right: 16, left: 84, height: 52, display: 'flex' }} data-tauri-drag-region>
-          <StageHead live={live} help={help} onHelp={() => setHelp((h) => !h)} onView={() => {}} onLeave={() => setLeft(true)} pinned={pinned} form={form} />
+          <StageHead
+            live={live}
+            help={help}
+            onHelp={() => setHelp((h) => !h)}
+            onView={() => {}}
+            onLeave={() => setLeft(true)}
+            pinned={pinned}
+            mapOpen={map}
+            onMap={() => setMap((m) => !m)}
+            form={form}
+          />
         </div>
       </div>
     </Opaque>
@@ -53,8 +66,8 @@ function Window({ width, windowed, form, pinned = false }: Args) {
  * presets, a low frame rate, no sound, a failure, "Pinned"), the Beat light
  * (tap tempo and Link in its popover), the Output light as a dot and words
  * (white on a display, grey in this window; "Full screen on…" in its popover
- * while the picture plays here), a hairline, then the mixer and its meter, the
- * camera, ?, settings and ✕, in Home's order. Between them the picture, which
+ * while the picture plays here), a hairline, then the library map's toggle (G),
+ * the mixer and its meter, the camera, ?, settings and ✕, in Home's order. Between them the picture, which
  * drags the window. No toasts.
  */
 const meta = {
@@ -85,10 +98,11 @@ export const OnTheProjector: Story = {
     await expect(await canvas.findByRole('button', { name: 'Beat, 124 BPM, 2 in time' })).toBeVisible();
     await expect(canvas.getByRole('radio', { name: /live/i })).toHaveAttribute('aria-checked', 'true');
     await fits(canvasElement);
-    // Home's order: the lights, a hairline, the mixer, the camera, ?, settings, ✕ (a quiet glyph, its tooltip the keys).
+    // Home's order: the lights, a hairline, the library map, the mixer, the camera, ?, settings, ✕ (a quiet glyph, its tooltip the keys).
     const order = [
       '.vs-stagehead-output',
       '.vs-stagehead-rule',
+      '.vs-stagehead-map',
       '.vs-stagehead-tools .vs-transport-right',
       '.vs-camera-action',
       '[aria-label="Help"]',
@@ -153,6 +167,23 @@ export const Pinned: Story = {
     await expect(word).toBeVisible();
     const beat = canvasElement.querySelector('.vs-stagehead-light')!.getBoundingClientRect();
     await expect(word.getBoundingClientRect().right).toBeLessThanOrEqual(beat.left);
+  },
+};
+
+/** The library map open: its button first after the hairline, pressed (a faint wash), G its key; a click lets it go. */
+export const MapOpen: Story = {
+  name: 'Map open',
+  args: { map: true },
+  play: async ({ canvas, canvasElement }) => {
+    const button = await canvas.findByRole('button', { name: 'Library map' });
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    await expect(button).toHaveAttribute('aria-controls', 'stage-map');
+    await expect(button).toHaveAttribute('aria-keyshortcuts', 'G');
+    await expect(button.getAttribute('title')).toMatch(/^Library map: .*\(G\)$/);
+    await expect(getComputedStyle(button).backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
+    await fits(canvasElement);
+    await userEvent.click(button);
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
   },
 };
 
