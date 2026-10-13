@@ -1,0 +1,244 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { Entry, LibraryQuery, Resume } from './api';
+import { setBridge, type EventCallback } from './ipc';
+import { firstToOpen, followAction, followGrid, forgetResumedQuery, gridKey, LIVE_WAIT, rereadOn, resumedQuery, sameQuery, startFrom, startLive, stepDeck, stepping } from './library';
+
+const invoke = vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null));
+const heard = new Map<string, (e: { payload: unknown }) => void>();
+setBridge({
+  invoke: <T>(cmd: string, args?: unknown) => invoke(cmd, ...(args === undefined ? [] : [args])) as Promise<T>,
+  listen: <T>(name: string, f: EventCallback<T>) => {
+    heard.set(name, f as unknown as (e: { payload: unknown }) => void);
+    return Promise.resolve(() => {});
+  },
+});
+
+/** The deck's `live` event, as it reaches the page. */
+const live = () => heard.get('live')?.({ payload: { deck: null, opened: null, path: '/p/next.milk', error: null } });
+/** Let the step be sent: it waits for its `live` listener first. */
+const sendOut = () => new Promise((r) => setTimeout(r, 0));
+
+describe('following the grid', () => {
+  const query: LibraryQuery = { groups: { style: ['Geiss'], author: ['Rovastar'] }, text: 'warm' };
+
+  it('asks the deck to play what the grid shows, from the preset opened, without opening it again', () => {
+    expect(followAction(query, '/p/b.milk')).toEqual({ kind: 'query', query, at: '/p/b.milk' });
+  });
+
+  it('sends the grid’s filter and the preset to the deck as one live action', () => {
+    invoke.mockClear();
+    followGrid(query, '/p/b.milk');
+    expect(invoke).toHaveBeenCalledWith('act', { action: { kind: 'query', query, at: '/p/b.milk' } });
+  });
+
+  it('says nothing when the deck refuses, or outside the app', async () => {
+    invoke.mockImplementationOnce(() => Promise.reject(new Error('held')));
+    expect(() => followGrid(query, '/p/a.milk')).not.toThrow();
+    invoke.mockImplementationOnce(() => {
+      throw new TypeError('no Tauri');
+    });
+    expect(() => followGrid(query, '/p/a.milk')).not.toThrow();
+    await Promise.resolve();
+  });
+});
+
+describe('stepping the deck', () => {
+  it('counts a step as in flight until the deck answers, after its live event, and settles a refused one', async () => {
+    let answer: (v: unknown) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    const sent = stepDeck({ kind: 'next' });
+    expect(stepping()).toBe(true);
+    await sendOut();
+    live();
+    expect(stepping()).toBe(true);
+    answer(null);
+    await sent;
+    expect(stepping()).toBe(false);
+    invoke.mockImplementationOnce(() => Promise.reject(new Error('held')));
+    await expect(stepDeck({ kind: 'next' })).rejects.toThrow('held');
+    expect(stepping()).toBe(false);
+  });
+
+  it('stays in flight when the deck answers before its live event reaches the page', async () => {
+    // The answer first: the page still shows the old preset, so a re-follow must wait.
+    const sent = stepDeck({ kind: 'next' });
+    await sent;
+    expect(invoke).toHaveBeenLastCalledWith('act', { action: { kind: 'next' } });
+    expect(stepping()).toBe(true);
+    live();
+    expect(stepping()).toBe(false);
+  });
+
+  it('does not take a live event from before the step was sent as its own', async () => {
+    await sendOut();
+    let answer: (v: unknown) => void = () => {};
+    invoke.mockImplementationOnce(() => new Promise((r) => (answer = r)));
+    const sent = stepDeck({ kind: 'previous' });
+    live(); // an auto-advance, say, before the step went out
+    await sendOut();
+    answer(null);
+    await sent;
+    expect(stepping()).toBe(true);
+    live();
+    expect(stepping()).toBe(false);
+  });
+
+  it('settles an answered step whose live event never comes, after a while', async () => {
+    vi.useFakeTimers();
+    try {
+      const sent = stepDeck({ kind: 'random' });
+      await vi.advanceTimersByTimeAsync(0);
+      await sent;
+      expect(stepping()).toBe(true);
+      await vi.advanceTimersByTimeAsync(LIVE_WAIT);
+      expect(stepping()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('gridKey', () => {
+  it('changes when the grid’s contents do, under the same filter (a hidden preset)', () => {
+    expect(gridKey(['/a', '/b', '/c'])).not.toBe(gridKey(['/a', '/c']));
+    expect(gridKey(['/a', '/b'])).toBe(gridKey(['/a', '/b']));
+  });
+});
+
+describe('rereadOn', () => {
+  it('rereads on each change until stopped, then unsubscribes', async () => {
+    let fire = () => {};
+    const unlisten = vi.fn();
+    const reread = vi.fn();
+    const stop = rereadOn((f) => {
+      fire = f;
+      return Promise.resolve(unlisten);
+    }, reread);
+    fire();
+    fire();
+    expect(reread).toHaveBeenCalledTimes(2);
+    stop();
+    fire();
+    expect(reread).toHaveBeenCalledTimes(2);
+    await Promise.resolve();
+    expect(unlisten).toHaveBeenCalledOnce();
+  });
+});
+
+const entry = (path: string): Entry => ({
+  path,
+  name: path
+    .split('/')
+    .pop()!
+    .replace(/\.milk$/, ''),
+  group: '',
+});
+const library = [entry('/p/a.milk'), entry('/p/b.milk'), entry('/p/c.milk')];
+
+describe('firstToOpen', () => {
+  it('opens the preset asked for, as the library knows it', () => {
+    const known = { ...entry('/p/b.milk'), group: 'Geiss' };
+    expect(firstToOpen([library[0], known], '/p/b.milk', 0)).toBe(known);
+  });
+
+  it('opens a preset asked for that is not in the library by its path', () => {
+    expect(firstToOpen(library, '/elsewhere/x.milk', 0)).toEqual({ path: '/elsewhere/x.milk', name: 'x', group: '' });
+  });
+
+  it('picks through the library otherwise, never past its end', () => {
+    expect(firstToOpen(library, null, 0)).toBe(library[0]);
+    expect(firstToOpen(library, null, 0.5)).toBe(library[1]);
+    expect(firstToOpen(library, null, 1)).toBe(library[2]);
+  });
+
+  it('opens nothing from an empty library', () => {
+    expect(firstToOpen([], null, 0.3)).toBeNull();
+  });
+});
+
+describe('startFrom', () => {
+  const resume = (over: Partial<Resume>): Resume => ({ playlist: null, index: null, current: null, source: null, ...over });
+
+  it('opens nothing of its own while the app picks up where it left off, and shows the preset it puts back', () => {
+    expect(startFrom(library, null, resume({ current: '/p/b.milk' }), 0)).toEqual({ open: null, show: library[1] });
+    expect(startFrom(library, null, resume({ current: '/gone/x.milk' }), 0)).toEqual({ open: null, show: { path: '/gone/x.milk', name: 'x', group: '' } });
+    // A filter played again from its start: nothing to show until the deck says.
+    expect(startFrom(library, null, resume({ query: { groups: {}, text: 'x' } }), 0)).toEqual({ open: null, show: null });
+  });
+
+  it('keeps its own start with nothing to pick up, or when given one', () => {
+    expect(startFrom(library, null, null, 0.5)).toEqual({ open: library[1], show: null });
+    expect(startFrom(library, '/p/c.milk', resume({ current: '/p/b.milk' }), 0)).toEqual({ open: library[2], show: null });
+  });
+
+  it('shows what the deck plays now over the preset put back', () => {
+    expect(startFrom(library, null, resume({ current: '/p/b.milk' }), 0, '/p/c.milk')).toEqual({ open: null, show: library[2] });
+  });
+});
+
+describe('startLive', () => {
+  const does = () => ({ open: vi.fn(), random: vi.fn(), shown: vi.fn() });
+  const r: Resume = { playlist: null, index: null, current: '/p/b.milk', source: null };
+
+  it('opens the preset asked for without waiting for the resume', async () => {
+    const d = does();
+    const resume = vi.fn();
+    await startLive('/p/a.milk', d, resume);
+    expect(d.open).toHaveBeenCalledWith('/p/a.milk');
+    expect(resume).not.toHaveBeenCalled();
+  });
+
+  it('opens nothing of its own when the app put a preset back, only showing it', async () => {
+    const d = does();
+    await startLive(null, d, () => Promise.resolve(r));
+    expect(d.random).not.toHaveBeenCalled();
+    expect(d.open).not.toHaveBeenCalled();
+    expect(d.shown).toHaveBeenCalledWith('/p/b.milk');
+  });
+
+  it('plays a random one when nothing was put back (a restore that failed), so the picture is never black', async () => {
+    const d = does();
+    await startLive(null, d, () => Promise.resolve(null));
+    expect(d.random).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('sameQuery', () => {
+  it('ignores the order of groups and values, and empty groups', () => {
+    expect(sameQuery({ groups: { style: ['A', 'B'], author: ['x'] }, text: 't' }, { groups: { author: ['x'], style: ['B', 'A'], colour: [] }, text: 't' })).toBe(true);
+    expect(sameQuery({ groups: { style: ['A'] }, text: 't' }, { groups: { style: ['A'] }, text: 'u' })).toBe(false);
+    expect(sameQuery({ groups: {}, text: '' }, null)).toBe(false);
+  });
+});
+
+describe('resumedQuery', () => {
+  const query: LibraryQuery = { groups: { style: ['Geiss'] }, text: 'x' };
+  const deckOn = (over: object) => ({ playlists: [], deck: { playlist: null, query: null, current: null, ...over } });
+  const answers = (r: Resume | null, deck = deckOn({ query })) => invoke.mockImplementation((cmd: unknown) => Promise.resolve(cmd === 'resume_state' ? r : cmd === 'playlists' ? deck : null));
+
+  it('is the filter picked up with no playlist while the deck plays it, until a library shows it or the user changes it', async () => {
+    answers({ playlist: null, index: null, current: null, source: null, query });
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toEqual(query);
+    forgetResumedQuery();
+    expect(await resumedQuery()).toBeNull();
+  });
+
+  it('is none once the deck has moved on: a playlist loaded from the home, or another filter', async () => {
+    answers({ playlist: null, index: null, current: null, source: null, query }, deckOn({ playlist: 'mine' }));
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
+    answers({ playlist: null, index: null, current: null, source: null, query }, deckOn({ query: { groups: {}, text: 'other' } }));
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
+  });
+
+  it('is none with a playlist picked up, or nothing', async () => {
+    answers({ playlist: 'mine', index: 0, current: null, source: null, query });
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
+    answers(null);
+    forgetResumedQuery(true);
+    expect(await resumedQuery()).toBeNull();
+  });
+});

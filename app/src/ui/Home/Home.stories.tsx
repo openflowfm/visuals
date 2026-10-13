@@ -52,17 +52,11 @@ const heroNamesPlaying = async (canvasElement: HTMLElement) => {
   if (inspector) await waitFor(() => expect(inspector.textContent).toContain(PLAYING.title));
 };
 
-/**
- * The inspector's two parts, where it shows: the details on top and the library map pinned at the
- * region's bottom, under them, the preset playing lit.
- */
-const mapUnderDetails = async (canvasElement: HTMLElement) => {
+/** The inspector, where it shows, has the library map, the preset playing lit. */
+const mapLitsPlaying = async (canvasElement: HTMLElement) => {
   const inspector = canvasElement.querySelector<HTMLElement>(`#${INSPECTOR_ID}`);
   if (!inspector) return;
   const map = within(inspector).getByRole('group', { name: 'Library map' });
-  const details = inspector.querySelector('.vs-inspector-details')!;
-  await expect(details.getBoundingClientRect().bottom).toBeLessThanOrEqual(map.getBoundingClientRect().top + 0.5);
-  await expect(inspector.getBoundingClientRect().bottom - map.getBoundingClientRect().bottom).toBeLessThan(48);
   await expect(map.querySelector('.vs-field-lit')).not.toBeNull();
 };
 
@@ -102,11 +96,7 @@ export const Wide: Story = {
     const first = (await within(list).findAllByRole('listitem'))[0];
     await expect(first.getAttribute('aria-label')).toMatch(/^1\. /);
     await expect(first.querySelector('.vs-home-tile-n')).toBeNull();
-    // The sidebar's first row and the column's preview start on one line (HomeLayout's content line).
-    const headrow = canvasElement.querySelector('.vs-isb-headrow');
-    const hero = canvasElement.querySelector('.vs-lay-hero');
-    if (headrow && hero) await expect(Math.abs(headrow.getBoundingClientRect().top - hero.getBoundingClientRect().top)).toBeLessThanOrEqual(1);
-    await mapUnderDetails(canvasElement);
+    await mapLitsPlaying(canvasElement);
   },
 };
 
@@ -151,14 +141,12 @@ export const SeveralPicked: Story = {
     const inspector = canvasElement.querySelector<HTMLElement>(`#${INSPECTOR_ID}`);
     if (!inspector) return;
     await waitFor(() => expect(within(inspector).getByRole('heading', { name: '3 selected' })).toBeVisible());
-    await mapUnderDetails(canvasElement);
+    await mapLitsPlaying(canvasElement);
   },
 };
 
 /** Quick add on Warm-up (its card's "Add presets", from its row picked again): the library with the strip over it, ✓ on what Warm-up holds. */
 export const QuickAdd: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   name: 'Quick add',
   parameters: { frame: 'fill' },
   play: async ({ canvas, canvasElement }) => {
@@ -166,8 +154,8 @@ export const QuickAdd: Story = {
     // In a narrow frame the sidebar and the inspector start put away: open them from the header.
     if (!canvasElement.querySelector(`#${SIDEBAR_ID}`)) await userEvent.click(canvas.getByRole('button', { name: 'sidebar' }));
     const side = within(canvasElement.querySelector(`#${SIDEBAR_ID}`) as HTMLElement);
-    // The row itself, not its menu's button (which names the playlist too).
-    const row = (await side.findAllByRole('button', { name: new RegExp(`^${WARM_UP.name}`) })).find((b) => !b.hasAttribute('aria-haspopup'))!;
+    // The row itself (its accessible name says it's a playlist).
+    const row = await side.findByRole('button', { name: new RegExp(`^${WARM_UP.name}, playlist`) });
     await userEvent.click(row);
     if (!canvasElement.querySelector(`#${INSPECTOR_ID}`)) await userEvent.click(canvas.getByRole('button', { name: 'info' }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add presets' }));

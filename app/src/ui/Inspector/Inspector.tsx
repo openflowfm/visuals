@@ -104,7 +104,7 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
 }
 
 /** Escape calls `onClose`, unless something inside took it first (a popover, the tag box, a rename) or it was typed in a text box. */
-function useEscape(onClose: InspectorProps['onClose']) {
+export function useEscape(onClose: InspectorProps['onClose']) {
   const close = useRef(onClose);
   close.current = onClose;
   const on = !!onClose;

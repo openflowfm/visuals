@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { ActionButtonFace as ButtonFace } from '@satoramoto/zen';
 import { useForm, type Forms, type Length } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
@@ -9,6 +8,7 @@ import { movesByItself, playsFrom, presetLength } from '../model/home';
 import type { LiveState } from '../model/live-model';
 import { nameOf, notice } from '../model/shell';
 import type { StageDockProps } from '../model/stage-model';
+import { useElapsed } from '../model/useElapsed';
 import { TransportBar, type TransportBarProps } from '../TransportBar/TransportBar';
 import './StageDock.css';
 
@@ -27,18 +27,6 @@ export const STAGE_DOCK_FORMS: Forms<StageDockForm> = [
   { id: 'stacked', min: { w: { control: 10 }, h: H_TWO }, ideal: { w: { control: 10 }, h: H_TWO }, grow: { w: true, h: true } },
 ];
 
-/** Seconds on the preset playing, ticking each second while one plays, from when it opened (`since`, ms; a re-open of the same preset restarts it); null while nothing plays. */
-function useElapsed(current: string | null, since: number, length: number | null): TransportBarProps['position'] {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    setNow(Date.now());
-    if (!current) return;
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [current, since]);
-  return current ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
-}
-
 /**
  * Home's floating transport driving the deck: the auto-change ring is HOLD (H; its tooltip says
  * whether and when it moves on), ◀ ▶ step, the dice random, the preset playing and where from at
@@ -47,7 +35,7 @@ function useElapsed(current: string | null, since: number, length: number | null
  */
 function useTransport(live: LiveState): TransportBarProps {
   const deck = live.deck;
-  const position = useElapsed(live.current, live.since, deck ? presetLength({ ...deck, hold: live.held }) : null);
+  const position = useElapsed(live.since, live.current !== null, deck ? presetLength({ ...deck, hold: live.held }) : null);
   const name = live.current ? nameOf(live.current) : null;
   return {
     layout: 'overlay',

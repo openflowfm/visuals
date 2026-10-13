@@ -2,8 +2,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import type * as pl from '../playlists.ts';
 import type { CameraFrame } from '../camera/api.ts';
+import type * as pl from '../ui/model/playlists';
 import { handler, seeded, world } from './backend.ts';
 import * as F from './fixtures.ts';
 

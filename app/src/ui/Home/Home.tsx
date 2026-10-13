@@ -58,6 +58,7 @@ import { INSPECTOR_KEY, modesFor, offersQuickAdd, paneName, SIDEBAR_KEY, type Qu
 import { Header, NoticeBanner, openSheet, Preview, type View } from '../Views/Views';
 import { problemKey, useSettingsProblems } from '../model/survive';
 import { say, Say } from '../model/words';
+import { useElapsed } from '../model/useElapsed';
 import './Home.css';
 
 // A port of visual[flow]'s `app/src/Home.tsx` and the screen-level rules of `home.css`: the same
@@ -1019,18 +1020,6 @@ export function unindexed(e: Entry): LibraryRow {
   return { key: e.path, path: e.path, hash: '', style, sub_style: sub, authors: [], title: e.name, thumbnail: null, look: null, starter: false };
 }
 
-/** Seconds on the preset playing, ticking each second while `on`, with its length before the deck moves on, or a null length when it stays until moved on; null (the bar's time line blank) while nothing plays. */
-function useElapsed(since: number, on: boolean, length: number | null): { elapsed: number; length: number | null } | null {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!on) return;
-    setNow(Date.now());
-    const t = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(t);
-  }, [on, since]);
-  return on ? { elapsed: Math.max(0, (now - since) / 1000), length } : null;
-}
-
 /**
  * Settings files that couldn't be read or kept (#99), each a quiet note over the
  * grid in the words the app wrote, until dismissed for this session. The live
@@ -1067,7 +1056,7 @@ export function firstPane(lists: Lists): Pane {
 }
 
 /** The library's index with the user's data over it, read again as either changes; null until read. `apply` takes a change's answer at once. */
-function useLibraryRows() {
+export function useLibraryRows() {
   const [index, setIndex] = useState<LibraryRow[] | null>(null);
   const [data, setData] = useState<LibraryData | null>(null);
   useEffect(() => {
@@ -1098,7 +1087,7 @@ function usePlayed() {
 }
 
 /** A playlist's presets as its grid shows them, in play order: while it plays shuffled, the deck's own order, which the page can't work out itself. */
-function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] | null, played: string[]): { tiles: StripTile[]; total: number } {
+export function useStrip(list: Playlist | null, lists: Lists | null, rows: Prepared[] | null, played: string[]): { tiles: StripTile[]; total: number } {
   const deck = lists?.deck ?? pl.EMPTY_DECK;
   const active = !!list && deck.playlist === list.id;
   const [order, setOrder] = useState<string[] | null>(null);

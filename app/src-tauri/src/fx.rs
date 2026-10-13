@@ -1504,9 +1504,9 @@ mod tests {
         }
     }
 
-    /// The fields of `interface Fx` in the page's `fx.ts`, which reads the `fx` event.
+    /// The fields of `interface Fx` in the page's `ui/model/fx.ts`, which reads the `fx` event.
     fn page_fields() -> Vec<String> {
-        let ts = include_str!("../../src/fx.ts");
+        let ts = include_str!("../../src/ui/model/fx.ts");
         let body = ts.split("export interface Fx {").nth(1).and_then(|s| s.split("\n}").next()).expect("interface Fx in fx.ts");
         body.lines().map(str::trim).filter(|l| !l.starts_with("/*") && !l.starts_with('*') && !l.starts_with("//")).filter_map(|l| l.split_once(':').map(|(name, _)| name.trim().to_string())).collect()
     }

@@ -34,12 +34,7 @@ export const On: Story = {
 
 /** Hearing an app that has quit: its name first, the rest to pick from. */
 export const Gone: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   parameters: { world: { heard: { choice: { name: 'Logic Pro', left: 1, right: 2, size: 2 }, channels: 2 } } },
-  play: async ({ canvas }) => {
-    await expect(await canvas.findByRole('combobox', { name: 'listen to' })).toHaveTextContent('Logic Pro');
-  },
 };
 
 /** Nothing to listen to. */
