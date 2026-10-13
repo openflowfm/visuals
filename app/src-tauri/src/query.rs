@@ -1,5 +1,5 @@
 //! Smart playlists: a [`LibraryQuery`], the page's library filter (`LibraryQuery`
-//! in `app/src/api.ts`), worked out from Rust over the library's rows
+//! in `app/src/ui/model/api.ts`), worked out from Rust over the library's rows
 //! ([`crate::catalog::rows`]) and what the user keeps about them
 //! ([`crate::userlib`]).
 //!
