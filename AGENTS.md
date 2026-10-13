@@ -20,9 +20,14 @@ its commands in `ui/model/lab.ts`, never `ui/model/api.ts`): `app/src/Lab.tsx` (
 only) renders `VisualsApp` with `lab={VisualsEditor}`, so none of the editor reaches the
 app's page. The UI reaches zen only through its public entries: `@satoramoto/zen` (and its
 `@satoramoto/zen/zen.css`) everywhere, `@satoramoto/zen/storybook` in stories, tests and
-`ui/fixtures/` only; never a deeper path. The older modules beside it in `app/src`
-(`api.ts`, `playlists.ts`, `layout/`…) are what `app/src/stories/` (the App stories' fake
-Tauri app) and their tests use.
+`ui/fixtures/` only; never a deeper path. `app/src/stories/` (the App stories' fake
+Tauri app) uses `ui/model/` too; there are no older copies of the modules beside it any more.
+
+**What gets tested.** Hooks and models (`ui/model/`, and a part's own hooks in
+`<Name>.hooks.test.tsx` beside it) have unit tests; stories' plays check behaviour (keys
+and clicks → state, callbacks, focus, aria). Layout is zen's job: no test or play asserts
+positions, sizes, overlap or computed styles; only the app's own decisions (when the
+sidebar and inspector dock, Stage's forms) are tested.
 
 **Working on the app and zen together.** A generic control, a token or a theme is zen's;
 a screen or a part of this app is `app/src/ui/`. To change both at once:
@@ -60,8 +65,8 @@ colours or radii, the tiers) still describe `app/src/ui/`, but nothing here test
 | `cargo fmt --all --check` | the Rust is formatted (`rustfmt.toml`: width 200; `cargo fmt --all` fixes it) | any `.rs` change |
 | `npm run format:check` | the editor page (`app/src`) is formatted with Prettier (`.prettierrc.json`: single quotes, width 200; `npx prettier --write app/src` fixes it) | any change under `app/src` |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
-| `npx vitest run --project unit <files>` | targeted unit tests (`app/src/**/*.test.{ts,tsx}`, `app/src/ui/` among them); they run in node, and a file that mounts components in a DOM opts into one on its first line: `// @vitest-environment happy-dom` (Testing Library and user-event; `useLibrary.dom.test.tsx` is the pattern) or `// @vitest-environment jsdom` (the tests that came from zen, in `app/src/ui/`). `app/src/ui/test-setup.ts` adds jest-dom's matchers and Testing Library's cleanup | the tests next to what you changed; CI runs them all (`npm test`) |
-| `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story renders in headless Chromium without throwing, and its `play` checks pass: the UI's parts (`app/src/ui/**/*.stories.tsx`, titled `open[flow]/visuals/…`, on `app/src/ui/fixtures/`) and the whole app (`app/src/App.stories.tsx`, over `zenBridge.ts`, on `app/src/stories/` answering Tauri's IPC), never the Rust app. A story tagged `!test` is left out: 13 of the UI's, whose plays never ran in zen and fail here, until they're fixed. Needs Playwright's Chromium once (`npx playwright install chromium`) | a change under `app/src/ui/`, to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin |
+| `npx vitest run --project unit <files>` | targeted unit tests (`app/src/**/*.test.{ts,tsx}`, `app/src/ui/` among them); they run in node, and a file that mounts components in a DOM opts into one on its first line: `// @vitest-environment happy-dom` (Testing Library and user-event; `ui/model/library.dom.test.tsx` is the pattern, and `ui/model/useLive.test.tsx` for a hook on `ui/fixtures/`' backend) or `// @vitest-environment jsdom` (the tests that came from zen, in `app/src/ui/`). `app/src/ui/test-setup.ts` adds jest-dom's matchers and Testing Library's cleanup | the tests next to what you changed; CI runs them all (`npm test`) |
+| `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story renders in headless Chromium without throwing, and its `play` checks pass: the UI's parts (`app/src/ui/**/*.stories.tsx`, titled `open[flow]/visuals/…`, on `app/src/ui/fixtures/`) and the whole app (`app/src/App.stories.tsx`, over `zenBridge.ts`, on `app/src/stories/` answering Tauri's IPC), never the Rust app. No story is tagged `!test`; a play checks behaviour, never layout. Needs Playwright's Chromium once (`npx playwright install chromium`) | a change under `app/src/ui/`, to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin |
 | `npm run storybook`, `npm run build-storybook` | Storybook with hot reload on port 6006 (or `PORT`), or built into `storybook-static/`: the UI's parts and the whole app, with zen's toolbar (theme pack, mode, facets) and a Desk menu. Agents add `-- --ci --no-open --host 127.0.0.1`, run it in the background with a `trap` that stops it, and check `ps` afterwards | to look at a component's states; `build-storybook` after a change to `.storybook/` |
 | `ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`STORYBOOK_PORT` for another port than 6006) | the UI and zen's source together, hot-reloaded, in one Storybook window with zen's composed in (see "Working on the app and zen together" above). Leaves node_modules linked to the checkout: run a plain `npm install` afterwards | designing across the app and zen; agents run it in the background, stop it, check `ps`, then `npm install` |
 | `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks), so nothing outside `Lab.tsx` may import `app/src/ui/lab.ts`, `Editor/`, `StageGraph/`, `StageInspector/` or `ui/model/lab.ts` | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
@@ -137,8 +142,7 @@ or `off` for a solid window; `VISUALS_FROST_TINT=<0..1>` scales the page's tints
 so only the material changes). Only a run on screen shows the frost: headless,
 the log says `VISUALS_FROST: the main window is …` and, but for `off`, `bench: stacked [Frost, Bench, Other]`.
 Home is the inspector view: the sidebar and the inspector either side of the main column
-(`app/src/ui/model/home-model.ts`; the older copy, `app/src/layout/home-model.ts`, stays
-for its tests). The `VITE_HOME_*` flags below are read behind `import.meta.env.DEV`, so
+(`app/src/ui/model/home-model.ts`). The `VITE_HOME_*` flags below are read behind `import.meta.env.DEV`, so
 only a dev run (`npm run dev`, `npm run app`) takes them, never a build. In a dev run `VITE_HOME_PANEL=1` opens the inspector at start and
 `VITE_HOME_PANEL=0` starts it closed, at any width; `VITE_HOME_SIDEBAR=1` shows the sidebar at start and
 `VITE_HOME_SIDEBAR=0` hides it; `VITE_HOME_PICK=<path in the pack>` starts with that preset picked, shown in
@@ -182,14 +186,14 @@ release: `npm run check:no-dev-code` checks the page and the binary.
 **Contract files.** These are the shared surface every feature's parts would otherwise
 all touch. A change to them lands as its own small PR (a milestone's contract) before the
 lanes that need it; a lane that needs one asks for it rather than making it:
-`app/src/api.ts` (the commands' TS types), `app/src/main.tsx` and `app/src/zenBridge.ts`
-(what the page renders and the bridge the UI runs on), `app/src/views.tsx`,
-`app/src/words.ts` (the plain words all UI copy uses: bench → preview, the one → bar
+`app/src/ui/model/api.ts` (the commands' TS types), `app/src/main.tsx` and `app/src/zenBridge.ts`
+(what the page renders and the bridge the UI runs on), `app/src/ui/Views/Views.tsx`,
+`app/src/ui/model/words.ts` (the plain words all UI copy uses: bench → preview, the one → bar
 start…), `app/src-tauri/src/main.rs` (modules and the command list),
 `app/src-tauri/src/settings.rs`, `app/src-tauri/Cargo.toml`, `Cargo.lock`,
 `app/src-tauri/tauri.conf.json` (each lane owns its own section, such as `plugins.updater`),
 `package.json` (zen's pin among it), `vite.app.config.ts`, `.github/workflows/ci.yml`, `AGENTS.md`, `README.md`
-and `app/src/layout/home-model.ts`. The screens' own contract files (`App`, `Numbers`,
+and `app/src/ui/model/playlists.ts`. The screens' own contract files (`App`, `Numbers`,
 the home's and live's models) are in `app/src/ui/` now (`App/`, `Numbers/`,
 `model/home-model.ts`, `model/live-model.ts`, `model/stage-model.ts`). The milestone
 notes below name files as they were before the UI moved to zen and back; the screens
