@@ -35,7 +35,7 @@ export const STAGE_DOCK_FORMS: Forms<StageDockForm> = [
  */
 function useTransport(live: LiveState): TransportBarProps {
   const deck = live.deck;
-  const position = useElapsed(live.since, live.current !== null,deck ? presetLength({ ...deck, hold: live.held }) : null);
+  const position = useElapsed(live.since, live.current !== null, deck ? presetLength({ ...deck, hold: live.held }) : null);
   const name = live.current ? nameOf(live.current) : null;
   return {
     layout: 'overlay',
