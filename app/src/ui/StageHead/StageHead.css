@@ -5,9 +5,11 @@
    there moves the window. The notices are quiet words before Beat (no toasts), and "Full screen
    on…" is in the Output popover.
 
-   Tuning knobs: none. */
+   Tuning knobs: `--vs-stagehead-on`, the faint wash behind the library map's button while the
+   map is open (15% of the ink, the wireframe's). */
 
 .vs-stagehead {
+  --vs-stagehead-on: color-mix(in oklab, var(--text-1) 15%, transparent);
   display: flex;
   flex: 1;
   align-items: center;
@@ -39,8 +41,8 @@
   display: inline-flex;
 }
 
-/* The mixer, the camera, ?, settings and ✕: Home's quiet glyph tools, in Home's order, brighter on
-   hover and while what they open shows. The mixer is Home's folded audio input (its glyph and
+/* The library map, the mixer, the camera, ?, settings and ✕: Home's quiet glyph tools, in Home's
+   order after the map, brighter on hover and while what they open shows. The mixer is Home's folded audio input (its glyph and
    meter, the source in its popover). */
 .vs-stagehead-tools {
   display: inline-flex;
@@ -95,6 +97,10 @@
 .vs-stagehead .lib-action-button-face.vs-stagehead-tool:hover,
 .vs-stagehead .lib-action-button-face.vs-stagehead-tool[aria-expanded='true'] {
   color: var(--text-1);
+}
+/* The library map's button, pressed while the map is open: a faint wash behind its glyph. */
+.vs-stagehead .lib-action-button-face.vs-stagehead-map[aria-expanded='true'] {
+  background: var(--vs-stagehead-on);
 }
 .vs-stagehead .lib-action-button-face.vs-stagehead-tool:focus-visible {
   outline: 2px solid var(--vs-focus-ring);

@@ -1,16 +1,50 @@
 import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
-import { Layer } from '@satoramoto/zen';
+import { AxisPicker, Layer } from '@satoramoto/zen';
 import { Text, type TextProps } from '@satoramoto/zen';
 import type { LibraryRow, Mine } from '../model/api';
-import { bandColour, bandPaths, dotOf, dotsOf, H, M, nearest, step, timesOf, tunedPath, tunedSays, W, xOf, yOf, type Direction, type Dot } from '../model/field';
+import {
+  AXES,
+  axisOf,
+  bandPaths,
+  COLOURINGS,
+  DEFAULT_AXES,
+  dotOf,
+  dotsOf,
+  endsOf,
+  groupColour,
+  H,
+  M,
+  nearest,
+  step,
+  stylesOf,
+  timesOf,
+  trailPoints,
+  tunedPath,
+  tunedSays,
+  W,
+  withAxis,
+  xOf,
+  yOf,
+  type Direction,
+  type Dot,
+  type MapAxes,
+} from '../model/field';
 import { tileBy, tileName } from '../PresetTile/PresetTile';
 import './Field.css';
 
 export interface FieldProps {
   /** The library's rows: every measured one is a dot. */
   library: readonly LibraryRow[];
-  /** The user's data by key: speed and brightness overrides move a dot, and so does its own speed (`tune.speed`), which marks it too. */
+  /** The user's data by key: overrides, ratings and styles move a dot, and so does its own speed (`tune.speed`) on an axis showing speed, which marks it too. */
   mine?: Readonly<Record<string, Mine>>;
+  /** What the dots are placed and coloured by; `DEFAULT_AXES` (speed across, brightness up, coloured by hue) when left out. */
+  axes?: MapAxes;
+  /** A new choice of axes: given, a picker under the plot chooses across and one along its left edge chooses up (picking the axis the other shows swaps them); left out, the edges say the axes' ends. */
+  onAxes?(next: MapAxes): void;
+  /** Presets played, by path (`LibraryRow.path`), oldest first: a dashed line runs through their dots, older segments fainter. */
+  trail?: readonly string[];
+  /** The listbox's accessible name; "The library by speed and brightness" (the axes, in lower case) when left out. */
+  name?: string;
   /** The preset playing (lit), or null: the only one the field marks, whatever a panel beside it is about. */
   playing: string | null;
   /** How intense the preset playing is, 0–1: its ring's width; null when unmeasured. */
@@ -32,11 +66,18 @@ const ARROWS: Record<string, Direction> = { ArrowLeft: 'left', ArrowRight: 'righ
 /** A dot's name, as the tip and a screen reader say it. */
 const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
 
+const AXIS_LABELS = AXES.map((a) => a.label);
+const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
+
 /**
- * **Job.** The field: every preset in the library a faint dot by speed (slow to fast, across)
- * and brightness (dark to bright, up), the preset playing lit with a fine cursor through it and a
- * ring as wide as it is intense. Markings at the edges, no grid or frame. The dots are one SVG
- * path per hue band, so the full pack's ~9,800 draw as a dozen nodes. It is the quick way
+ * **Job.** The field: every preset in the library a faint dot by two axes (speed across and
+ * brightness up unless `axes` says otherwise: any two of speed, brightness, intensity, hue,
+ * colourfulness, my rating and style), coloured by hue, style or rating, the preset playing lit
+ * with a fine cursor through it and a ring as wide as it is intense, and, with a `trail`, a dashed
+ * line through the presets played, fading with age. Markings at the edges, no grid or frame. With
+ * `onAxes`, the edges are pickers: one along the plot's left edge for up and one under it for
+ * across, each with its ends' words. The dots are one SVG path per colour group, so the full
+ * pack's ~9,800 draw as a dozen nodes. It is the quick way
  * through the whole library: the pointer finds the dot nearest it, hover names it, a click plays
  * it. From the keyboard the field is one stop, a listbox whose one rendered option is the dot
  * under its cursor: the arrows move the cursor to the nearest dot that way, Enter (or Space)
@@ -50,20 +91,28 @@ const nameOf = (row: LibraryRow) => tileName(row.title, row.path);
  * float's glass, edge and cast instead of a raised tint and a hand-made shadow) whose element is a
  * caption `Text`; the edges' words are `Text`s in capitals on a tight line. The markings'
  * hairline is the ink at a fifth rather than a literal white, so it follows the palette. Classes
- * are `vs-field-*`.
+ * are `vs-field-*`. The axes, the colouring, the trail and the pickers are new (`axes`, `onAxes`,
+ * `trail`, `name`; `ColourPicker` for a title row); the edges' words follow the axes.
  *
  * **Kept.** Its other props, the drawing (box, ticks, dots, ring, cursor), hover's tip,
- * the arrows' cursor, the roles and names.
+ * the arrows' cursor, the roles, and with the default axes its names and words.
  *
  * **Tuning knobs**
  * - `--vs-field-hair`: the markings' hairline colour.
  * - `--vs-field-at`: the tip's place across, 0–1 (set inline from the dot).
  * - `--vs-field-tip-width`: the tip's widest.
  */
-export function Field({ library, mine, playing, intensity, hue, description, onPick }: FieldProps) {
-  const dots = useMemo(() => dotsOf(library, mine), [library, mine]);
+export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, name, playing, intensity, hue, description, onPick }: FieldProps) {
+  const dots = useMemo(() => dotsOf(library, mine, axes), [library, mine, axes]);
   const paths = useMemo(() => bandPaths(dots), [dots]);
   const tuned = useMemo(() => tunedPath(dots), [dots]);
+  const needStyles = axes.colour === 'style' || axes.across === 'style' || axes.up === 'style';
+  const styles = useMemo(() => (needStyles ? stylesOf(library, mine) : []), [needStyles, library, mine]);
+  const trailAt = useMemo(() => (trail?.length ? trailPoints(dots, trail) : []), [dots, trail]);
+  const across = axisOf(axes.across);
+  const up = axisOf(axes.up);
+  const acrossEnds = endsOf(axes.across, styles);
+  const upEnds = endsOf(axes.up, styles);
   const [hover, setHover] = useState(-1);
   // The keyboard's cursor, by key, so it stays on its preset if the library changes under it.
   const [cursorKey, setCursorKey] = useState<string | null>(null);
@@ -109,14 +158,23 @@ export function Field({ library, mine, playing, intensity, hue, description, onP
   const optionId = `${id}-dot`;
   const ring = 5 + (intensity ?? 0) * 11;
 
+  const pickAxis = (which: 'across' | 'up') => (i: number) => {
+    const next = AXES[i];
+    if (next && onAxes) onAxes(withAxis(axes, which, next.id));
+  };
+
   return (
-    <figure className="vs-field">
-      <Axis className="vs-field-axis-top">bright</Axis>
+    <figure className="vs-field" data-pickers={onAxes ? '' : undefined}>
+      {onAxes ? (
+        <AxisPicker className="vs-field-pick-up" orientation="vertical" label="Up" items={AXIS_LABELS} index={AXES.indexOf(up)} low={upEnds.low} high={upEnds.high} onChange={pickAxis('up')} />
+      ) : (
+        <Axis className="vs-field-axis-top">{upEnds.high}</Axis>
+      )}
       <div
         className="vs-field-plot"
         role="listbox"
         tabIndex={0}
-        aria-label="The library by speed and brightness"
+        aria-label={name ?? `The library by ${across.label.toLowerCase()} and ${up.label.toLowerCase()}`}
         aria-describedby={`${id}-says`}
         aria-activedescendant={active ? optionId : undefined}
         onKeyDown={onKeyDown}
@@ -147,10 +205,11 @@ export function Field({ library, mine, playing, intensity, hue, description, onP
           </g>
           <g className="vs-field-dots" data-dim={lit >= 0 ? '' : undefined}>
             {paths.map((p) => (
-              <path key={p.band} d={p.d} stroke={bandColour(p.band)} />
+              <path key={p.band} d={p.d} stroke={groupColour(axes.colour, p.band, styles)} />
             ))}
           </g>
           {tuned && <path className="vs-field-tuned" d={tuned} />}
+          {trailAt.length > 1 && <Trail points={trailAt} />}
           {lit >= 0 && <Lit dot={dots[lit]} ring={ring} hue={hue} />}
           {tip && <circle className="vs-field-hot" cx={tip.x} cy={tip.y} r={4} />}
         </svg>
@@ -176,12 +235,50 @@ export function Field({ library, mine, playing, intensity, hue, description, onP
       <span className="vs-field-sr" id={`${id}-says`}>
         {description}.{lit >= 0 && dots[lit].tuned ? ` ${tunedSays(dots[lit])}.` : ''} Arrow keys move among the presets; Enter plays one.
       </span>
-      <Axis className="vs-field-axis-low">dark</Axis>
-      <Axis className="vs-field-axis-x">
-        <span>slow</span>
-        <span>fast</span>
-      </Axis>
+      {onAxes ? (
+        <AxisPicker className="vs-field-pick-x" label="Across" items={AXIS_LABELS} index={AXES.indexOf(across)} low={acrossEnds.low} high={acrossEnds.high} onChange={pickAxis('across')} />
+      ) : (
+        <>
+          <Axis className="vs-field-axis-low">{upEnds.low}</Axis>
+          <Axis className="vs-field-axis-x">
+            <span>{acrossEnds.low}</span>
+            <span>{acrossEnds.high}</span>
+          </Axis>
+        </>
+      )}
     </figure>
+  );
+}
+
+/** The map's colour choice, for its title row: a picker of hue, style or rating, no ends. */
+export function ColourPicker({ axes, onAxes }: { axes: MapAxes; onAxes(next: MapAxes): void }) {
+  return (
+    <AxisPicker
+      className="vs-field-pick-colour"
+      label="Colour"
+      items={COLOUR_LABELS}
+      index={Math.max(
+        0,
+        COLOURINGS.findIndex((c) => c.id === axes.colour),
+      )}
+      onChange={(i) => {
+        const next = COLOURINGS[i];
+        if (next && next.id !== axes.colour) onAxes({ ...axes, colour: next.id });
+      }}
+    />
+  );
+}
+
+/** The presets played: a dashed line through their dots, each segment fainter the older it is. */
+function Trail({ points }: { points: readonly { x: number; y: number }[] }) {
+  const n = points.length - 1;
+  return (
+    <g className="vs-field-trail" aria-hidden="true">
+      {points.slice(1).map((p, i) => {
+        const a = points[i];
+        return <path key={i} d={`M${a.x.toFixed(1)} ${a.y.toFixed(1)}L${p.x.toFixed(1)} ${p.y.toFixed(1)}`} style={{ opacity: 0.15 + (0.75 * (i + 1)) / n }} />;
+      })}
+    </g>
   );
 }
 

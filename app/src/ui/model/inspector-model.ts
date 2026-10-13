@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import { TUNE_MAX, TUNE_MIN, type LibraryChange, type LibraryRow, type Level, type Look, type Mine, type Overrides } from './api';
 import { colourOf, valueLabel, type Colour, type Prepared } from './librarySearch';
 import type { Playlist } from './playlists';
+import type { AxisId } from './field';
 // UI import: PresetTile.tsx (pure helpers), where the screen port puts it.
 import { tileBy, tileName } from '../PresetTile/PresetTile';
 
@@ -188,19 +189,36 @@ export function tunePosition(multiplier: number): number {
   return Math.min(TUNE_POSITION_MAX, Math.max(TUNE_POSITION_MIN, Math.log2(multiplier)));
 }
 
+/** How the field's words name an axis ("by speed and brightness"). */
+const AXIS_NAMES: Record<AxisId, string> = { speed: 'speed', brightness: 'brightness', intensity: 'intensity', hue: 'hue', colourfulness: 'colourfulness', rating: 'my rating', style: 'style' };
+/** A preset's word on an axis ("slow", "dark", "red"), or null where it has none (rating; colourfulness unless grey). */
+const AXIS_WORD: Record<AxisId, (c: Character) => string | null> = {
+  speed: (c) => c.speed.word,
+  brightness: (c) => c.brightness.word,
+  intensity: (c) => c.intensity.word,
+  hue: (c) => c.hues[0]?.colour ?? null,
+  colourfulness: (c) => (c.grey ? 'grey' : null),
+  rating: () => null,
+  style: (c) => c.style || null,
+};
+
 /**
- * What the field says about the preset playing: "Slow and dark, among 9,791 presets".
+ * What the field says about the preset playing on its axes (`axes`, across then up; speed and
+ * brightness when left out): "Slow and dark, among 9,791 presets"; an axis with no word for the
+ * preset is left out, and with neither it says "On the map".
  * `count` is how many presets the field draws (those measured) and `total` how
  * many the library holds: the count is said only when the field draws them all,
  * so a library of 9,791 with 250 measured never reads "among 250 presets".
  */
-export function fieldSays(c: Character | null, count: number, total: number = count): string {
+export function fieldSays(c: Character | null, count: number, total: number = count, axes: readonly [AxisId, AxisId] = ['speed', 'brightness']): string {
   const n = count.toLocaleString('en-US');
   const all = count >= total;
   const among = all ? `, among ${n} presets` : '';
-  if (!c) return all ? `The library: ${n} presets by speed and brightness` : `The library by speed and brightness: ${n} of its ${total.toLocaleString('en-US')} presets drawn so far`;
-  const words = [c.speed.word, c.brightness.word].filter((w): w is string => !!w);
-  if (c.unmeasured || !words.length) return `Not drawn yet${among}`;
+  const by = axes.map((a) => AXIS_NAMES[a]).join(' and ');
+  if (!c) return all ? `The library: ${n} presets by ${by}` : `The library by ${by}: ${n} of its ${total.toLocaleString('en-US')} presets drawn so far`;
+  if (c.unmeasured) return `Not drawn yet${among}`;
+  const words = axes.map((a) => AXIS_WORD[a](c)).filter((w): w is string => !!w);
+  if (!words.length) return `On the map${among}`;
   const said = listed(words);
   return `${said.charAt(0).toUpperCase()}${said.slice(1)}${among}`;
 }

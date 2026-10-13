@@ -87,7 +87,9 @@ export function useLive({ start, windowed }: { start: string | null; windowed?: 
   useTauriEvent(pl.onLists, setLists);
   useTauriEvent(pl.onLive, (now) => {
     setLists((l) => (l ? { ...l, deck: now.deck } : l));
+    // An open (the map's pick) says what plays only in the deck (`emit_deck`: no `path`), so follow the deck's current too.
     if (now.path) setCurrent(now.path);
+    else if (now.deck.current) setCurrent(now.deck.current);
     setSince((was) => sinceAfter(was, now, Date.now()));
     // A preset that opened clears a failure to open the last one.
     if (now.error) setError(openFailed(now.path, now.error));

@@ -1,0 +1,81 @@
+/* Live's map panel (LiveMap.tsx): the Effects panel's frame at the Stage's right (a raised
+   Surface, no backdrop: the native picture under it can't be blurred; in the Stage's Opaque scope
+   it draws its solid). Its height is its content's (the field's 4:3 at its width) up to the slot
+   the Stage gives it, scrolling past that. Contract variables only, plus the local knob declared
+   in LiveMap.tsx:
+
+   --vs-live-map-pad  the panel's padding (20px, the Effects panel's) */
+
+.vs-live-map {
+  --vs-live-map-pad: calc(var(--space-4) + var(--space-1)); /* 20px */
+  /* Raised: captions take the raised step. */
+  --text-3: var(--vs-caption-raised);
+  --lib-surface-backdrop: none;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: var(--vs-live-map-pad);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-card);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  pointer-events: auto;
+}
+
+/* The head: "Map", what it shows, the colour picker, and ✕ at its end. */
+.vs-live-map-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.vs-live-map-title {
+  flex: none;
+  margin: 0;
+  --text-size: var(--vs-text-heading);
+  color: var(--text-1);
+}
+.vs-live-map-caption {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vs-live-map-fill {
+  flex: 1 1 0;
+}
+.vs-live-map .lib-action-button-face.vs-live-map-close {
+  flex: none;
+  width: var(--control-h);
+  margin-right: calc(var(--space-2) * -1);
+  padding: 0;
+  color: var(--text-3);
+}
+.vs-live-map .lib-action-button-face.vs-live-map-close:hover {
+  color: var(--text-1);
+}
+
+/* This set | Library, under the head. */
+.vs-live-map-scope {
+  flex: none;
+  align-self: flex-start;
+}
+
+/* The field at the panel's width (its own 4:3). */
+.vs-live-map > .vs-field {
+  flex: none;
+}
+
+.vs-live-map .lib-action-button-face:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}

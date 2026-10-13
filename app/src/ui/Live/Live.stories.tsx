@@ -4,6 +4,9 @@ import { withLibraryTheme, withStoryFrame } from '@satoramoto/zen/storybook';
 import { Lights } from '../HomeLayout/HomeLayout';
 import { FX_BUSY, LISTS, PLAYING_DECK, WARM_UP } from '../fixtures/fixtures';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
+import { DEFAULT_AXES } from '../model/field';
+import { setMapAxes } from '../model/mapPrefs';
+import { resetTrail } from '../model/trail';
 import { Live } from './Live';
 
 /**
@@ -11,7 +14,8 @@ import { Live } from './Live';
  * and over it, on hover, the header's bare type along the top (laid out as
  * Home's) and Home's floating transport: the preset at the top left, and at
  * the foot Effects, ◀ ring ▶ centred, the dice and star. Effects (or E) opens
- * the effects panel at the left. No sidebar, no dock bar, no toasts. It plays
+ * the effects panel at the left; the header's map button (or G) the library
+ * map at the right. No sidebar, no dock bar, no toasts. It plays
  * in the window on the way in, "Full screen on…" in the Output popover until a
  * display is picked (only a start in live mode, `windowed` false, opens the
  * output by itself). `\` pins the controls shown; ? lists every control. The
@@ -101,6 +105,94 @@ export const EffectsOpen: Story = {
     const win = canvasElement.querySelector('.vs-stagelayout')!.getBoundingClientRect();
     await expect([r.left - win.left, r.top - win.top]).toEqual([20, 64]);
   },
+};
+
+/** The library map, its panel, and where the Stage puts it. */
+const mapOf = (el: HTMLElement) => within(el).getByRole('complementary', { name: 'Library map' });
+const mapButton = (el: HTMLElement) => within(el).getByRole('button', { name: 'Library map' });
+/** A rect relative to the Stage's window. */
+const inWindow = (el: HTMLElement, r: DOMRect) => {
+  const win = el.querySelector('.vs-stagelayout')!.getBoundingClientRect();
+  return { left: r.left - win.left, top: r.top - win.top, right: win.right - r.right, bottom: win.bottom - r.bottom };
+};
+const apart = (a: DOMRect, b: DOMRect) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+/** What played this session before Warm-up's third preset (the deck's current): the map's dashed trail has somewhere to go. */
+const PLAYED = [WARM_UP.items[5].path, WARM_UP.items[0].path, WARM_UP.items[1].path, WARM_UP.items[2].path];
+
+/**
+ * Wireframe D: G opens the library map at the right, 20px in and 64px down, with the session's
+ * trail dashed through what played; the header's map button pressed. A dot picked from the
+ * keyboard (→ then Enter on the field) plays, the lit dot moving to it; a short Esc puts the map
+ * away and gives focus back to the map button.
+ */
+export const MapOpen: Story = {
+  name: 'Map open',
+  beforeEach: () => resetTrail(PLAYED),
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
+    await userEvent.keyboard('g');
+    const map = await waitFor(() => mapOf(canvasElement));
+    await shows(canvasElement);
+    await expect(mapButton(canvasElement)).toHaveAttribute('aria-expanded', 'true');
+    const at = inWindow(canvasElement, map.getBoundingClientRect());
+    await expect([Math.round(at.right), Math.round(at.top)]).toEqual([20, 64]);
+    await waitFor(() => expect(map.querySelector('.vs-field-trail')).not.toBeNull());
+    // Another dot from the keyboard: the field's cursor starts on the preset playing; → moves it, Enter plays it.
+    const field = await within(map).findByRole('listbox');
+    await waitFor(() => expect(map.querySelector('.vs-field-lit')).not.toBeNull());
+    const before = map.querySelector('.vs-field-lit')!.outerHTML;
+    field.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(map.querySelector('.vs-field-lit')?.outerHTML).not.toBe(before));
+    await waitFor(() => expect(within(map).getByRole('option')).toHaveAccessibleName(/playing$/));
+    // A short Esc (down and up) puts it away, and focus goes back to the map button.
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(within(canvasElement).queryByRole('complementary', { name: 'Library map' })).toBeNull());
+    await expect(mapButton(canvasElement)).toHaveAttribute('aria-expanded', 'false');
+    await expect(mapButton(canvasElement)).toHaveFocus();
+  },
+};
+
+/** The map on other axes (intensity across, hue up, coloured by style): the pickers on its edges say so. */
+export const MapOtherAxes: Story = {
+  name: 'Map on other axes',
+  beforeEach: () => {
+    setMapAxes({ across: 'intensity', up: 'hue', colour: 'style' });
+    return () => setMapAxes(DEFAULT_AXES);
+  },
+  play: async ({ canvasElement }) => {
+    await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
+    await userEvent.keyboard('g');
+    const map = await waitFor(() => mapOf(canvasElement));
+    await expect(within(map).getByRole('combobox', { name: /^Across/ })).toHaveTextContent('Intensity');
+    await expect(within(map).getByRole('combobox', { name: /^Up/ })).toHaveTextContent('Hue');
+  },
+};
+
+/** E and G: the effects panel at the left and the map at the right, both shown, never overlapping. */
+async function effectsAndMap(canvasElement: HTMLElement) {
+  await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
+  await userEvent.keyboard('e');
+  await userEvent.keyboard('g');
+  const canvas = within(canvasElement);
+  const effects = await canvas.findByRole('complementary', { name: 'Effects' });
+  const map = await waitFor(() => mapOf(canvasElement));
+  await shows(canvasElement);
+  await expect(effects).toBeVisible();
+  await expect(map).toBeVisible();
+  await expect(apart(effects.getBoundingClientRect(), map.getBoundingClientRect())).toBe(true);
+}
+
+export const EffectsAndMap: Story = {
+  name: 'Effects and map',
+  play: async ({ canvasElement }) => effectsAndMap(canvasElement),
+};
+
+export const EffectsAndMapNarrow: Story = {
+  name: 'Effects and map, 1000 × 700',
+  parameters: { frame: { w: 1000, h: 700 } },
+  play: async ({ canvasElement }) => effectsAndMap(canvasElement),
 };
 
 /** Pinned shown (`\`) at 1440 × 900, to judge the overlay's look. */

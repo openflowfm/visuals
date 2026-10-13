@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
 import { assemble, principlesFor, type Placement } from '@satoramoto/zen';
 import { packs } from '@satoramoto/zen';
-import { stageSpec } from './StageLayout';
+import { StageLayout, stageSpec } from './StageLayout';
 
 // Live's Stage assembled under the visuals pack's principles: which forms the header and the
 // controls take, from their needs alone (docs/assembly.md). No crate: the column is the window.
@@ -54,5 +55,42 @@ describe('the Stage assembles itself', () => {
     expect(from).toBeLessThanOrEqual(1070);
     for (let w = from; w <= 1400; w += 10) expect(dockAt(w)).toBe('full');
     expect(dockAt(from - 1)).toBe('stacked');
+  });
+});
+
+// The panels' slots (warning owed, so the native preview isn't mounted: nothing reaches the app).
+describe('the Stage’s panels', () => {
+  const stageWith = (panel: boolean, side: boolean) =>
+    render(<StageLayout warning inWindow head={<p>head</p>} dock={<p>dock</p>} panel={panel ? <aside aria-label="Effects" /> : null} side={side ? <aside aria-label="Library map" /> : null} />)
+      .container;
+
+  it('puts the effects panel at the left and the map at the right, both in the overlay, the panel first, then the map, then the screen', () => {
+    const c = stageWith(true, true);
+    const root = c.querySelector('.vs-stagelayout')!;
+    expect(root).toHaveAttribute('data-panel');
+    expect(root).toHaveAttribute('data-side');
+    const reveal = c.querySelector('.vs-stagelayout-reveal')!;
+    const panel = reveal.querySelector('.vs-stagelayout-panel')!;
+    const side = reveal.querySelector('.vs-stagelayout-side')!;
+    expect(panel.querySelector('[aria-label="Effects"]')).not.toBeNull();
+    expect(side.querySelector('[aria-label="Library map"]')).not.toBeNull();
+    const order = [...reveal.querySelectorAll('.vs-stagelayout-panel, .vs-stagelayout-side, .vs-stagelayout-screen')].map((el) => el.className.split(' ').find((n) => n.startsWith('vs-stagelayout-')));
+    expect(order).toEqual(['vs-stagelayout-panel', 'vs-stagelayout-side', 'vs-stagelayout-screen']);
+  });
+
+  it('makes both panels inert while the warning is owed', () => {
+    const c = stageWith(true, true);
+    expect(c.querySelector('.vs-stagelayout-panel')).toHaveAttribute('inert');
+    expect(c.querySelector('.vs-stagelayout-side')).toHaveAttribute('inert');
+  });
+
+  it('says data-side only while the map is there, and draws no empty slot', () => {
+    const c = stageWith(true, false);
+    expect(c.querySelector('.vs-stagelayout')).not.toHaveAttribute('data-side');
+    expect(c.querySelector('.vs-stagelayout-side')).toBeNull();
+    const m = stageWith(false, true);
+    expect(m.querySelector('.vs-stagelayout')).toHaveAttribute('data-side');
+    expect(m.querySelector('.vs-stagelayout')).not.toHaveAttribute('data-panel');
+    expect(m.querySelector('.vs-stagelayout-panel')).toBeNull();
   });
 });

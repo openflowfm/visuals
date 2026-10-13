@@ -33,6 +33,8 @@ export interface LiveKeyTargets {
   panels?: () => void;
   /** E: open the Stage's effects panel, or close it (only the Stage has it). */
   effects?: () => void;
+  /** G: open the Stage's library map, or close it (only the Stage has it). */
+  map?: () => void;
   /** Esc pressed: shows the Stage's hidden panels or puts a laid-over crate away; true when it was used. Only Esc held leaves. */
   escape?: () => boolean;
   /** Esc went down and is being held toward leaving (true), or the hold ended: let go, cancelled or done (false). */
@@ -138,6 +140,12 @@ export function liveKeys(to: LiveKeyTargets, holdMs = LEAVE_HOLD_MS) {
         if (!e.repeat) to.effects();
         return;
       }
+      if (e.key.toLowerCase() === 'g' && !e.shiftKey) {
+        if (!to.map) return;
+        e.preventDefault();
+        if (!e.repeat) to.map();
+        return;
+      }
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to.act({ kind: 'next' });
       else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to.act({ kind: 'previous' });
       else if (e.key.toLowerCase() === 'r') to.act({ kind: 'random' });
@@ -200,6 +208,7 @@ export function useLiveKeys(to: LiveKeyTargets): EscapeFeed {
       sheetOpen: () => (latest.current.sheetOpen ?? modalOpen)(),
       panels: () => latest.current.panels?.(),
       effects: () => latest.current.effects?.(),
+      map: () => latest.current.map?.(),
       escape: () => latest.current.escape?.() === true,
       holding: (on) => latest.current.holding?.(on),
     });

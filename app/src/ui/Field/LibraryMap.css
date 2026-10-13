@@ -1,5 +1,5 @@
 /* The library map (LibraryMap.tsx): the inspector region's bottom section, a Group whose label is
-   the heading ("Library map") with its count and axes as the aside, then the Field. A plain part
+   the heading ("Library map") with its count, axes and colour picker as the aside, then the Field. A plain part
    of the panel: no fill, no shadow, a hairline over it. The section sets no inset of its own; the
    inspector gives it the panel's (Inspector.css). Contract variables and visuals.css tokens only. */
 
@@ -32,9 +32,19 @@
   text-overflow: ellipsis;
   color: var(--vs-caption-raised);
 }
+/* No overflow clip here: the colour picker's list opens from the aside. The count ellipsizes itself. */
 .vs-map > .lib-group__head .lib-group__aside {
   min-width: 0;
-  overflow: hidden;
+}
+/* The aside: the count and axes, then the colour's picker. */
+.vs-map-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.vs-map-head > .vs-field-pick-colour {
+  flex: none;
 }
 /* Nothing playing: what the dots are, under the heading. */
 .vs-map-help {
