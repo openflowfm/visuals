@@ -32,7 +32,7 @@
     "design": "app/design.sh"
   },
   "dependencies": {
-    "@satoramoto/zen": "github:satoramoto/zen#6439363862065a51d90be258411c077ca58811c5",
+    "@satoramoto/zen": "github:satoramoto/zen#3672b5f912832d11404976a74f0d8a8cae9217e0",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
