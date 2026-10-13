@@ -64,6 +64,25 @@ describe('useEscape', () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it('dismisses the toast first while one shows, without closing', () => {
+    const onClose = vi.fn();
+    const dismiss = vi.fn();
+    const { rerender } = renderHook(({ toast }: { toast?: () => void }) => useEscape(onClose, toast), { initialProps: { toast: dismiss as (() => void) | undefined } });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+    rerender({ toast: undefined });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismisses a toast even with nothing to close', () => {
+    const dismiss = vi.fn();
+    renderHook(() => useEscape(undefined, dismiss));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(dismiss).toHaveBeenCalledTimes(1);
+  });
+
   it('stops listening once unmounted', () => {
     const onClose = vi.fn();
     const { unmount } = renderHook(() => useEscape(onClose));

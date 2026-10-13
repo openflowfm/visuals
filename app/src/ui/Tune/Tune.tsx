@@ -85,7 +85,13 @@ export function TuneCard({ subjects, onSet }: { subjects: readonly Prepared[]; o
       className="vs-tune"
       aside={
         tuned && (
-          <Text as="button" type="button" className="vs-tune-reset" onClick={reset} title={`Play ${it} ${say('preset tune reset')}: ${several ? 'their' : 'its'} own speed and ${say('preset sensitivity')}`}>
+          <Text
+            as="button"
+            type="button"
+            className="vs-tune-reset"
+            onClick={reset}
+            title={`Play ${it} ${say('preset tune reset')}: ${several ? 'their' : 'its'} own speed and ${say('preset sensitivity')}`}
+          >
             {say('preset tune reset')}
           </Text>
         )
