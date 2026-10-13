@@ -7,6 +7,7 @@ import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixture
 import { DEFAULT_AXES } from '../model/field';
 import { setMapAxes } from '../model/mapPrefs';
 import { resetTrail } from '../model/trail';
+import { resetLiveMapScope } from '../LiveMap/scope';
 import { Live } from './Live';
 
 /**
@@ -40,7 +41,12 @@ const meta = {
   component: Live,
   decorators: [withLights, withVisualsFrame, withStoryFrame, withLibraryTheme],
   globals: VISUALS_GLOBALS,
-  beforeEach: visualsBeforeEach,
+  // The map's trail and scope are the page's session's (module state): each story starts them over.
+  beforeEach: (ctx) => {
+    resetTrail();
+    resetLiveMapScope();
+    return visualsBeforeEach(ctx);
+  },
   args: { start: null, onMode: () => {} },
   parameters: { scope: 'bare', layout: 'fullscreen', frame: WINDOW },
 } satisfies Meta<typeof Live>;
