@@ -224,7 +224,7 @@ fn main() {
                 *state.bench.lock().unwrap() = Some(thread);
                 // The opt-in camera experiment must never resume a saved microphone or system-audio source.
                 if !(cfg!(feature = "dev-bridge") && std::env::var("VISUALS_CAMERA_LAB").as_deref() == Ok("1")) {
-                    listen::resume(&state);
+                    listen::start(app.handle());
                 }
                 dev::capture(app.handle());
             }

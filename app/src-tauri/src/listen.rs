@@ -414,6 +414,11 @@ fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &
 /// asks nothing about the microphone before the welcome's "Listen to" step has
 /// said why. Nothing chosen once the first run is done (finished, skipped, or an
 /// install from before the welcome): the system's default input, as before.
+pub fn start(handle: &tauri::AppHandle) {
+    use tauri::Manager;
+    resume(&handle.state::<App>());
+}
+
 pub fn resume(app: &App) {
     let _operation = app.audio.operation.lock().unwrap();
     *app.audio.preferences.lock().unwrap() = crate::settings::load("audio-lanes.json").unwrap_or_default();
