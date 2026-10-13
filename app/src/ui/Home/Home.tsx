@@ -48,6 +48,11 @@ import { Hero, HERO_PIC } from '../Hero/Hero';
 import { TransportAudio, TransportBar } from '../TransportBar/TransportBar';
 import { InsetSidebar, sidebarSections } from '../InsetSidebar/InsetSidebar';
 import { Inspector } from '../Inspector/Inspector';
+import { LibraryHead } from '../Library/LibraryHead';
+import { LibraryMapView } from '../Field/LibraryMapView';
+import { ColourPicker } from '../Field/Field';
+import { useMapAxes } from '../model/mapPrefs';
+import { inspectorShowsMap, listRows, roomShowsMap, useLibraryView } from '../model/libraryView';
 import { Icon } from '../Icon/Icon';
 import { INSPECTOR_KEY, modesFor, offersQuickAdd, paneName, SIDEBAR_KEY, type QuickAdd, type Selection, type SidebarActions } from '../model/home-model';
 import { Header, NoticeBanner, openSheet, Preview, type View } from '../Views/Views';
@@ -123,7 +128,13 @@ const ownsArrows = (target: EventTarget | null): boolean => {
  * `--mat-plate-inset`, tightened to `--space-4` in the pane's small form. ✕ glyphs are the icon set's
  * `close` (as Views' NoticeBanner). ⌘F finds the search inside the header's toolbar slot
  * (any input the library portals there), not by the library's class names; ← → R leave
- * the sidebar alone by its id (`SIDEBAR_ID`), not its class.
+ * the sidebar alone by its id (`SIDEBAR_ID`), not its class. The room under the hero has a head
+ * row (`LibraryHead`: the source, how many it shows, **Grid | Map**); the choice is the app's
+ * (`useLibraryView`, kept like the map's axes). In Map view (wireframe B) the room shows the map
+ * (`LibraryMapView`) of what the grid would show: the library or Starred as searched and filtered,
+ * a playlist's presets; a dot plays as its tile would; the inspector leaves its map section out
+ * (`inspectorShowsMap`). Quick add keeps the grid. The hero keeps its size; with the head row the
+ * grid starts under it rather than reaching up behind the preview.
  *
  * **Kept.** Every piece of state, the optimistic play and its undo, the deck's word and
  * the click's claim, the keys (⌃⌘S, ⌘I, ⌘F, Esc's order, ?, ← → R H with the isTyping and
@@ -650,6 +661,46 @@ export function Home({
     if (modes.inspector === null) choose('inspector', true);
   };
 
+  // A dot played (the inspector's map, or a playlist's map with no tile for it): at once and on its own (not from a playlist
+  // shown); what was picked is let go, so the details, the map's ring and the grid follow what plays from here on.
+  const playDot = (row: LibraryRow) => {
+    const p = byKey.get(row.key);
+    if (!p) return;
+    toSource();
+    void load(entryOf(p), true);
+  };
+  // A tile of a playlist's grid played: from that place in it, the inspector showing it at once.
+  const playTile = (t: StripTile) => {
+    const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
+    playAt(t.index, t.path, t.name, undo);
+  };
+
+  // The library's view (Grid or Map, the app's choice): in Map view the room under the hero shows the map, and the inspector
+  // leaves its own map section out (never two maps). Quick add keeps the grid, where a click adds.
+  const [view, setView] = useLibraryView();
+  const [axes, setAxes] = useMapAxes();
+  const roomMap = roomShowsMap(view, quickAdd !== null);
+  const libraryHead = (title: string, count: number | null, countTitle?: string) => (
+    <LibraryHead
+      title={title}
+      count={count}
+      countTitle={countTitle}
+      view={view}
+      onView={setView}
+      switchable={quickAdd === null}
+      aside={roomMap ? <ColourPicker axes={axes} onAxes={setAxes} /> : null}
+    />
+  );
+  // A playlist's map: its presets as dots; one played from its place in the playlist, as its tile would.
+  const listMapRows = useMemo(() => (list && roomMap ? listRows(list, rows ?? [], played.paths) : []), [list, roomMap, rows, played.paths]);
+  const playListDot = (row: LibraryRow) => {
+    if (row.path === current?.path) return;
+    const t = tiles.find((x) => x.path === row.path);
+    if (!t) return playDot(row);
+    if (tilesPicked.length) pickInList([]);
+    playTile(t);
+  };
+
   const sourceName = paneName(shown, lists);
   // The playlist's head: its card in the inspector, or over its pane while it is empty.
   const playlistHead = (variant: 'pane' | 'inspector') =>
@@ -800,14 +851,10 @@ export function Home({
               mine={data?.presets}
               onSet={setData}
               onAddTo={addTo}
-              // A dot in the library map plays at once, as a library tile's play does, and on its own (not from a playlist shown):
-              // what was picked is let go, so the details, the map's ring and the grid follow what plays from here on.
-              onPick={(row: LibraryRow) => {
-                const p = byKey.get(row.key);
-                if (!p) return;
-                toSource();
-                void load(entryOf(p), true);
-              }}
+              // A dot in the library map plays at once, as a library tile's play does, and on its own (`playDot`).
+              onPick={playDot}
+              // In Map view the room shows the map: the inspector's section goes, the details take the region.
+              map={inspectorShowsMap(view, quickAdd !== null)}
               onBack={toSource}
               onPlay={picked.length === 1 ? playPicked : undefined}
               chosen={picked.length > 1 ? picked : undefined}
@@ -855,6 +902,11 @@ export function Home({
                           selected: keysOf(sel),
                           controls: INSPECTOR_ID,
                           adding: adding && { name: adding.name, has: addingPaths, onToggle: toggleAdded },
+                          head: ({ shown: n, total: all, filtered }) =>
+                            libraryHead(sourceName, filtered ? n : all, filtered ? `${n.toLocaleString('en-US')} of ${all.toLocaleString('en-US')} presets shown` : undefined),
+                          map: roomMap
+                            ? (dots, play) => <LibraryMapView rows={dots} mine={data?.presets} playing={playingShown} source={shown.kind === 'library' ? undefined : sourceName} onPick={play} />
+                            : null,
                         }}
                       />
                     )}
@@ -862,25 +914,29 @@ export function Home({
                 </div>
               </>
             ) : list && lists ? (
-              <PlaylistPane
-                key={list.id}
-                list={list}
-                lists={lists}
-                tiles={tiles}
-                total={total}
-                rows={rows}
-                dropping={dropping}
-                picked={tilesPicked}
-                onPick={pickInList}
-                onPlay={(t) => {
-                  const undo = showPlayed(library.find((e) => e.path === t.path) ?? { path: t.path, name: t.name, group: '' });
-                  playAt(t.index, t.path, t.name, undo);
-                }}
-                onLists={setLists}
-                onError={(what) => fail(`Couldn't ${what}.`)}
-                onLibrary={() => pick({ kind: 'library' })}
-                head={emptyHead || undefined}
-              />
+              <>
+                {libraryHead(list.name, total)}
+                {roomMap && tiles.length > 0 ? (
+                  <LibraryMapView rows={listMapRows} mine={data?.presets} playing={playingShown} source={list.name} onPick={playListDot} />
+                ) : (
+                  <PlaylistPane
+                    key={list.id}
+                    list={list}
+                    lists={lists}
+                    tiles={tiles}
+                    total={total}
+                    rows={rows}
+                    dropping={dropping}
+                    picked={tilesPicked}
+                    onPick={pickInList}
+                    onPlay={playTile}
+                    onLists={setLists}
+                    onError={(what) => fail(`Couldn't ${what}.`)}
+                    onLibrary={() => pick({ kind: 'library' })}
+                    head={emptyHead || undefined}
+                  />
+                )}
+              </>
             ) : null}
             <DragGhost />
           </div>

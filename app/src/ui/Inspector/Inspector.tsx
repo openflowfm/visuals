@@ -14,6 +14,12 @@ import './Inspector.css';
 
 export type { InspectorProps } from '../model/inspector-model';
 
+/** Whether the inspector has its library map section. */
+export interface InspectorMap {
+  /** False leaves the section out (Home's library in Map view shows the map itself); the details take the whole region. True when left out. */
+  map?: boolean;
+}
+
 /**
  * **Job.** The inspector ("Scope"): the right-hand region's two parts. On top, the details of
  * what is selected, as Finder's and Photos' inspectors show it; at the bottom, pinned, the
@@ -41,12 +47,14 @@ export type { InspectorProps } from '../model/inspector-model';
  * sits on the black key at 60% rather than a literal black. The map is no longer one of the
  * details (between the facts and the tune, given up for several picked's pictures or a source's
  * card): it is its own section under them, always there, lighting the preset playing rather than
- * the one shown. A dot plays rather than shows (the Home's `onPick`).
+ * the one shown. A dot plays rather than shows (the Home's `onPick`). With `map={false}` (Home's
+ * library in Map view, which shows the map in the grid's room) the section is left out and the
+ * details take the whole region.
  *
  * **Kept.** Its props, the details' order, every name, role, title and word, Escape closing it
  * unless something inside took the key first or it was typed in a text box.
  */
-export function Inspector(props: InspectorProps) {
+export function Inspector({ map = true, ...props }: InspectorProps & InspectorMap) {
   const { subject: p, playing, playingPreset, chosen, source, error, playlists, library, mine, onSet, onAddTo, onPick, onPlay, onEdit, onBack, onClose } = props;
   const many = chosen && chosen.length > 1 ? chosen : null;
   const picked = !many && p !== null && p.row.key !== playing;
@@ -90,7 +98,7 @@ export function Inspector(props: InspectorProps) {
           </Text>
         )}
       </div>
-      <LibraryMap library={library} mine={mine} playing={lit} onPick={pick} />
+      {map && <LibraryMap library={library} mine={mine} playing={lit} onPick={pick} />}
     </div>
   );
 }

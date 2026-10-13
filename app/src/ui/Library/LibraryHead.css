@@ -1,0 +1,33 @@
+/* The library's head row on Home (LibraryHead.tsx): the source's name and count at the left, the
+   Grid | Map switch (the theme's tabs material) and, in Map view, the colour picker at the right.
+   No fill, no rule: it sits on the column's padding, as the grid does. Contract variables and
+   visuals.css tokens only. */
+
+.vs-libhead {
+  --vs-library-head-pad: var(--space-2);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--vs-library-head-pad) var(--vs-home-pad, var(--mat-plate-inset));
+}
+.vs-libhead-title {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-1);
+}
+.vs-libhead-count {
+  flex: none;
+  color: var(--text-3);
+  font-family: var(--font-readout);
+}
+.vs-libhead-fill {
+  flex: 1;
+}
+.vs-libhead-views,
+.vs-libhead > .vs-field-pick-colour {
+  flex: none;
+}
