@@ -8,14 +8,14 @@
  */
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
-import type * as api from '../api.ts';
 import { validateCameraFrame, type CameraFrame } from '../camera/api.ts';
-import type { AudioStatus, AudioLane } from '../audio-api.ts';
-import type * as fx from '../fx.ts';
-import type * as link from '../link.ts';
-import type * as output from '../output.ts';
-import type * as pack from '../pack.ts';
-import type * as pl from '../playlists.ts';
+import type * as api from '../ui/model/api';
+import type { AudioStatus, AudioLane } from '../ui/model/audio-api';
+import type * as fx from '../ui/model/fx';
+import type * as link from '../ui/model/link';
+import type * as output from '../ui/model/output';
+import type * as pack from '../ui/model/pack';
+import type * as pl from '../ui/model/playlists';
 import * as F from './fixtures.ts';
 
 /** Two sources are the same by identity, never by display name (zen's SourcePicker matches the same way). */
@@ -52,7 +52,7 @@ export interface World {
   crashes: api.CrashReport[];
   crashesEnabled: boolean;
   update: api.Update | null;
-  updateChannel: api.UpdateChannels;
+  updateChannel: api.UpdateChannel;
   sources: api.AudioSources;
   heard: api.Heard;
   audio?: AudioStatus;
@@ -580,7 +580,7 @@ export function handler(w: World) {
       case 'update_channel':
         return w.updateChannel;
       case 'update_channel_set':
-        w.updateChannel = { ...w.updateChannel, channel: args.channel as api.UpdateChannel };
+        w.updateChannel = { ...w.updateChannel, channel: args.channel as api.UpdateChannelName };
         w.update = null;
         return w.updateChannel;
     }
