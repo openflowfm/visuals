@@ -64,11 +64,11 @@ describe('useLiveKeys', () => {
     renderHook(() => useLiveKeys(t));
     key('keydown', 's');
     key('keydown', 'f');
-    t.fx.mockClear();
+    vi.mocked(t.fx).mockClear();
     setVisibility('visible');
     expect(t.fx).not.toHaveBeenCalled();
     setVisibility('hidden');
-    expect(t.fx.mock.calls).toEqual([[hitAction('strobe', false)], [hitAction('freeze', false)]]);
+    expect(vi.mocked(t.fx).mock.calls).toEqual([[hitAction('strobe', false)], [hitAction('freeze', false)]]);
   });
 
   it('the window losing focus lets go too', () => {

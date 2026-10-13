@@ -208,7 +208,7 @@ describe('the effect keys that hold', () => {
     const keys = liveKeys(t);
     keys.keydown(press('F', { shiftKey: true }));
     keys.keyup({ key: 'F' });
-    expect(t.fx.mock.calls).toEqual([[hitAction('freeze', null)]]);
+    expect(vi.mocked(t.fx).mock.calls).toEqual([[hitAction('freeze', null)]]);
   });
 
   it('the window losing focus lets go of every effect held', () => {
@@ -218,7 +218,7 @@ describe('the effect keys that hold', () => {
     keys.keydown(press('f'));
     vi.mocked(t.fx).mockClear();
     keys.blur();
-    expect(t.fx.mock.calls).toEqual([[hitAction('punch', false)], [hitAction('freeze', false)]]);
+    expect(vi.mocked(t.fx).mock.calls).toEqual([[hitAction('punch', false)], [hitAction('freeze', false)]]);
     keys.keyup({ key: 'p' });
     keys.blur();
     expect(t.fx).toHaveBeenCalledTimes(2);
@@ -230,7 +230,7 @@ describe('the effect keys that hold', () => {
     keys.keydown(press('b'));
     keys.keydown(press('b', { repeat: true }));
     keys.keydown(press('0'));
-    expect(t.fx.mock.calls).toEqual([[{ kind: 'blackout', on: null }], [{ kind: 'fx_reset' }]]);
+    expect(vi.mocked(t.fx).mock.calls).toEqual([[{ kind: 'blackout', on: null }], [{ kind: 'fx_reset' }]]);
   });
 });
 
