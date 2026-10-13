@@ -72,6 +72,11 @@
   color: var(--text-1);
 }
 
+/* The toast's live region, always there: no box of its own, so no gap while empty. */
+.vs-inspector-toast-region {
+  display: contents;
+}
+
 /* The Never toast, under the header: what it did, and Undo. A quiet well, not a box of its own. */
 .vs-inspector-toast {
   display: flex;

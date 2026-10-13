@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
 import { Slider, Text, type Param } from '@satoramoto/zen';
 import { detentSays, TUNE_DETENTS, TUNE_POSITION_MAX, TUNE_POSITION_MIN, TUNE_STEPS, tuneDragged, tuneNudged, tunePosition, tuneSays, tuneStepped, tuneTyped } from '../model/inspector-model';
 
@@ -93,6 +93,14 @@ export function TuneSlider({ name, value, onChange, disabled = false, title }: T
     set(v);
   };
 
+  // zen's double-click goes back to its default, which is the value it is handed while Mixed, so it may not call back: put them all to 1× here, before it, and once.
+  const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    if (!mixed || disabled || !(e.target as HTMLElement).closest('.vs-tune-rail')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    set(1);
+  };
+
   // Whether the typing is still open: the blur that follows Enter or Escape (as the field goes) mustn't commit again.
   const typing = useRef(false);
   const startTyping = () => {
@@ -120,7 +128,7 @@ export function TuneSlider({ name, value, onChange, disabled = false, title }: T
   };
 
   return (
-    <div className="vs-tune-slider" data-disabled={disabled || undefined} data-mixed={(mixed && !disabled) || undefined} onKeyDownCapture={onKeyDownCapture}>
+    <div className="vs-tune-slider" data-disabled={disabled || undefined} data-mixed={(mixed && !disabled) || undefined} onKeyDownCapture={onKeyDownCapture} onDoubleClickCapture={onDoubleClick}>
       <div className="vs-tune-slider-line">
         <Text role="caption" className="vs-tune-slider-caption" id={caption} truncate>
           {name}

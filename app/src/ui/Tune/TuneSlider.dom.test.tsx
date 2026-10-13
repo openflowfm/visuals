@@ -95,6 +95,15 @@ describe('the tune slider', () => {
     expect(says()).toBe('2×');
   });
 
+  it('double-click while "Mixed" sets them all to 1×', () => {
+    const onChange = vi.fn();
+    render(<Kept start={null} onChange={onChange} />);
+    fireEvent.doubleClick(slider());
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenLastCalledWith(1);
+    expect(says()).toBe('1×');
+  });
+
   it('does nothing while disabled', async () => {
     const onChange = vi.fn();
     render(<TuneSlider name="speed" value={1} onChange={onChange} disabled />);

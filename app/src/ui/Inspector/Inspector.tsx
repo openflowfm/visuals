@@ -70,11 +70,19 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
   const pick = (row: LibraryRow) => (row.key !== playing ? onPick(row) : aboutPlaying ? undefined : onBack());
 
   const [toast, setToast] = useState<NeverToast | null>(null);
+  // The pointer over the toast or focus in it holds it: its time starts again on leave or blur.
+  const [hover, setHover] = useState(false);
+  const [focus, setFocus] = useState(false);
   const dismiss = () => setToast(null);
   useEffect(() => {
-    if (!toast) return;
+    if (!toast || hover || focus) return;
     const t = setTimeout(() => setToast(null), TOAST_FOR);
     return () => clearTimeout(t);
+  }, [toast, hover, focus]);
+  useEffect(() => {
+    if (toast) return;
+    setHover(false);
+    setFocus(false);
   }, [toast]);
   useEscape(onClose, toast ? dismiss : undefined);
   // Never play goes on at once, and the toast keeps what to put back: only those that weren't already never played.
@@ -108,29 +116,37 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
             <CloseAction className="vs-inspector-close" onClose={onClose} />
           </div>
         )}
-        {toast && (
-          <div
-            className="vs-inspector-toast"
-            role="status"
-            onKeyDown={(ev) => {
-              if (ev.key !== 'Escape') return;
-              ev.preventDefault();
-              dismiss();
-            }}
-          >
-            <Text role="caption" className="vs-inspector-toast-words">
-              {say(toast.n > 1 ? 'never toast many' : 'never toast one')}
-            </Text>
-            <Button
-              label="Undo"
-              variant="quiet"
-              onPress={() => {
-                if (toast.restore.length) onSet(toast.restore, { hidden: false });
+        {/* Always there, so a screen reader announces the words as they come. */}
+        <div className="vs-inspector-toast-region" role="status">
+          {toast && (
+            <div
+              className="vs-inspector-toast"
+              onPointerEnter={() => setHover(true)}
+              onPointerLeave={() => setHover(false)}
+              onFocus={() => setFocus(true)}
+              onBlur={(ev) => {
+                if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) setFocus(false);
+              }}
+              onKeyDown={(ev) => {
+                if (ev.key !== 'Escape') return;
+                ev.preventDefault();
                 dismiss();
               }}
-            />
-          </div>
-        )}
+            >
+              <Text role="caption" className="vs-inspector-toast-words">
+                {say(toast.n > 1 ? 'never toast many' : 'never toast one')}
+              </Text>
+              <Button
+                label="Undo"
+                variant="quiet"
+                onPress={() => {
+                  if (toast.restore.length) onSet(toast.restore, { hidden: false });
+                  dismiss();
+                }}
+              />
+            </div>
+          )}
+        </div>
         {many ? <Selected {...props} chosen={many} /> : !p && source ? <div className="vs-inspector-source">{source}</div> : <Scope {...props} />}
         {error && (
           <Text as="p" role="caption" className="vs-inspector-error" ariaRole="alert">

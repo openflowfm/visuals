@@ -5,6 +5,7 @@ import type { LibraryRow } from '../model/api';
 import { prepareRow } from '../model/librarySearch';
 import { DATA, PLAYLISTS, ROWS } from '../fixtures/fixtures';
 import { NOW } from '../fixtures/layout';
+import { TUNE_SEND_AFTER } from '../Tune/Tune';
 import { Inspector, TOAST_FOR, type InspectorProps } from './Inspector';
 
 const PLAYING = NOW.preset!;
@@ -31,7 +32,9 @@ function props(over: Partial<InspectorProps> = {}): InspectorProps {
 }
 
 const never = () => screen.getByRole('button', { name: 'never play' });
-const toast = () => screen.queryByRole('status');
+/** The live region, always there; the toast in it, or null while it's empty. */
+const region = () => screen.getByRole('status');
+const toast = () => (region().textContent ? region() : null);
 
 afterEach(() => vi.useRealTimers());
 
@@ -70,6 +73,37 @@ describe('the Never toast', () => {
     expect(toast()).toBeNull();
   });
 
+  it('waits while the pointer is over it, and goes once it leaves', () => {
+    vi.useFakeTimers();
+    render(<Inspector {...props({ subject: prep(SHOWN[0]) })} />);
+    fireEvent.click(never());
+    const box = within(region()).getByRole('button', { name: 'Undo' }).parentElement!;
+    fireEvent.pointerEnter(box);
+    act(() => vi.advanceTimersByTime(TOAST_FOR * 3));
+    expect(toast()).not.toBeNull();
+    fireEvent.pointerLeave(box);
+    act(() => vi.advanceTimersByTime(TOAST_FOR));
+    expect(toast()).toBeNull();
+  });
+
+  it('waits while focus is on Undo, and goes once it leaves', () => {
+    vi.useFakeTimers();
+    render(<Inspector {...props({ subject: prep(SHOWN[0]) })} />);
+    fireEvent.click(never());
+    const undo = within(region()).getByRole('button', { name: 'Undo' });
+    act(() => undo.focus());
+    act(() => vi.advanceTimersByTime(TOAST_FOR * 3));
+    expect(toast()).not.toBeNull();
+    act(() => undo.blur());
+    act(() => vi.advanceTimersByTime(TOAST_FOR));
+    expect(toast()).toBeNull();
+  });
+
+  it('keeps its live region mounted, empty with no toast', () => {
+    render(<Inspector {...props({ subject: prep(SHOWN[0]) })} />);
+    expect(region()).toBeEmptyDOMElement();
+  });
+
   it('shows none for turning never play off', () => {
     const p = props({ subject: { ...prep(SHOWN[0]), hidden: true } });
     render(<Inspector {...p} />);
@@ -92,9 +126,15 @@ describe('the Never toast', () => {
 
 describe('the tune in the inspector', () => {
   it('shows for several picked, "for these presets", and sets all of them', () => {
+    vi.useFakeTimers();
     const chosen = [prep(SHOWN[0]), prep(SHOWN[1])];
-    render(<Inspector {...props({ subject: chosen[0], chosen })} />);
+    const p = props({ subject: chosen[0], chosen });
+    render(<Inspector {...p} />);
     expect(screen.getByRole('group', { name: 'for these presets' })).toBeTruthy();
+    const [speed] = screen.getAllByRole('slider');
     expect(screen.getAllByRole('slider')).toHaveLength(2);
+    fireEvent.keyDown(speed, { key: 'ArrowRight' });
+    act(() => vi.advanceTimersByTime(TUNE_SEND_AFTER));
+    expect(p.onSet).toHaveBeenCalledWith([SHOWN[0].key, SHOWN[1].key], expect.objectContaining({ tune: expect.anything() }));
   });
 });
