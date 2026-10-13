@@ -85,12 +85,12 @@ function Page({ mode, onMode, lab: Lab }: { mode: Mode; onMode(view: View, prese
   return <Home start={mode.preset} onMode={onMode} library={mode.library} />;
 }
 
-/** The lab's editor (`@satoramoto/zen/visuals/lab`'s `VisualsEditor`), as `VisualsApp` mounts it for the `editor` view. */
+/** The lab's editor (`ui/lab.ts`'s `VisualsEditor`, loaded by `Lab.tsx`), as `VisualsApp` mounts it for the `editor` view. */
 export type LabEditor = ComponentType<{ start: string | null; onMode(view: View, path: string | null): void }>;
 
 export interface VisualsAppProps {
   /**
-   * A lab build's editor (`VisualsEditor` from `@satoramoto/zen/visuals/lab`, its own entry so
+   * A lab build's editor (`VisualsEditor` from `ui/lab.ts`, its own module so
    * none of it reaches an app built without it). Given, every header's switch offers `editor`
    * and the app starts in it.
    */
