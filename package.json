@@ -31,7 +31,7 @@
     "check:no-dev-code": "node app/no-dev-code.mjs"
   },
   "dependencies": {
-    "@satoramoto/zen": "github:satoramoto/zen#bc2e62845940576f60d35aa7c6cccf6b18434e18",
+    "@satoramoto/zen": "github:satoramoto/zen#c8536c13737cc000f21e84a06275e6d5be891e3e",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
