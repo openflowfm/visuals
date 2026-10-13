@@ -1,16 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Entry, LibraryQuery, Resume } from './api.ts';
-import { firstToOpen, followAction, followGrid, forgetResumedQuery, gridKey, LIVE_WAIT, rereadOn, resumedQuery, sameQuery, startFrom, startLive, stepDeck, stepping } from './library.ts';
+import type { Entry, LibraryQuery, Resume } from './api';
+import { setBridge, type EventCallback } from './ipc';
+import { firstToOpen, followAction, followGrid, forgetResumedQuery, gridKey, LIVE_WAIT, rereadOn, resumedQuery, sameQuery, startFrom, startLive, stepDeck, stepping } from './library';
 
-const { invoke } = vi.hoisted(() => ({ invoke: vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null)) }));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
-const { heard } = vi.hoisted(() => ({ heard: new Map<string, (e: { payload: unknown }) => void>() }));
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: vi.fn((name: string, f: (e: { payload: unknown }) => void) => {
-    heard.set(name, f);
+const invoke = vi.fn((..._args: unknown[]): Promise<unknown> => Promise.resolve(null));
+const heard = new Map<string, (e: { payload: unknown }) => void>();
+setBridge({
+  invoke: <T>(cmd: string, args?: unknown) => invoke(cmd, ...(args === undefined ? [] : [args])) as Promise<T>,
+  listen: <T>(name: string, f: EventCallback<T>) => {
+    heard.set(name, f as unknown as (e: { payload: unknown }) => void);
     return Promise.resolve(() => {});
-  }),
-}));
+  },
+});
 
 /** The deck's `live` event, as it reaches the page. */
 const live = () => heard.get('live')?.({ payload: { deck: null, opened: null, path: '/p/next.milk', error: null } });

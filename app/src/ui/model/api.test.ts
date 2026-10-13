@@ -1,10 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import * as api from './api';
+import { setBridge } from './ipc';
 
 const invoke = vi.fn((..._args: unknown[]) => Promise.resolve(null));
-vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
-vi.mock('@tauri-apps/api/event', () => ({ listen: vi.fn() }));
-
-const api = await import('./api.ts');
+setBridge({ invoke: <T>(cmd: string, args?: unknown) => invoke(cmd, ...(args === undefined ? [] : [args])) as Promise<T> });
 
 describe('the library commands', () => {
   it('ask for the index and the user data by their command names', async () => {

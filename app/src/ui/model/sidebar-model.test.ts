@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { Drag } from '../drag.ts';
-import { DEFAULT_SETTINGS, EMPTY_DECK, manual, type Lists, type Playlist } from '../playlists.ts';
-import { canToggle, dropState, menuAt, menuStep, renamed, rowMenu, sidebarSections, toggleTitle } from './sidebar-model.ts';
+import type { Drag } from './drag';
+import { DEFAULT_SETTINGS, EMPTY_DECK, manual, type Lists, type Playlist } from './playlists';
+import { canToggle, dropState, menuAt, menuStep, renamed, rowMenu, sidebarSections, toggleTitle } from './sidebar-model';
 
 const item = (k: string) => ({ path: `/p/${k}.milk`, name: k, group: 'A', missing: false, hash: k });
 const smart = (id: string, name: string, recent?: number): Playlist => ({
