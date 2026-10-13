@@ -50,17 +50,19 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 test('person-only fails closed until fresh mask, and stale/duplicate frames never refresh native', () => {
+  // Freshness follows the simulated capture clock, never CI scheduling or contour-processing time.
+  let now = 1_000;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
   const capture = new BrowserCapture({ getVideoTracks: () => [] } as unknown as MediaStream, vi.fn());
   decode(1);
   expect(capture.frame(DEFAULT_CAMERA_SETTINGS)).toBeNull();
   masks.capturedAt = performance.now() - 100;
   decode(2);
   const frame = capture.frame(DEFAULT_CAMERA_SETTINGS)!;
-  expect(frame.remainingFreshMs).toBeGreaterThan(0);
-  expect(frame.remainingFreshMs).toBeLessThanOrEqual(150);
+  expect(frame.remainingFreshMs).toBe(150);
   expect([...frame.rgba.slice(0, 4)]).toEqual([255, 255, 255, 255]);
   expect(capture.frame(DEFAULT_CAMERA_SETTINGS)).toBeNull();
-  masks.capturedAt = performance.now() - 251;
+  now += 151; // The previously fresh mask is now 251 ms old.
   decode(3);
   expect(capture.frame(DEFAULT_CAMERA_SETTINGS)).toBeNull();
   capture.reset();
@@ -68,6 +70,17 @@ test('person-only fails closed until fresh mask, and stale/duplicate frames neve
   capture.dispose();
   expect(video.srcObject).toBeNull();
   expect(video.cancelVideoFrameCallback).toHaveBeenCalledWith(1);
+});
+test('frames that expire during processing never refresh native', () => {
+  let now = 1_000;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  const capture = new BrowserCapture({ getVideoTracks: () => [] } as unknown as MediaStream, vi.fn());
+  decode(1);
+  draw.mockImplementationOnce(() => {
+    now += 251;
+  });
+  expect(capture.frame({ ...DEFAULT_CAMERA_SETTINGS, personOnly: false })).toBeNull();
+  capture.dispose();
 });
 test('explicit enable asks for video with audio false, denial is surfaced', async () => {
   const acquire = vi.fn().mockRejectedValue(new Error('Denied'));
