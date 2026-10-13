@@ -1,0 +1,283 @@
+/* The transport along the bottom of the home's main column (TransportBar.tsx), from the
+   original's transport-bar.css: ◀ the auto-change ring ▶ R, the preset playing, the slow warning,
+   the audio input. It paints no background: the main column is already painted the window's tint
+   (by the hero's spread shadow, HomeLayout.css), and painting it again would make a darker strip,
+   or cover the preview were it under. No rule over it (decision 68); the keys are glyphs and type
+   with no boxes. No playhead (decision 86): presets are endless, so the ring alone says when the
+   next one comes. The audio input is quiet text. */
+
+.vs-transport {
+  /* The bar's height: 48px (the frosted panel's; the keys are 36px). */
+  --vs-transport-h: calc(var(--space-6) + var(--space-4));
+  /* How long the ring eases between the position's ticks (about once a second). */
+  --vs-transport-tick: 1s;
+  display: flex;
+  flex-direction: column;
+  height: var(--vs-transport-h);
+  padding: 0 var(--mat-plate-inset);
+  box-sizing: border-box;
+  min-width: 0;
+  background: none;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+}
+
+/* Floating over the preview's foot (`layout="overlay"`, Hero's controls): as tall as its keys,
+   no side padding of its own (the scrim pads it), and a container, so a narrow picture puts the
+   preset's name on its own line above the keys and the audio input. */
+.vs-transport[data-layout='overlay'] {
+  height: auto;
+  min-height: var(--space-6);
+  padding: 0;
+  container: vs-transport / inline-size;
+  flex: 1 1 auto;
+}
+/* The overlay fills the picture: the preset's name and where it plays from at its top-left, the
+   keys and the audio input at its foot; only the rows take clicks. */
+.vs-transport[data-layout='overlay'] .vs-transport-bar > .lib-group__body {
+  height: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr auto;
+  grid-template-areas: 'now now star' '. . .' 'keys . right';
+  align-items: end;
+}
+/* The playing preset's star, top right: an outline, filled in the ink while starred. */
+.vs-transport[data-layout='overlay'] .vs-transport-star {
+  grid-area: star;
+  align-self: start;
+  justify-self: end;
+  pointer-events: auto;
+}
+/* `diceByStar`: the dice then the star, side by side in the star's corner. */
+.vs-transport[data-layout='overlay'] .vs-transport-top {
+  grid-area: star;
+  display: flex;
+  align-self: start;
+  justify-self: end;
+  pointer-events: auto;
+}
+/* `centreKeys`: two equal side columns, so the keys' column sits dead centre; the audio input
+   (when the bar keeps it) still at the right end. */
+.vs-transport[data-layout='overlay'][data-centre-keys] .vs-transport-bar > .lib-group__body {
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-areas: 'now now star' '. . .' 'lead keys right';
+}
+/* `lead` (with `centreKeys`; Live's Effects button): at the foot's left end, on the keys' line. */
+.vs-transport[data-layout='overlay'] .vs-transport-lead {
+  grid-area: lead;
+  display: flex;
+  justify-self: start;
+  min-width: 0;
+  pointer-events: auto;
+}
+/* `footStar` (with `diceByStar`; Live's Stage): the dice and star at the foot's right end, the
+   preset's name the whole top line, and the foot's three parts centred on one line. */
+.vs-transport[data-layout='overlay'][data-foot-star] .vs-transport-bar > .lib-group__body {
+  grid-template-areas: 'now now now' '. . .' 'lead keys right';
+  align-items: center;
+}
+.vs-transport[data-layout='overlay'][data-foot-star] .vs-transport-top {
+  grid-area: right;
+  align-self: center;
+}
+.vs-transport[data-layout='overlay'][data-centre-keys] .vs-transport-keys {
+  margin-left: 0;
+}
+.vs-transport[data-layout='overlay'][data-centre-keys] .vs-transport-right {
+  justify-self: end;
+}
+.vs-transport-star[aria-pressed='true'] {
+  color: var(--text-1);
+}
+.vs-transport-star[aria-pressed='true'] .vs-icon path {
+  fill: currentColor;
+}
+.vs-transport[data-layout='overlay'] .vs-transport-keys {
+  grid-area: keys;
+}
+.vs-transport[data-layout='overlay'] .vs-transport-right {
+  grid-area: right;
+}
+.vs-transport[data-layout='overlay'] .vs-transport-mid {
+  grid-area: now;
+  align-self: start;
+  justify-content: flex-start;
+}
+.vs-transport[data-layout='overlay'] :is(.vs-transport-keys, .vs-transport-mid, .vs-transport-right) {
+  pointer-events: auto;
+}
+/* On the preview: two lines, the name a title's size over where it plays from. */
+.vs-transport[data-layout='overlay'] .vs-transport-now {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.vs-transport[data-layout='overlay'] .vs-transport-name {
+  --text-size: var(--vs-text-title);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-transport[data-layout='overlay'] .vs-transport-from {
+  margin-left: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@container vs-transport (max-width: 560px) {
+  .vs-transport .vs-transport-bar > .lib-group__body {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'now now' 'keys right';
+    row-gap: 0;
+  }
+  .vs-transport .vs-transport-keys {
+    grid-area: keys;
+  }
+  .vs-transport .vs-transport-mid {
+    grid-area: now;
+    justify-content: flex-start;
+  }
+  .vs-transport .vs-transport-right {
+    grid-area: right;
+  }
+  /* `footStar` keeps its one foot line (lead, keys centred, dice and star) however narrow. */
+  .vs-transport[data-layout='overlay'][data-foot-star] .vs-transport-bar > .lib-group__body {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-areas: 'now now now' '. . .' 'lead keys right';
+  }
+}
+
+/* The toolbar Group filling the bar; its body lays the three columns out. */
+.vs-transport .vs-transport-bar {
+  flex: 1 1 auto;
+}
+.vs-transport .vs-transport-bar > .lib-group__body {
+  display: grid;
+  /* The right column never shrinks under what it holds (its input shrinks itself first), so in a
+     narrow bar the preset's name gives way rather than running under the audio input. Columns
+     12–28px apart. */
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: clamp(var(--space-3), 3%, calc(var(--space-6) - var(--space-1)));
+}
+
+/* The keys: 6px out to the left (their own padding), 10px apart, each 32px. */
+.vs-transport .vs-transport-keys {
+  margin-left: calc(var(--space-1) * -1.5);
+}
+.vs-transport .vs-transport-keys > .lib-group__body {
+  align-items: center;
+  gap: calc(var(--space-1) * 2.5);
+}
+.vs-transport .vs-transport-key {
+  display: grid;
+  place-items: center;
+  height: var(--space-6);
+  min-width: var(--space-6);
+  padding: 0 calc(var(--space-1) * 1.5);
+  border: 0;
+  border-radius: var(--vs-lay-key-radius, var(--radius-control));
+  background: none;
+  color: var(--text-2);
+  /* A strong body Text, a pixel over the body size. */
+  --text-size: calc(var(--vs-text-body) + 1px);
+  cursor: pointer;
+}
+.vs-transport .vs-transport-key:hover {
+  color: var(--text-1);
+}
+.vs-transport .vs-transport-key:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+
+/* The auto-change ring leads, where play/pause was: 36px, the glyph a step larger. Moving on by
+   itself it is bright; its unfilled ring quiet under the fill. */
+.vs-transport .vs-transport-auto {
+  min-width: calc(var(--space-6) + var(--space-1)); /* 36px */
+  color: var(--text-1);
+}
+.vs-transport-loop-track {
+  stroke: var(--text-4);
+}
+.vs-transport-loop-fill {
+  transition: stroke-dashoffset var(--vs-transport-tick) linear;
+}
+/* Back to empty at a change: at once, never round the ring backwards. */
+.vs-transport-loop-fill[data-back] {
+  transition: none;
+}
+/* The arrowhead lights as the fill reaches it. */
+.vs-transport-loop-head {
+  stroke: var(--text-4);
+}
+.vs-transport-loop-head[data-lit] {
+  stroke: currentColor;
+}
+/* Held: an empty ring in quieter ink, brightening on hover to say a click lets go. */
+.vs-transport .vs-transport-auto[data-state='held'] {
+  color: var(--text-3);
+}
+.vs-transport .vs-transport-auto[data-state='held']:hover {
+  color: var(--text-2);
+}
+/* Nothing playing: the quietest. */
+.vs-transport .vs-transport-auto[data-state='off'] {
+  color: var(--text-4);
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-transport-loop-fill {
+    transition: none;
+  }
+}
+
+/* The middle: the preset playing; centred, and never over its neighbours however narrow the bar
+   (the keys and the audio input keep their room, layout above). */
+.vs-transport-mid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+/* The preset playing on one line, the name brighter and where it plays from quieter after it;
+   ellipsised. */
+.vs-transport-now {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  /* A body Text; the name in it strong. */
+  --text-size: var(--vs-text-body);
+}
+.vs-transport-name {
+  color: var(--text-1);
+}
+.vs-transport-from {
+  --text-size: var(--vs-text-label);
+  margin-left: calc(var(--space-1) * 2.5); /* 10px */
+  color: var(--text-3);
+  word-spacing: var(--vs-sep-space);
+}
+
+/* The audio input: quiet text and its meter, no box at rest. */
+.vs-transport-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  min-width: 0;
+  /* A body Text, which the audio input inherits. */
+  --text-size: var(--vs-text-label);
+  color: var(--text-4);
+}
+.vs-transport-right > * {
+  min-width: 0;
+}
+/* The picture drawing slowly: the warning in the bar's small type (the frame rate's own
+   --vs-text-label), in the sans, never wider than it needs. */
+.vs-transport-right .vs-stats {
+  flex: none;
+  font-family: var(--font-sans);
+  white-space: nowrap;
+}

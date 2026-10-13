@@ -28,10 +28,11 @@
     "app:lab": "VITE_LAB=1 app/run.sh --features lab",
     "dev": "app/dev.sh",
     "dev:lab": "VITE_LAB=1 app/dev.sh --features lab",
-    "check:no-dev-code": "node app/no-dev-code.mjs"
+    "check:no-dev-code": "node app/no-dev-code.mjs",
+    "design": "app/design.sh"
   },
   "dependencies": {
-    "@satoramoto/zen": "github:satoramoto/zen#ff076db6c53c92eb7d276f18d27ad994b729acbe",
+    "@satoramoto/zen": "github:satoramoto/zen#985972dcb3c274f24b0c6fa737cc42e35f8f720f",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-opener": "^2.7.0",
     "react": "^19.0.0",
@@ -40,10 +41,10 @@
   "devDependencies": {
     "@mediapipe/tasks-vision": "1.1.0",
     "@storybook/addon-docs": "^10.6.0",
-    "@storybook/addon-themes": "^10.6.0",
     "@storybook/addon-vitest": "^10.6.1",
     "@storybook/react-vite": "^10.6.0",
     "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",
     "@types/node": "^26.6.5",
@@ -54,6 +55,7 @@
     "@vitest/browser-playwright": "^5.0.3",
     "@vitest/coverage-v8": "^5.0.3",
     "happy-dom": "^20.14.6",
+    "jsdom": "^30.1.2",
     "playwright": "^1.64.0",
     "prettier": "3.9.9",
     "storybook": "^10.6.0",

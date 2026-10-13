@@ -1,0 +1,100 @@
+/* The lab's stage graph (StageGraph.tsx), from graph.css's .stage* rules, on the contract.
+   The graph, the devices and the menu paint themselves (core Graph, Device, Popup); pictures and
+   code heads are Surfaces. This file sizes things, places the fit button and picks inks from the
+   contract's meanings. */
+
+/* The graph fills its box; the fit button sits in the box's corner over it. */
+.vs-stage-graph-box {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+.vs-stage-graph-box > .vs-stage-graph {
+  position: absolute;
+  inset: 0;
+}
+
+/* The cords, by what they carry. Audio is the signal (green, as a meter); the rest are tone steps,
+   since every hue in this pack already means something (stems, decks, caution). */
+.vs-stage-graph {
+  --lib-cord-audio: var(--success);
+  --lib-cord-motion: var(--text-2);
+  --lib-cord-picture: var(--text-2);
+  --lib-cord-draw: var(--text-3);
+}
+
+/* Widths are `WIDE` and `NARROW` in stage-layout.ts, which the layout spaces by (graph units):
+   under the `roomy` scale (--space-1 is 4px) these are exactly 168px and 88px. */
+.vs-stage {
+  --vs-stage-wide: calc(var(--space-1) * 42); /* 168px */
+  --vs-stage-narrow: calc(var(--space-1) * 22); /* 88px */
+  --lib-device-width: var(--vs-stage-wide);
+}
+.vs-stage[data-kind='source'],
+.vs-stage[data-kind='out'] {
+  --lib-device-width: var(--vs-stage-narrow);
+}
+
+/* The head's leading mark and the ports, by kind: the loop's two ends (motion, feedback) full
+   ink, the shaders a step down, the layers another. The ends keep the ports' own ink. */
+.vs-stage[data-kind='motion'],
+.vs-stage[data-kind='feedback'] {
+  --lib-device-accent: var(--text-1);
+}
+.vs-stage[data-kind='shader'] {
+  --lib-device-accent: var(--text-2);
+}
+.vs-stage[data-kind='layer'] {
+  --lib-device-accent: var(--text-3);
+}
+
+/* A stage picture: 16:9, a layer's a strip of it. */
+.vs-stage-picture > canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+.vs-stage-picture[data-wide] > canvas {
+  aspect-ratio: 32 / 9;
+  object-fit: cover;
+}
+
+/* The head of the code: a few lines, cut rather than wrapped, at the caption size. */
+.vs-stage-code {
+  margin: 0;
+  padding: calc(var(--space-1) * 0.75) var(--space-1); /* 3px 4px */
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
+  cursor: text;
+}
+/* Over the code role's body size and leading. */
+.vs-stage-code-text {
+  --text-size: var(--vs-text-label);
+  --text-leading: 1.3;
+}
+
+.vs-stage-add {
+  padding-top: var(--space-1);
+}
+.vs-stage-add-anchor {
+  display: inline-block;
+}
+
+.vs-stage-add-menu {
+  padding: var(--space-1);
+}
+/* Each offer the menu's full width, its words from the start. */
+.vs-stage-add-menu .vs-stage-add-item {
+  --lib-action-button-width: 100%;
+}
+.vs-stage-add-words {
+  flex: 1;
+  min-width: 0;
+  text-align: start;
+}
+
+.vs-stage-graph-tools {
+  position: absolute;
+  inset: auto var(--space-2) var(--space-2) auto;
+}

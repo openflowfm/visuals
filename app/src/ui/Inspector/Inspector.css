@@ -1,0 +1,315 @@
+/* The inspector (Inspector.tsx), "Scope", near borderless (decision 68). The header row: back at
+   the left, the actions as bare glyphs at the right (the pressed one brighter, the star filled),
+   then ✕. Under it what it is: the name large, the authors. Then its facts (a Group): the style,
+   the measures read out as one line ("slow · dark · calm"), the colours as dots, my tags. Then
+   the tune (Tune) and the playlists holding it as a quiet line. Areas are told apart by space
+   alone. Under those details, pinned at the panel's bottom, the library map (LibraryMap.css). The panel is a raised tint, so the caption here is the raised one
+   (visuals.css --vs-caption-raised). Contract variables and visuals.css tokens only.
+
+   Type is Text's: each line of words is a `Text` in a role (the name `display` at strong weight,
+   the captions `caption`, the empty state's title `heading`), refined by the knobs on its own
+   class. Lines that had no leading of their own keep the one they inherit (`line-height:
+   inherit`, a reset), so they stand as tall as before. The panel itself sets no type: it reads
+   the app's body size from .vs-root. */
+
+/* Two parts filling the panel's body: the details on top, scrolling on their own when the region
+   is short, and the library map (LibraryMap) pinned at the bottom at the region's width. On its
+   own (no panel of a set height around it) the parts simply stack. */
+.vs-inspector {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-2);
+}
+/* The original's 14px 20px, and 20px under the details before the map's hairline. */
+.vs-inspector-details {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(var(--space-1) * 3.5) calc(var(--space-2) * 2.5) var(--space-5);
+}
+/* The details scroll rather than squeeze: each part keeps its own height. */
+.vs-inspector-details > * {
+  flex-shrink: 0;
+}
+/* The map: the panel's sides, and the original's 24px under it. */
+.vs-inspector > .vs-map {
+  margin: 0 calc(var(--space-2) * 2.5);
+  padding-bottom: var(--space-5);
+}
+
+/* The header row: back to now playing at the left; the actions, then close (laid over), at the right. */
+.vs-inspector-top {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  /* The original's 28px row, pulled out 4px up and 6px either side, 10px over the name. */
+  min-height: calc(var(--space-1) * 7);
+  margin: calc(var(--space-1) * -1) calc(var(--space-1) * -1.5) calc(var(--space-1) * 2.5);
+}
+.vs-inspector-keys + .vs-inspector-close {
+  margin-left: var(--space-1);
+}
+.vs-inspector-close {
+  display: inline-grid;
+  place-items: center;
+  /* The original's 26px. */
+  width: calc(var(--space-1) * 6.5);
+  height: calc(var(--space-1) * 6.5);
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--vs-caption-raised);
+  cursor: pointer;
+}
+.vs-inspector-close:hover {
+  color: var(--text-1);
+}
+
+/* Something that failed: one line under the rest, in the caution colour, no box. */
+.vs-inspector-error {
+  margin: var(--space-4) 0 0;
+  color: var(--warning);
+  --text-leading: 1.45;
+}
+
+/* Several picked: their first pictures, three across, the count of the rest over the last, under the facts. */
+.vs-inspector-pictures {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  /* The original's 22px, as the field's: the plate's inset. */
+  margin-top: var(--mat-plate-inset);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.vs-inspector-pictures > div {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--vs-thumb);
+}
+.vs-inspector-pictures img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-inspector-pictures-more {
+  position: absolute;
+  /* The original's 6px in, 4px up, 1px 6px padding; its 11px on the label step (12). */
+  right: calc(var(--space-1) * 1.5);
+  bottom: var(--space-1);
+  padding: 1px calc(var(--space-1) * 1.5);
+  border-radius: var(--radius-control);
+  background: color-mix(in oklab, var(--key-black) 60%, transparent);
+  color: var(--key-white);
+  /* A caption (--vs-text-label is the caption size), strong, tabular: the Text's props. */
+  line-height: inherit;
+}
+
+.vs-inspector-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  /* The original's 26px, padded 6px after and 2px before. */
+  height: calc(var(--space-1) * 6.5);
+  padding: 0 calc(var(--space-1) * 1.5) 0 2px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--vs-caption-raised);
+  cursor: pointer;
+}
+/* Its word: a caption at the original's 500. */
+.vs-inspector-back-label {
+  --text-weight: 500;
+}
+.vs-inspector-back:hover {
+  color: var(--text-1);
+}
+/* The back glyph: the chevron, turned to point back. */
+.vs-inspector-back-glyph {
+  transform: rotate(180deg);
+}
+
+/* Nothing playing: the words say so in the name's place. */
+/* The original's 17px, on the sheet-title step (16.5). */
+.vs-inspector-none-title {
+  margin: 0 0 calc(var(--space-1) * 1.5);
+  color: var(--text-1);
+  --text-size: var(--vs-text-heading);
+  line-height: inherit;
+}
+.vs-inspector-quiet {
+  margin: 0;
+  color: var(--vs-caption-raised);
+  --text-leading: 1.45;
+}
+
+/* First, the name and who made it. */
+.vs-inspector-head {
+  margin-top: var(--space-1);
+}
+.vs-inspector-top + .vs-inspector-head {
+  margin-top: 0;
+}
+/* The original's 3px dot, on the nearest step (4). */
+.vs-inspector-sep {
+  display: inline-block;
+  width: var(--space-1);
+  height: var(--space-1);
+  margin: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: currentColor;
+  opacity: 0.6;
+  vertical-align: middle;
+}
+.vs-inspector-name {
+  margin: 0;
+  color: var(--text-1);
+  /* The display face and tracking at strong weight (the Text's role and weight); the original's
+     22px, the heading step and a tenth, at 1.2. */
+  --text-size: calc(var(--size-heading) * 1.1);
+  --text-leading: 1.2;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  text-wrap: balance;
+}
+.vs-inspector-by {
+  margin: var(--space-1) 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The facts: the style, the readout (the measures as words, the colours as dots) and my tags.
+   The Group sets no space between them (gap 0): each keeps its own. */
+/* The original's 18px. */
+.vs-inspector-meta {
+  margin-top: calc(var(--space-3) * 1.5);
+}
+/* The original's 6px under it; its 11px on the label step (12): a caption, at 500, a little open. */
+.vs-inspector-style {
+  margin: 0 0 calc(var(--space-1) * 1.5);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--vs-caption-raised);
+  --text-weight: 500;
+  --text-tracking: 0.02em;
+  line-height: inherit;
+}
+.vs-inspector-words {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  color: var(--text-1);
+  /* The original's 15px: three quarters of the heading step. */
+  --text-size: calc(var(--size-heading) * 0.75);
+  --text-weight: 500;
+  line-height: inherit;
+}
+.vs-inspector-words > span {
+  display: inline-flex;
+  align-items: center;
+}
+/* The original's 9px either side of the words' dots, on the nearest step (10). */
+.vs-inspector-words .vs-inspector-sep {
+  margin: 0 calc(var(--space-1) * 2.5);
+}
+/* The original's 10px gap, 8px above. */
+.vs-inspector-hues {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-1) * 2.5);
+  margin: var(--space-2) 0 0;
+  color: var(--vs-caption-raised);
+  line-height: inherit;
+}
+/* The original's 9px dots 5px apart, on the nearest steps (10 and 4: the same 14px pitch). */
+.vs-inspector-swatches {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+.vs-inspector-swatch {
+  width: calc(var(--space-1) * 2.5);
+  height: calc(var(--space-1) * 2.5);
+  border-radius: var(--radius-pill);
+}
+.vs-inspector-swatch[data-grey] {
+  background: var(--vs-caption-raised);
+  opacity: 0.6;
+}
+
+/* The keys, in the header row: bare glyphs, no boxes, their names in their tooltips; pressed is
+   brighter, the star filled. The add key is a Popover: its button is .vs-popover-button. */
+.vs-inspector-keys {
+  margin-left: auto;
+}
+.vs-inspector-keys > .lib-group__body {
+  align-items: center;
+  gap: 2px;
+}
+.vs-inspector-keys button.vs-inspector-key,
+.vs-inspector-keys .vs-inspector-key > .vs-popover-button {
+  display: inline-grid;
+  place-items: center;
+  /* The original's 28px keys. */
+  width: calc(var(--space-1) * 7);
+  height: calc(var(--space-1) * 7);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--vs-caption-raised);
+  cursor: pointer;
+}
+.vs-inspector-keys button.vs-inspector-key:hover,
+.vs-inspector-keys button.vs-inspector-key[aria-pressed='true'],
+.vs-inspector-keys .vs-inspector-key > .vs-popover-button:hover,
+.vs-inspector-keys .vs-inspector-key > .vs-popover-button[aria-expanded='true'] {
+  color: var(--text-1);
+  text-decoration: none;
+}
+/* On some of several: brighter than off, short of on. */
+.vs-inspector-keys button.vs-inspector-key[aria-pressed='mixed'] {
+  color: var(--text-1);
+  opacity: 0.75;
+}
+/* Only the star fills; never play stays a line and reads as on by its colour. */
+.vs-inspector-key[aria-pressed='true'] .vs-icon[data-icon='star'] {
+  fill: currentColor;
+}
+.vs-inspector-keys button.vs-inspector-key:focus-visible,
+.vs-inspector-keys .vs-inspector-key > .vs-popover-button:focus-visible,
+.vs-inspector-back:focus-visible,
+.vs-inspector-close:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+
+/* My tags (TagEditor), the last of the facts. */
+/* The original's 14px. */
+.vs-inspector-mine {
+  margin-top: calc(var(--space-1) * 3.5);
+}
+.vs-inspector-meta > .lib-group__body > .vs-inspector-mine:first-child {
+  margin-top: 0;
+}
+/* The playlists holding it: a quiet line, last. */
+/* The original's 20px. */
+.vs-inspector-in {
+  margin-top: calc(var(--space-2) * 2.5);
+}

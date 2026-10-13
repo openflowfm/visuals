@@ -1,0 +1,288 @@
+/* The crate (Crate.tsx), the crate's half of the original's live/stage-crate.css, in Home's inset
+   sidebar look: quiet sentence-case headings that fold with a chevron, 40px rows on 8px pills,
+   the playlist playing the soft pill with its green dot, no lines (decision 68). The panel around
+   it (its band, the mark, its opaque tone) is StageCrate's. The pills are the ink mixed thin over
+   the panel, as the original drew them. Contract variables and visuals.css tokens only; the
+   tuning knobs (--vs-crate-*) are listed in Crate.tsx. */
+
+.vs-crate {
+  --vs-crate-row: calc(var(--space-6) + var(--space-2)); /* layout.css --lay-row, 40px */
+  --vs-crate-inset: calc(var(--space-2) + var(--space-1) / 2); /* stage-crate.css 10px: the rows' and headings' side inset */
+  --vs-crate-small: calc(var(--size-caption) - 1px); /* stage-crate.css 11px: headings, notes, counts */
+  --vs-crate-hover: color-mix(in srgb, var(--text-1) 4%, transparent);
+  --vs-crate-cued: color-mix(in srgb, var(--text-1) 6%, transparent);
+  --vs-crate-on: color-mix(in srgb, var(--text-1) 9%, transparent);
+  --vs-crate-key: color-mix(in srgb, var(--text-1) 12%, transparent);
+  --vs-crate-key-hover: color-mix(in srgb, var(--text-1) 18%, transparent);
+  /* The crate: its sections scroll inside it, the scrollbar at the panel's edge. */
+  flex: 1;
+  min-height: 0;
+  margin: 0 calc(-1 * var(--vs-crate-inset));
+  padding: 0 var(--vs-crate-inset) var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+}
+.vs-crate-section + .vs-crate-section {
+  margin-top: calc((var(--space-3) + var(--space-4)) / 2); /* 14px */
+}
+
+/* A section's heading: its title in the caption's grey, the chevron after it, faint until hovered or focused. */
+.vs-crate-head {
+  margin: 0;
+  font: inherit;
+}
+.vs-crate-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  width: 100%;
+  height: calc(var(--space-6) - var(--space-1)); /* 28px */
+  padding: 0 var(--vs-crate-inset);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+}
+/* The heading's title: a strong Text (Crate.tsx) at the crate's small size. */
+.vs-crate-title {
+  --text-size: var(--vs-crate-small);
+}
+.vs-crate-toggle:hover {
+  color: var(--text-1);
+}
+.vs-crate-chevron {
+  flex: none;
+  opacity: 0.55;
+}
+.vs-crate-toggle:is(:hover, :focus-visible) .vs-crate-chevron {
+  opacity: 1;
+}
+
+.vs-crate-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A playlist's or a mood's row: an icon, the name, the green dot when it plays, a count. */
+.vs-crate-row,
+.vs-crate-next {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-2) + var(--space-1) / 2); /* 10px */
+  box-sizing: border-box;
+  width: 100%;
+  height: var(--vs-crate-row);
+  padding: 0 var(--vs-crate-inset);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  user-select: none;
+}
+.vs-crate-row {
+  cursor: pointer;
+}
+.vs-crate-icon {
+  flex: none;
+  color: var(--text-4);
+}
+.vs-crate-row:hover {
+  color: var(--text-1);
+  background: var(--vs-crate-hover);
+}
+.vs-crate-row:hover .vs-crate-icon {
+  color: var(--text-1);
+}
+/* The playlist playing, and the moods playing: the soft pill, the name in the ink and heavier. A cued playlist's aria-pressed isn't playing. */
+.vs-crate-row:is([aria-current='true'], [aria-pressed='true']:not([data-cued])) {
+  color: var(--text-1);
+  background: var(--vs-crate-on);
+}
+.vs-crate-row:is([aria-current='true'], [aria-pressed='true']:not([data-cued])) .vs-crate-name {
+  --text-weight: var(--weight-strong);
+}
+.vs-crate-row:is([aria-current='true'], [aria-pressed='true']:not([data-cued])) .vs-crate-icon {
+  color: var(--text-1);
+}
+
+/* A playlist cued (tapped, not yet playing): a fainter pill, its name in the ink at its usual weight, room for Play at its end. */
+.vs-crate-list {
+  position: relative;
+}
+.vs-crate-row[data-cued] {
+  padding-right: calc(var(--space-6) * 2); /* 64px */
+  color: var(--text-1);
+  background: var(--vs-crate-cued);
+}
+.vs-crate-row[data-cued] .vs-crate-icon {
+  color: var(--text-1);
+}
+/* Play on the cued row: a small capsule at its end, the one step that switches the set. */
+.vs-crate-play {
+  position: absolute;
+  top: 50%;
+  right: var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: calc(var(--space-5) - 2px); /* 22px */
+  /* 0 9px 0 7px in the original, rounded to 10px and 6px (the same width) */
+  padding: 0 calc(var(--space-2) + var(--space-1) / 2) 0 calc(var(--space-1) * 1.5);
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--vs-crate-key);
+  color: var(--text-1);
+  font: inherit;
+  cursor: pointer;
+  transform: translateY(-50%);
+  user-select: none;
+}
+/* Its word: a strong Text (Crate.tsx) at the crate's small size. */
+.vs-crate-play-label {
+  --text-size: var(--vs-crate-small);
+}
+.vs-crate-play:hover {
+  background: var(--vs-crate-key-hover);
+}
+.vs-crate-play .vs-icon {
+  color: var(--vs-playing);
+}
+.vs-crate-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.vs-crate-dot {
+  flex: none;
+  /* 5px in the original, rounded to 6px */
+  width: calc(var(--space-1) * 1.5);
+  height: calc(var(--space-1) * 1.5);
+  margin-left: calc(-1 * var(--space-1));
+  border-radius: var(--radius-pill);
+  background: var(--vs-playing);
+}
+.vs-crate-count {
+  flex: none;
+  margin-left: auto;
+  padding-left: calc(var(--space-1) * 1.5); /* 6px */
+  color: var(--text-3);
+  font-family: var(--font-readout);
+  font-style: normal;
+  --text-size: var(--vs-crate-small);
+}
+.vs-crate-note {
+  margin: 0;
+  padding: var(--space-1) var(--vs-crate-inset);
+  color: var(--text-3);
+  --text-size: var(--vs-crate-small);
+  --text-leading: 1.45;
+}
+
+/* Up next: rows of the same height, quieter; one that moves shows its ≡ on hover or focus. */
+.vs-crate-next {
+  height: var(--space-6); /* 32px */
+  color: var(--text-4);
+}
+.vs-crate-next[data-moves] {
+  cursor: default;
+}
+.vs-crate-next[data-moves]:is(:hover, :focus-visible),
+.vs-crate-next[data-dragging] {
+  color: var(--text-1);
+  background: var(--vs-crate-hover);
+}
+.vs-crate-next[data-dragging] {
+  background: var(--vs-crate-on);
+}
+.vs-crate-next[data-missing] {
+  color: var(--text-3);
+}
+.vs-crate-handle {
+  display: flex;
+  visibility: hidden;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  /* 24px, pulled 6px into the row's inset */
+  width: var(--space-5);
+  height: var(--space-5);
+  margin-left: auto;
+  margin-right: calc(var(--space-1) * -1.5);
+  border-radius: var(--radius-control);
+  color: var(--text-3);
+  cursor: grab;
+  touch-action: none;
+}
+.vs-crate-next:is(:hover, :focus-within, [data-dragging]) .vs-crate-handle {
+  visibility: visible;
+}
+.vs-crate-handle:hover {
+  color: var(--text-1);
+}
+.vs-crate-handle:active {
+  cursor: grabbing;
+}
+/* Where a dragged row would land: a line between rows. */
+.vs-crate-drop {
+  position: absolute;
+  right: var(--vs-crate-inset);
+  left: var(--vs-crate-inset);
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--text-1);
+  pointer-events: none;
+}
+.vs-crate-drop[data-at='before'] {
+  top: -1px;
+}
+.vs-crate-drop[data-at='after'] {
+  bottom: -1px;
+}
+.vs-crate-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: calc(var(--space-6) - var(--space-1)); /* 28px */
+  margin-top: 2px;
+  padding: 0 var(--vs-crate-inset);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--text-3);
+  font: inherit;
+  cursor: pointer;
+}
+.vs-crate-more-label {
+  --text-size: var(--vs-crate-small);
+}
+.vs-crate-more:hover {
+  color: var(--text-1);
+}
+
+/* Only for VoiceOver: how to move a row, which the ≡ shows on screen. */
+.vs-crate-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The focus ring goes inside: the crate scrolls, and would clip one drawn outside. */
+:is(.vs-crate-row, .vs-crate-toggle, .vs-crate-next, .vs-crate-more, .vs-crate-play):focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: -2px;
+}

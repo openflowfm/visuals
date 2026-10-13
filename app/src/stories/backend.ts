@@ -457,6 +457,11 @@ export function handler(w: World) {
         w.output = F.OUTPUT_OFF;
         void emit('output', w.output);
         return w.output;
+      // The output's render settings (`ui/model/output.ts`) aren't in the Rust app yet: they fail
+      // there as here, and the page keeps the user's choice without saying so.
+      case 'output_render':
+      case 'output_set_render':
+        throw new Error(`command ${cmd} not found`);
       case 'displays':
         return w.displays;
       case 'live_start':

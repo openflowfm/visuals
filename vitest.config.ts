@@ -3,7 +3,8 @@ import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { playwright } from '@vitest/browser-playwright';
 
 // Two projects. `unit` is the editor page's unit tests, next to what they test in
-// app/src, under node (`npm test`). Named rather than left to vitest's default,
+// app/src, under node (`npm test`); a DOM test names its environment on its
+// first line, and `app/src/ui/test-setup.ts` adds jest-dom and Testing Library's cleanup. Named rather than left to vitest's default,
 // which would also walk teaser/ and any worktree under .claude/. `stories`
 // renders every story (`app/src/*.stories.tsx`) in headless Chromium and fails
 // if one throws or its play function fails (`npm run test:stories`); the addon
@@ -12,7 +13,7 @@ export default defineConfig({
   test: {
     projects: [
       {
-        test: { name: 'unit', include: ['app/src/**/*.test.{ts,tsx}'], environment: 'node' },
+        test: { name: 'unit', include: ['app/src/**/*.test.{ts,tsx}'], environment: 'node', setupFiles: ['app/src/ui/test-setup.ts'] },
       },
       {
         plugins: [storybookTest({ configDir: '.storybook' })],

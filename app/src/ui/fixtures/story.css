@@ -1,0 +1,71 @@
+/* The window a visuals story sits in (story.tsx's withVisualsFrame): the desktop behind the HUD
+   frost, the ground layer over it, and `.vs-root`. Nothing here changes a component. */
+
+/* The window's height: the canvas's, unless a story frame (storybook.tsx's withStoryFrame) sets
+   its design window's on the frame. */
+:root {
+  --story-frame-h: 100vh;
+}
+
+.vs-frame {
+  /* Set inline from the fixtures: the starter still, as the desktop and as the native preview. */
+  --vs-still: none;
+  /* How much of the ground's opaque tone the frost lays over the blurred desktop: a dark desktop
+     comes out near the solid tone, a light one shows more of itself (the original's stand-ins,
+     about #1e1e1e and #363636 over the same HUD material). */
+  --vs-frost-tint: 82%;
+  /* The window's own corners: square in a story (macOS rounds the real one). */
+  --vs-frame-radius: 0px;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  /* The canvas, or the design window inside a story frame (storybook.tsx's withStoryFrame). */
+  min-height: var(--story-frame-h, 100vh);
+}
+.vs-frame[data-desk='light'] {
+  --vs-frost-tint: 62%;
+}
+/* Reduce transparency: the material solid, no desktop through it. */
+.vs-frame[data-desk='solid'] {
+  background: var(--layer-ground-solid);
+}
+
+/* The desktop, already blurred as the frost blurs it (headless pictures can't show a live blur). */
+.vs-frame-desk {
+  position: absolute;
+  inset: calc(-1 * var(--space-6));
+  z-index: -1;
+  background: var(--vs-still) center / cover no-repeat;
+  filter: blur(28px) saturate(1.6);
+}
+.vs-frame-desk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: color-mix(in oklab, var(--layer-ground-solid) var(--vs-frost-tint), transparent);
+}
+
+/* The ground layer: transparent under glass packs (the desktop shows through), the page's own
+   ground under the others. */
+.vs-frame-ground {
+  position: relative;
+  min-height: var(--story-frame-h, 100vh);
+  border-radius: var(--vs-frame-radius);
+}
+
+/* `scope: 'home'`: a component inside the app's root, laid out as itself. */
+.vs-frame[data-scope='home'] .vs-root {
+  display: block;
+}
+/* `scope: 'bare'`: a whole view, filling the canvas. */
+.vs-frame[data-scope='bare'] .vs-root {
+  height: var(--story-frame-h, 100vh);
+}
+
+/* The native preview's stand-in: where the engine's view would show through a hole, the still. */
+.vs-root[data-still] .lib-hole {
+  background: var(--vs-still) center / cover no-repeat var(--layer-ground-solid);
+}
+.vs-root[data-still] [data-loading] > .lib-hole {
+  background: transparent;
+}

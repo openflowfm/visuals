@@ -1,0 +1,254 @@
+/* Live's Stage (StageLayout.tsx): the picture full-bleed across the main window, and over it one
+   overlay (the header and the controls on a scrim) that fades in on hover as Home's preview
+   controls do (Hero.css: the same scrim and fade). The effects panel docks at the left in the
+   overlay (no corner toasts); the warning and Esc's hold over everything.
+
+   Where the header and the controls sit and how big they are is the solver's (stageSpec in
+   StageLayout.tsx): nothing here sizes the screen, and no query decides it.
+
+   Who paints what: the picture is the native preview under the page (Views' Preview, a Hole) and
+   fills the window, so the root and every slot paint nothing; the scrim is a Surface whose fill is
+   a gradient of the window's tint (no backdrop: a blur never reaches the native view). Everything
+   sits in one Opaque scope: each layer over the picture (a popover, a toast) draws its solid.
+
+   The tuning knobs (--vs-stagelayout-*) are listed in StageLayout.tsx. */
+
+.vs-stagelayout {
+  /* The title bar's 52px (layout.css --lay-titlebar). */
+  --vs-stagelayout-titlebar: calc(var(--space-5) * 2 + var(--space-1));
+  /* The window buttons' room, 84px: x 24, three 12px buttons 8px apart, and 8px after. */
+  --vs-stagelayout-lights: calc(var(--space-5) + 3 * var(--space-3) + 3 * var(--space-2));
+  /* Hero's fade and scrim (Hero.css --vs-hero-fade, --vs-hero-scrim). */
+  --vs-stagelayout-fade: 160ms;
+  --vs-stagelayout-scrim: 85%;
+  /* The effects panel: 340px wide, 20px in from the window's left, from 64px down (12px under the
+     header) to 100px over the foot (clear of the controls' foot row, so Effects stays in sight). */
+  --vs-stagelayout-panel: calc(var(--space-6) * 10 + var(--space-4) + var(--space-1));
+  --vs-stagelayout-panel-inset: calc(var(--space-4) + var(--space-1));
+  --vs-stagelayout-panel-top: calc(var(--space-6) * 2);
+  --vs-stagelayout-panel-foot: calc(var(--space-6) * 3 + var(--space-1));
+  --vs-stagelayout-z-reveal: 1;
+  --vs-stagelayout-z-centre: 2;
+  --vs-stagelayout-z-overlay: 10;
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: none;
+}
+.vs-stagelayout-opaque {
+  position: relative;
+  height: 100%;
+}
+
+/* The picture: the whole window under everything, whatever shows over it; square (macOS rounds the window). */
+.vs-stagelayout .vs-stagelayout-picture,
+.vs-stagelayout .vs-stagelayout-dark {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  --vs-hole-radius: 0px;
+}
+.vs-stagelayout-picture > .vs-preview-hole::before {
+  content: none;
+}
+/* Until it draws, a plain opaque surface saying so. */
+.vs-stagelayout-picture[data-loading] {
+  background: var(--layer-base-solid);
+}
+/* The warning owed: nothing plays, a dark window (the base solid half way to black), opaque over whatever the native view last showed. */
+.vs-stagelayout-dark {
+  background: color-mix(in oklab, var(--layer-base-solid), var(--key-black));
+}
+
+/* The one overlay: the scrim under the assembled screen (the header and the controls), the
+   window's size. Hidden until the window is hovered, focus is inside it, one of its popovers is
+   open or `\` pinned it; always shown with no hover (touch). Only its rows take presses: the clear
+   middle passes them to the picture. */
+.vs-stagelayout-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: var(--vs-stagelayout-z-reveal);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--vs-stagelayout-fade) ease;
+}
+.vs-stagelayout:hover .vs-stagelayout-reveal,
+.vs-stagelayout-reveal:focus-within,
+.vs-stagelayout-reveal:has([aria-expanded='true']),
+.vs-stagelayout-reveal[data-pinned] {
+  opacity: 1;
+}
+/* A note owed (the header marks it `[data-note]`: no sound, a failure, a hint): the header shows
+   with the overlay otherwise hidden, on the scrim's top tint; the controls stay faded. */
+.vs-stagelayout-reveal:has(.vs-stagelayout-head [data-note]) {
+  opacity: 1;
+}
+.vs-stagelayout-dock {
+  transition: opacity var(--vs-stagelayout-fade) ease;
+}
+@media (hover: hover) {
+  .vs-stagelayout:not(:hover) .vs-stagelayout-reveal:has(.vs-stagelayout-head [data-note]):not(:focus-within):not([data-pinned]):not(:has([aria-expanded='true'])) .vs-stagelayout-dock {
+    opacity: 0;
+  }
+}
+@media (hover: none) {
+  .vs-stagelayout-reveal {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-stagelayout-reveal {
+    transition: none;
+  }
+}
+/* Hero's scrim (Hero.css .vs-hero-controls): the window's tint from the top, clear by 64px under
+   the header; from the foot, clear by about a third up so the controls' rows sit on it. */
+.vs-stagelayout .vs-stagelayout-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  --lib-surface-fill:
+    linear-gradient(to bottom, color-mix(in oklab, var(--surface-0) var(--vs-stagelayout-scrim), transparent), transparent calc(var(--space-6) * 3)),
+    linear-gradient(
+      to top,
+      color-mix(in oklab, var(--surface-0) var(--vs-stagelayout-scrim), transparent),
+      color-mix(in oklab, var(--surface-0) calc(var(--vs-stagelayout-scrim) * 0.6), transparent) calc(var(--space-6) * 3),
+      transparent calc(var(--space-6) * 6)
+    );
+}
+.vs-stagelayout .vs-stagelayout-screen {
+  position: absolute;
+  inset: 0;
+}
+
+/* The header's row: the title bar's 52px, the type centred on the window buttons' line (y 28),
+   clear of them at its start and 16px in from the right. It paints nothing; its empty line drags
+   the window. Above the controls and the effects panel, so its popovers open over them. */
+.vs-stagelayout-head {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  height: var(--vs-stagelayout-titlebar);
+  padding: 0 var(--space-4) 0 var(--vs-stagelayout-lights);
+  box-sizing: border-box;
+  pointer-events: auto;
+}
+
+/* The controls: the room under the header, 20px under it, 32px in at the sides and 36px over the
+   foot (part of their declared need: CONTROLS_W, CONTROLS_H); StageDock fills it. */
+.vs-stagelayout-dock {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: calc(var(--space-4) + var(--space-1)) var(--space-6) calc(var(--space-6) + var(--space-1));
+  box-sizing: border-box;
+}
+.vs-stagelayout-dock > * {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* The warning owed: the controls wait for "I understand". */
+.vs-stagelayout[data-warning] .vs-stagelayout-dock {
+  opacity: 0.4;
+}
+
+/* The warning, centred over the window. Only what it holds takes presses. */
+.vs-stagelayout-centre {
+  position: absolute;
+  inset: 0;
+  z-index: var(--vs-stagelayout-z-centre);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+  pointer-events: none;
+}
+.vs-stagelayout-centre > * {
+  pointer-events: auto;
+}
+
+/* The effects panel, in the overlay (it fades with it, and keeps it shown while open: its Effects
+   button is expanded): docked at the left under the header, over the controls' room but ending
+   above their foot row. Never wider than the window allows. */
+.vs-stagelayout-panel {
+  position: absolute;
+  top: var(--vs-stagelayout-panel-top);
+  bottom: var(--vs-stagelayout-panel-foot);
+  left: var(--vs-stagelayout-panel-inset);
+  z-index: 1;
+  display: flex;
+  width: min(var(--vs-stagelayout-panel), calc(100% - 2 * var(--vs-stagelayout-panel-inset)));
+  pointer-events: auto;
+}
+.vs-stagelayout-panel > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Esc held to leave live: over everything in this window (never the output), an opaque card in
+   the picture's middle with a ring filling over the hold and the line to keep holding. It shows
+   after a beat (no fade), so a short Esc flashes nothing; the ring fills from the press all the
+   same. Presses go through to what's under it. */
+.vs-stagelayout-leaving {
+  --vs-stagelayout-hold: 3s; /* set inline: LEAVE_HOLD_MS */
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--vs-stagelayout-z-overlay) + 2);
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  animation: vs-stagelayout-after-a-beat 0s linear 0.2s both;
+}
+.vs-stagelayout .lib-layer.vs-stagelayout-leaving-card {
+  display: flex;
+  align-items: center;
+  gap: calc((var(--space-3) + var(--space-4)) / 2); /* 14px */
+  /* 16px 28px 16px 18px */
+  padding: var(--space-4) calc(var(--space-6) - var(--space-1)) var(--space-4) calc(var(--space-3) * 1.5);
+  border-radius: var(--radius-pill);
+  box-shadow: var(--layer-base-edge), var(--layer-float-cast);
+}
+.vs-stagelayout-leaving-line {
+  --text-size: var(--vs-text-heading);
+  color: var(--text-1);
+  white-space: nowrap;
+}
+.vs-stagelayout-ring {
+  flex: none;
+  /* 44px */
+  width: calc(var(--space-6) + var(--space-3));
+  height: calc(var(--space-6) + var(--space-3));
+  transform: rotate(-90deg);
+}
+.vs-stagelayout-ring circle {
+  fill: none;
+  stroke-width: 4;
+}
+.vs-stagelayout-ring-track {
+  stroke: var(--text-3);
+  opacity: 0.35;
+}
+/* The ring is the hold's progress, not decoration: it fills under Reduce motion too. */
+.vs-stagelayout-ring-fill {
+  stroke: var(--text-1);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: vs-stagelayout-fill var(--vs-stagelayout-hold, 3s) linear forwards;
+}
+@keyframes vs-stagelayout-after-a-beat {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+@keyframes vs-stagelayout-fill {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

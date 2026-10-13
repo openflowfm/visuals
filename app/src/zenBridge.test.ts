@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from 'vitest';
 import { clearMocks, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
-import { currentBridge } from '@satoramoto/zen/visuals';
+import { currentBridge } from './ui';
 import { installTauriBridge } from './zenBridge.ts';
 
 let restore: (() => void) | null = null;

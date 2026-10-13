@@ -1,0 +1,28 @@
+/* The header's source picker (AudioInput.tsx). app.css, decision 63: below 760px the header gives
+   way instead of cutting off its end; the picker shrinks to 72px and its notes to nothing (their
+   titles keep the words). */
+
+.vs-audio-header {
+  display: inline-flex;
+  min-width: 0;
+}
+
+@media (max-width: 759px) {
+  /* app.css: from 180px down to 72px. */
+  .vs-audio-header .lib-select.vs-audio-source {
+    flex: 0 1 calc(var(--control-h) * 6);
+    min-width: calc(var(--space-5) * 3);
+  }
+  .vs-audio-header .vs-audio-source .lib-select__trigger {
+    width: 100%;
+    min-width: 0;
+  }
+  .vs-audio-header .vs-audio-note,
+  .vs-audio-header .vs-audio-input > .vs-warning {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}

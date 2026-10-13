@@ -1,0 +1,77 @@
+/* The output (OutputPanel.tsx), from live/stage-head.css's `.live-output` (the Stage's popover)
+   and settings.css's `.output-settings`. No panel of its own: it sits in a float layer (the
+   popover) or a sheet, so it paints nothing and draws no lines (decision 68). */
+
+.vs-output,
+.vs-output-settings {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+  /* A body Text, which the controls inside inherit. */
+  --text-size: var(--vs-text-body);
+  color: var(--text-2);
+}
+
+/* The heading: a sentence-case caption, a step lighter on glass (a strong body Text, no case). */
+.vs-output-head {
+  margin: 0;
+  color: var(--vs-caption-raised);
+  --text-size: var(--vs-text-annot);
+}
+
+/* Showing or not: green only while it is (the signal), a caption otherwise. */
+.vs-output-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0;
+  color: var(--text-4);
+}
+.vs-output-status[data-on] {
+  color: var(--vs-playing);
+}
+
+.vs-output .vs-output-display {
+  display: flex;
+}
+.vs-output .vs-output-display .lib-select__trigger {
+  width: 100%;
+}
+
+/* The notes' measure: the original's 360px, fifteen of the scale's 24px steps (spaces, not
+   --control-h: inside the Settings sheet that is 44px). Caption Texts (--vs-text-label) on a
+   roomier line. */
+.vs-output-note,
+.vs-output-fit-lead,
+.vs-output-warn {
+  --text-leading: 1.45;
+}
+.vs-output-note {
+  max-width: calc(var(--space-5) * 15);
+  margin: 0;
+  color: var(--vs-caption-raised);
+}
+.vs-output-settings .vs-output-note {
+  color: var(--text-3);
+}
+.vs-output-fit-lead {
+  color: var(--text-2);
+}
+
+/* Caution: an amber wash, no border. */
+.vs-output-warn {
+  max-width: calc(var(--space-5) * 15);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-control);
+  background: color-mix(in oklab, var(--warning) 12%, transparent);
+  color: var(--warning);
+}
+
+/* The render settings: resolution, scale, frame rate and the pixel line, on the column's gap. */
+.vs-output-render {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}

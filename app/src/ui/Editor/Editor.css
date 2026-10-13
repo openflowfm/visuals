@@ -1,0 +1,63 @@
+/* The lab's editor (Editor.tsx), from the original's lab.css: the library column, the preview
+   over the stage graph, the stage inspector. Widths are scale steps equal to the original's px
+   under the roomy scale. */
+
+.vs-editor {
+  /* The library column: 220px. */
+  --vs-editor-library: calc(var(--space-5) * 11);
+  /* The stage inspector: 380px. */
+  --vs-editor-side: calc(var(--space-5) * 19);
+  /* The preview: 16:9, at most 40% of the window's height. */
+  --vs-editor-bench: 40vh;
+  height: 100%;
+  min-height: 0;
+  color: var(--text-2);
+}
+
+/* The library and the inspector scroll inside their regions. */
+.vs-editor-library > .lib-region__body,
+.vs-editor-side > .lib-region__body {
+  overflow: auto;
+}
+
+/* The main column: the preview's row, then the graph. Nothing behind the preview may paint (a
+   background here would show instead of the picture), so the region drops its plate and the
+   bars beside a 16:9 picture are the preview's own spread shadow, clipped to the row. */
+.vs-editor-main {
+  background: none;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+.vs-editor-main > .lib-region__body {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-2);
+  padding: 0;
+}
+.vs-editor-bench-row {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+.vs-editor-bench {
+  aspect-ratio: 16 / 9;
+  height: var(--vs-editor-bench);
+  max-width: 100%;
+  box-shadow: 0 0 0 100vmax var(--surface-0);
+}
+.vs-editor-bench[data-loading] {
+  box-shadow: none;
+}
+
+/* The graph fills what the preview leaves; the Graph inside fills it. */
+.vs-editor-graph {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+}
+.vs-editor-graph > * {
+  position: absolute;
+  inset: 0;
+}

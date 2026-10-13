@@ -122,20 +122,34 @@ npm ci
 npm run app      # the player: app/run.sh runs cargo tauri dev, with the page's vite on $PORT or a free port
 npm run app:lab  # the lab build: the same with the preset editor
 npm run dev      # the player's page in your browser with hot reload, driving the real app headless, plus Storybook on port 6006 (dev:lab for the editor)
-npm run storybook  # the whole page on a fake app, with hot reload, on port 6006 (or $PORT); no app needed
+npm run storybook  # every screen and part, and the whole page, on a fake app, with hot reload, on port 6006 (or $PORT); no app needed
+ZEN_SOURCE=~/Code/satoramoto/zen npm run design  # the UI and a local zen together, hot-reloaded, in one Storybook (see below)
 ```
 
-The page is built on the design OS [zen](https://github.com/satoramoto/zen)
-(`@satoramoto/zen/visuals`, in its `visuals` pack): the home, live mode, the sheets and
-prompts are zen's `VisualsApp`, which reaches the app only through the Tauri bridge
-`app/src/main.tsx` installs (`app/src/zenBridge.ts`). Each screen and part, in its
-important states, is in zen's Storybook. This repo's Storybook shows the whole app as
-`main.tsx` renders it (a launch, a start in live mode, the first run, an update waiting),
-over a fake app answering the Tauri commands from fixtures made of the starter set's real
-presets and thumbnails (`app/src/stories/`), so no story needs Rust. The toolbar's theme
-picker swaps the stand-in for the frosted window between a dark desktop, a light one and
-Reduce transparency. `npm run build-storybook` builds it into `storybook-static/`. None of
-it reaches the app's build.
+The page's UI lives in `app/src/ui/` (`VisualsApp`: the home, live mode, the sheets and
+prompts; `app/src/ui/README.md` is its layout), built on the design OS
+[zen](https://github.com/satoramoto/zen) through its public package entries
+(`@satoramoto/zen`, pinned to a commit in `package.json`), in zen's `visuals` theme pack.
+It reaches the app only through the Tauri bridge `app/src/main.tsx` installs
+(`app/src/zenBridge.ts`). Storybook shows each screen and part in its important states
+(`open[flow]/visuals/…`, next to each part as `<Name>.stories.tsx`) and the whole app as
+`main.tsx` renders it (`App`: a launch, a start in live mode, the first run, an update
+waiting), over fake apps answering the commands from fixtures made of the starter set's
+real presets and thumbnails (`app/src/ui/fixtures/`, `app/src/stories/`), so no story needs
+Rust. The toolbar has zen's theme pack, mode and facets, and a Desk menu that swaps the
+stand-in for the frosted window between a dark desktop, a light one and Reduce
+transparency. `npm run build-storybook` builds it into `storybook-static/`. None of it
+reaches the app's build.
+
+To change a screen here and a control or token in zen at once, run
+`ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`app/design.sh`). It links
+node_modules/@satoramoto/zen to that checkout (`npm install --no-save "$ZEN_SOURCE"`),
+starts zen's own launcher (its Storybook on 6022) unless 6022 is already serving, and
+starts this Storybook on 6006 resolving zen to its source (zen's `zen-source` export
+condition) with zen's Storybook composed in under "zen"; it prints the one URL to open and
+stops what it started when you press Ctrl-C. Land the zen change as a zen PR first (pin
+its branch's sha here meanwhile), then pin zen's merged sha. A plain `npm install` puts
+the pinned zen back.
 
 The lab build adds the editor: the preset as MilkDrop's stage graph, each stage's picture,
 its EEL or HLSL and numbers, and every edit reloading the preset as it plays. It's the

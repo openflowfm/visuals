@@ -1,0 +1,346 @@
+/* The welcome flow (Onboarding.tsx), filling the window, the flashing-lights warning as a dialog,
+   and live mode's silence banner; from the original's onboarding.css on the contract. The page is
+   tint over the frost: the steps are type and paint nothing, except the listen step's words, an
+   opaque base layer beside the preview's hole, and the hole's own spread shadow, which paints the
+   column round the picture. Near borderless: no rules between header, body and footer. Contract
+   variables only, plus the local ones declared in Onboarding.tsx's Tuning knobs:
+
+   --vs-onboarding-main-min    the main button's least width (the original's 120px)
+   --vs-onboarding-step-width  a step's widest (the original's 560px)
+   --vs-onboarding-text-width  the listen step's words' column at its widest (the original's 460px)
+
+   Type is Text's: the header, a step's title (`display`), lead, notes and cue, the row and the
+   picker that set a size for what they hold, and a vibe's name and line are `Text`s, refined by
+   the knobs on their own classes. Where the original set no leading, the Text keeps the one it
+   inherits (`line-height: inherit`, a reset), so every line stands as tall as before. */
+
+/* The Screen: header, step, footer, with no gap between them (the plate gap is for regions). */
+.vs-onboarding {
+  gap: 0;
+  height: 100%;
+  color: var(--text-2);
+}
+
+.vs-onboarding-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: calc(var(--control-h) + var(--space-4));
+  padding: 0 var(--space-3) 0 var(--space-4);
+  /* A body Text at a control's size, for everything in the row. */
+  --text-size: var(--vs-text-control);
+  line-height: inherit;
+  white-space: nowrap;
+}
+.vs-onboarding-head > * {
+  flex: none;
+}
+.vs-onboarding-head > .vs-fill {
+  flex: 1;
+}
+
+/* Where you are: each step's name, the one you're on underlined in the accent, as a switch's
+   chosen word is; the ones done in the caption grey, the rest the faint step. */
+.vs-onboarding-head > .vs-onboarding-dots {
+  flex: 0 1 auto;
+}
+.vs-onboarding-dots {
+  display: flex;
+  gap: var(--space-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  list-style: none;
+}
+.vs-onboarding-dots li {
+  padding: 2px var(--space-2);
+  border-bottom: 2px solid transparent;
+  color: var(--text-4);
+}
+.vs-onboarding-dots li[data-done] {
+  color: var(--text-3);
+}
+.vs-onboarding-dots li[data-at] {
+  color: var(--text-1);
+  border-color: var(--vs-line-active);
+}
+
+.vs-onboarding-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  overflow: auto;
+  outline: none;
+}
+.vs-onboarding-body[data-step='listen'] {
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.vs-onboarding-foot {
+  display: flex;
+  padding: var(--space-2) var(--space-3);
+}
+
+.vs-onboarding-step {
+  --vs-onboarding-step-width: calc(var(--space-4) * 35); /* onboarding.css 560px */
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-sizing: border-box;
+  width: min(var(--vs-onboarding-step-width), 100%);
+  padding: var(--space-6);
+}
+/* A display Text (its face, weight and tracking) at half again the pane title's size. */
+.vs-onboarding-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-1);
+  --text-size: calc(var(--vs-text-title) * 1.6);
+  line-height: inherit;
+}
+.vs-onboarding-title .vs-mark {
+  height: auto;
+  padding: 0;
+  font-size: inherit;
+}
+.vs-onboarding-lead {
+  margin: 0;
+  color: var(--text-2);
+  --text-size: var(--vs-text-title);
+  --text-leading: 1.45;
+}
+/* A body Text (the body step) at 1.45. */
+.vs-onboarding-note {
+  margin: 0;
+  color: var(--text-3);
+  --text-leading: 1.45;
+}
+/* A strong body Text at the pane title's size. */
+.vs-onboarding-cue {
+  margin: 0;
+  color: var(--text-1);
+  --text-size: var(--vs-text-title);
+  line-height: inherit;
+}
+
+.vs-onboarding-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.vs-onboarding-actions > * {
+  flex: none;
+}
+/* The one thing to do next: bigger, and filled in the action colour. */
+.vs-onboarding-main {
+  --vs-onboarding-main-min: calc(var(--space-5) * 5); /* onboarding.css 120px */
+}
+.vs-onboarding-main > .lib-action-button-face {
+  min-width: var(--vs-onboarding-main-min);
+  padding: 0 var(--space-4);
+  background: var(--action);
+  box-shadow: var(--mat-key-shadow);
+  color: var(--action-text);
+  /* The face is a label Text: the body step's size on it. */
+  --text-size: var(--vs-text-body);
+}
+.vs-onboarding-main > .lib-action-button-face:disabled {
+  opacity: 0.5;
+}
+
+.vs-onboarding-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  /* A body Text (the body step) for its words and the select. */
+  line-height: inherit;
+}
+
+/* At the body step it inherits from the step (and the Modal's body Text). */
+.vs-onboarding-problem {
+  gap: var(--space-2);
+}
+
+/* Listen to: the words on the left, on an opaque base layer; the preview's hole on the right. */
+.vs-onboarding-listen {
+  flex-direction: row;
+  gap: 0;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+.vs-onboarding-text-scope {
+  --vs-onboarding-text-width: calc(var(--space-1) * 115); /* onboarding.css 460px */
+  display: flex;
+  flex: 0 0 min(var(--vs-onboarding-text-width), 45%);
+  position: relative;
+  z-index: 1;
+}
+.vs-onboarding-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  /* Square: it runs edge to edge down the window's left. */
+  border-radius: 0;
+}
+.vs-onboarding-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  /* A body Text at a control's size, for the picker in it. */
+  --text-size: var(--vs-text-control);
+  line-height: inherit;
+}
+.vs-onboarding-picker[data-off] {
+  opacity: 0.45;
+}
+/* The rest of the row, clipping the hole's painted surround to itself. */
+.vs-onboarding-stage {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
+  overflow: hidden;
+}
+.vs-onboarding-stage > .vs-onboarding-preview {
+  aspect-ratio: 16 / 9;
+  /* onboarding.css min(100%, (100vh - 200px) * 16 / 9). */
+  width: min(100%, calc((100vh - var(--space-2) * 25) * 16 / 9));
+  /* Paints everything round the hole in the frost's opaque tone, so only the picture shows through. */
+  box-shadow: 0 0 0 100vmax var(--layer-base-solid);
+}
+
+/* The flashing-lights warning, as the flow's step and as the dialog over any view: a heading in
+   the text's own colour marked by one small caution-coloured dot, the reduce-flashing switch on a
+   raised row of its own, its name before it; no lines. */
+.vs-onboarding-warning .vs-onboarding-title,
+.vs-onboarding-warning [data-part='title'] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-1);
+}
+.vs-onboarding-warning .vs-onboarding-title::before,
+.vs-onboarding-warning [data-part='title']::before {
+  content: '';
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+}
+
+.vs-onboarding-reduce-setting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.vs-onboarding-reduce {
+  min-height: calc(var(--space-6) * 1.5); /* onboarding.css 48px */
+  padding: 0 var(--space-3) 0 var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--layer-raised-fill);
+  box-shadow: var(--layer-raised-edge);
+  color: var(--text-1);
+}
+/* Its name: a strong Text at the row's size. */
+.vs-onboarding-reduce-name {
+  line-height: inherit;
+}
+.vs-onboarding-reduce-setting .vs-onboarding-note {
+  padding: 0 var(--space-4);
+  color: var(--vs-caption-raised);
+  --text-size: var(--vs-text-label);
+}
+
+/* The warning again, from the menu, or owed: a core Modal; only I understand answers an owed one,
+   so its ✕ is not drawn. */
+.vs-onboarding-dialog-scope,
+.vs-onboarding-silence-scope {
+  display: contents;
+}
+.vs-onboarding-dialog .vs-onboarding-lead {
+  color: var(--text-2);
+  --text-size: var(--vs-text-heading);
+  --text-leading: 1.5;
+}
+.vs-onboarding-dialog--required [data-part='close'] {
+  display: none;
+}
+
+/* Pick a vibe: a raised tile per starter playlist, and one for anything at all. */
+.vs-onboarding-vibes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(calc(var(--control-h) * 5), 1fr)); /* onboarding.css 150px */
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.vs-onboarding-vibe {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--layer-raised-fill);
+  box-shadow: var(--layer-raised-edge);
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* Its name, a strong Text at the pane title's size; its line, a body Text. */
+.vs-onboarding-vibe-name {
+  color: var(--text-1);
+  --text-size: var(--vs-text-title);
+  line-height: inherit;
+}
+.vs-onboarding-vibe-says {
+  color: var(--vs-caption-raised);
+  line-height: inherit;
+}
+.vs-onboarding-vibe:hover:not(:disabled) {
+  background: var(--surface-3);
+}
+.vs-onboarding-vibe:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+}
+.vs-onboarding-vibe:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Live mode, after five seconds of nothing: a quiet strip near the bottom, a toast. */
+.vs-onboarding-silence {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--space-6) + var(--space-3)); /* onboarding.css 44px */
+  z-index: 10;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  max-width: calc(100vw - 2 * var(--space-4));
+  padding: var(--space-2) var(--space-3);
+  /* The body step, inherited from the app's base type. */
+  color: var(--text-2);
+}

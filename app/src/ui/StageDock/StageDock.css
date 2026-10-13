@@ -1,0 +1,57 @@
+/* Live's controls over the picture (StageDock.tsx), under the header: Home's floating transport,
+   the preset at the top left and one row at the foot: Effects on the left, ◀ ring ▶ dead centre,
+   the dice and star on the right. Type and glyphs on the shell's scrim, no boxes, no dock bar.
+
+   Who paints what: the shell (StageLayout) places it 32px in from the window's sides, paints the
+   scrim and fades it in and out; this paints nothing, fills the room it is given, and only its
+   rows take presses (the clear middle passes them to the picture). The keys' hit areas reach 8px
+   past their glyphs, so the glyphs' outer edges, and the preset's name, sit on the 40px margin.
+
+   --vs-stagedock-clear  how far the preset's name moves right while the effects panel shows
+                         (368px: listed in StageDock.tsx's Tuning knobs) */
+
+.vs-stagedock {
+  --vs-stagedock-clear: calc(var(--space-6) * 11 + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  box-sizing: border-box;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  pointer-events: none;
+}
+
+/* The preset's name, on the 40px margin (the dock's 32px and 8px), and clear of the effects panel
+   while it shows. */
+.vs-stagedock .vs-transport-mid {
+  padding-left: var(--space-2);
+}
+.vs-stagedock[data-panel] .vs-transport-mid {
+  padding-left: var(--vs-stagedock-clear);
+}
+
+/* Effects: the spark, its word and its key, quiet; pressed while the panel shows. */
+.vs-stagedock .lib-action-button-face.vs-stagedock-effects {
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-2);
+}
+.vs-stagedock .lib-action-button-face.vs-stagedock-effects:hover,
+.vs-stagedock .lib-action-button-face.vs-stagedock-effects[aria-expanded='true'] {
+  color: var(--text-1);
+}
+.vs-stagedock .lib-action-button-face.vs-stagedock-effects:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+.vs-stagedock-effects-key {
+  --text-size: var(--size-caption);
+  color: var(--text-4);
+}
+
+/* The stacked form (STAGE_DOCK_FORMS, a narrow window): Effects its glyph alone. */
+.vs-stagedock[data-form='stacked'] :is(.vs-stagedock-effects-word, .vs-stagedock-effects-key) {
+  display: none;
+}

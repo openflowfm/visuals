@@ -1,0 +1,86 @@
+/* The lab's inspector (StageInspector.tsx): one column, never wider than its pane; code scrolls
+   inside its own box. Its settings sit in two columns, each a name and its control. Spacing is the
+   Stacks' gaps; type is Text; the code wells are Surfaces. Contract variables and the knobs below. */
+
+.vs-stage-inspector {
+  /* The original's 84, 96 and 64 px. */
+  --vs-stage-inspector-number: calc(var(--space-1) * 21);
+  --vs-stage-inspector-menu: calc(var(--space-2) * 12);
+  --vs-stage-inspector-switch: calc(var(--space-2) * 8);
+  /* The original's 10px. */
+  padding: calc(var(--space-1) * 2.5);
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+/* A code box: its name over the well. */
+.vs-stage-inspector-code {
+  min-width: 0;
+}
+.vs-stage-inspector-term {
+  font-size: inherit;
+}
+.vs-stage-inspector-well {
+  display: block;
+  min-width: 0;
+}
+.vs-stage-inspector-text {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  /* The original's 6px. */
+  padding: calc(var(--space-1) * 1.5);
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--text-1);
+  --text-leading: 1.45;
+  resize: vertical;
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+}
+
+/* The settings: two columns of a name and its control. The original's 4px 12px. */
+.vs-stage-inspector-values {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-1) var(--space-3);
+}
+.vs-stage-inspector-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  /* The original's 6px. */
+  gap: calc(var(--space-1) * 1.5);
+  min-width: 0;
+}
+.vs-stage-inspector-row > :not(.vs-stage-inspector-name) {
+  flex: none;
+}
+/* A setting a written shader has baked in: still editable, but it no longer reaches the picture. */
+.vs-stage-inspector-row[data-baked] > .vs-stage-inspector-name {
+  text-decoration: line-through;
+}
+/* The settings' widths, so a column of them lines up (two classes: over the control's own default). */
+.vs-stage-setting.vs-stage-setting-number {
+  --lib-number-field-width: var(--vs-stage-inspector-number);
+}
+.vs-stage-setting.vs-stage-setting-menu {
+  --lib-select-width: var(--vs-stage-inspector-menu);
+}
+/* Inside, the Toggle spans its row; here it is a fixed key at the row's end. */
+.vs-stage-setting.vs-stage-setting-switch[data-layout] {
+  width: var(--vs-stage-inspector-switch);
+}
+
+/* The file's values nobody else claims: a disclosure, set apart by space, not a rule. */
+.vs-stage-inspector-summary {
+  cursor: pointer;
+}
+.vs-stage-inspector-file[open] > .vs-stage-inspector-summary {
+  /* The original's 6px. */
+  margin-bottom: calc(var(--space-1) * 1.5);
+}

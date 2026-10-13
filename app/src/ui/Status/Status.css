@@ -1,0 +1,101 @@
+/* The live status readouts (Status.tsx): the tap key (live/stage-head.css's `.live-tap`), the
+   beat dot, the frame rate and the skipped note. Numerals are tabular; green is only the signal
+   (the beat). The caller's class places each one; these give it its look. */
+
+/* Tap tempo: a soft tint filling its line, not a bevelled key. */
+.vs-status-tap.lib-action-button-face {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  /* stage-head.css's 48px line. */
+  min-height: calc(var(--space-5) * 2);
+  height: auto;
+  padding: var(--space-3) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-card);
+  background: color-mix(in oklab, var(--text-1) 6%, transparent);
+  box-shadow: none;
+  color: var(--text-1);
+  cursor: pointer;
+}
+.vs-status-tap.lib-action-button-face:hover {
+  background: color-mix(in oklab, var(--text-1) 10%, transparent);
+}
+.vs-status-tap.lib-action-button-face[data-on] {
+  background: color-mix(in oklab, var(--accent) 24%, transparent);
+  box-shadow: none;
+}
+.vs-status-tap.lib-action-button-face:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+}
+/* The face's words are body Texts (Status.tsx): what a press does at the sheet title's size, the
+   tempo's unit at the smallest, the tempo a numeral at heading size, T's keycap strong. */
+.vs-status-tap-what {
+  flex: 1;
+  text-align: start;
+  --text-size: var(--vs-text-heading);
+}
+.vs-status-tap-bpm {
+  color: var(--vs-caption-raised);
+  --text-size: var(--vs-text-annot);
+}
+.vs-status-tap-num {
+  /* stage-head.css's 3px, on the nearest step. */
+  margin-inline-end: var(--space-1);
+  color: var(--text-1);
+}
+.vs-status-tap-key {
+  display: inline-grid;
+  place-items: center;
+  /* stage-head.css's 20px key. */
+  min-width: calc(var(--space-2) * 2.5);
+  height: calc(var(--space-2) * 2.5);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-control);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--text-1) 24%, transparent);
+  color: var(--vs-caption-raised);
+  --text-size: var(--vs-text-annot);
+}
+
+/* The beat dot: faint until the beat, then the signal's green, at once. */
+.vs-status-beat {
+  display: inline-block;
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--text-4);
+}
+.vs-status-beat[data-on] {
+  background: var(--vs-playing);
+}
+
+/* The frame rate, only while it is low: caution, tabular. */
+.vs-status-fps {
+  color: var(--warning);
+  font-family: var(--font-readout);
+  white-space: nowrap;
+}
+
+/* The skipped note: a caution caption, cut short with the whole in its tooltip; it fades over
+   SKIP_FADE (1s), the one motion kept (a hint's fade). */
+.vs-status-skip {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--warning);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 1;
+}
+.vs-status-skip[data-fading] {
+  opacity: 0;
+  transition: opacity 1s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-status-skip[data-fading] {
+    transition: none;
+  }
+}

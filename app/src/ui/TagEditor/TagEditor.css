@@ -1,0 +1,96 @@
+/* My tags (TagEditor.tsx), from the original's tag-editor.css, as the inspector shows them: each a
+   "#tag" in type, no pill, with its ✕ on hover or focus; a tag on only some of several picked
+   fainter, with its count; then "+ Tag", and the box it becomes. The editor is a body Text at
+   --vs-text-label (the box inherits it); a tag, its count and "+ Tag" are Texts a touch heavier. */
+.vs-tag-editor {
+  --text-size: var(--vs-text-label);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+.vs-tag-editor .vs-tag-chip,
+.vs-tag-editor .vs-tag-chip-count {
+  --text-weight: 500;
+}
+.vs-tag-editor .vs-tag-chip {
+  --text-size: var(--vs-text-label);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--text-1);
+}
+.vs-tag-editor .vs-tag-chip::before {
+  content: '#';
+  margin-right: 1px;
+  color: var(--text-3);
+}
+.vs-tag-editor .vs-tag-chip[data-some] {
+  color: var(--text-2);
+}
+.vs-tag-editor .vs-tag-chip-count {
+  margin-left: 2px;
+  color: var(--text-3);
+  --text-size: var(--vs-text-annot);
+}
+.vs-tag-editor .vs-tag-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: var(--space-4);
+  height: var(--space-4);
+  padding: 0;
+  border: 0;
+  /* 4px: half a row's pill. */
+  --vs-tag-x-radius: calc(var(--radius-control) / 2);
+  border-radius: var(--vs-tag-x-radius);
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+  opacity: 0;
+}
+.vs-tag-editor .vs-tag-chip:hover .vs-tag-chip-x,
+.vs-tag-editor .vs-tag-chip-x:focus-visible {
+  opacity: 1;
+}
+.vs-tag-editor .vs-tag-chip-x:hover {
+  color: var(--text-1);
+}
+/* "+ Tag" and the box it becomes aren't tags: no "#". */
+.vs-tag-editor .vs-tag-chip-add::before,
+.vs-tag-editor .vs-tag-chip-input::before {
+  content: none;
+}
+.vs-tag-editor .vs-tag-chip-add {
+  /* 22px: a step and a half over the 16px step. */
+  height: calc(var(--space-4) + var(--space-1) * 1.5);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.vs-tag-editor .vs-tag-chip-add:hover {
+  color: var(--text-1);
+}
+.vs-tag-editor .vs-tag-chip-input {
+  flex: 1;
+  /* 120px: four control heights. */
+  min-width: calc(var(--control-h) * 4);
+  height: var(--space-5);
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-input);
+  background: var(--surface-3);
+  color: var(--text-1);
+  /* The editor's type (--vs-text-label, the body weight). */
+  font: inherit;
+  outline: none;
+}
+.vs-tag-editor .vs-tag-chip-input::placeholder {
+  color: var(--text-3);
+}
+/* The focus ring (the original's access.css), in the controls' ink. */
+.vs-tag-editor :is(.vs-tag-chip-x, .vs-tag-chip-add):focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+}

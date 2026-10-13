@@ -1,0 +1,20 @@
+/* The library's pack offer (PackOffer.tsx), on the home: one quiet line on the main column's
+   inset, its button inline; a body Text in tabular figures. Contract variables and visuals.css
+   tokens only. */
+
+.vs-pack-offer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0 var(--mat-plate-inset) var(--space-3);
+  color: var(--text-3);
+  --text-size: var(--vs-text-body);
+}
+.vs-pack-offer .vs-pack-offer-error {
+  color: var(--danger);
+}
+.vs-pack-offer .vs-pack-progress {
+  flex: 1 1 calc(var(--space-6) * 7.5); /* 240px */
+}

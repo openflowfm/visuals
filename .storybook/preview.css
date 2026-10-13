@@ -21,10 +21,25 @@ html[data-sb-desk='solid'] {
 }
 
 /* The app fills the canvas, as it fills the window. */
-#storybook-root,
-.sb-show-main.sb-main-fullscreen,
-.sb-show-main.sb-main-fullscreen #storybook-root {
+html[data-sb-desk] #storybook-root,
+html[data-sb-desk] .sb-show-main.sb-main-fullscreen,
+html[data-sb-desk] .sb-show-main.sb-main-fullscreen #storybook-root {
   height: 100%;
+}
+
+/* The UI's parts (`app/src/ui/**`) are drawn on the base zen's own Storybook gave them (its
+   `src/styles.css`), which their stories' checks were written against. No specificity, so
+   any component's own rule wins. The App stories (`data-sb-desk`) keep the page's own base. */
+:where(html:not([data-sb-desk])) *,
+:where(html:not([data-sb-desk])) *::before,
+:where(html:not([data-sb-desk])) *::after {
+  box-sizing: border-box;
+}
+:where(html:not([data-sb-desk]) body) {
+  margin: 0;
+}
+:where(html:not([data-sb-desk])) :where(button, input, select) {
+  font: inherit;
 }
 
 /* The native preview's stand-in: where the engine's view would show through

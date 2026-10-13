@@ -1,0 +1,179 @@
+/* The selection's drawer (PresetDrawer.tsx), from the original's library.css: under the grid, a
+   raised tone step rather than a ruled panel. Near borderless: no outlines on its chips, tags or
+   box; the focus ring is the only line. */
+
+.vs-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 55%;
+  overflow-y: auto;
+  padding: var(--space-2) var(--space-2) var(--space-2);
+  color: var(--text-2);
+}
+.vs-drawer-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* A strong body Text. */
+.vs-drawer-title {
+  --text-size: var(--vs-text-body);
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-drawer-picture {
+  display: block;
+  flex: none;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  background: var(--vs-thumb);
+  cursor: pointer;
+}
+.vs-drawer-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-drawer :is(.vs-drawer-picture, .vs-drawer-tag-x, .vs-drawer-tag-input):focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+}
+.vs-drawer-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-1);
+  box-sizing: border-box;
+  color: var(--text-3);
+  --text-size: var(--vs-text-label);
+  text-align: center;
+  overflow: hidden;
+}
+.vs-drawer-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  /* library.css 3px, rounded to the hairline. */
+  gap: 2px;
+}
+.vs-drawer-strip > * {
+  aspect-ratio: 4 / 3;
+  width: 100%;
+  object-fit: cover;
+  /* 2px: a quarter of a row's pill. */
+  --vs-drawer-strip-radius: calc(var(--radius-control) / 4);
+  border-radius: var(--vs-drawer-strip-radius);
+  background: var(--vs-thumb);
+}
+
+.vs-drawer-facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px var(--space-2);
+  margin: 0;
+  /* A body Text: the facts inherit its size. */
+  --text-size: var(--vs-text-label);
+}
+.vs-drawer-facts dt {
+  color: var(--text-3);
+}
+.vs-drawer-facts dd {
+  margin: 0;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.vs-drawer-colour {
+  display: inline-flex;
+  align-items: center;
+  /* library.css 3px, rounded to the hairline; 6px (a step and a half) after. */
+  gap: 2px;
+  margin-right: calc(var(--space-1) * 1.5);
+}
+/* library.css 9px, rounded to the 8px step. */
+.vs-drawer-swatch {
+  display: inline-block;
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+}
+
+.vs-drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.vs-drawer-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* library.css 3px, rounded to the hairline. */
+  gap: 2px;
+}
+.vs-drawer-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px 0 calc(var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  color: var(--text-1);
+  /* A body Text; its × inherits it. */
+  --text-size: var(--vs-text-label);
+}
+.vs-drawer-tag[data-some] {
+  color: var(--text-3);
+}
+.vs-drawer-tag-count {
+  --text-size: var(--vs-text-annot);
+  color: var(--text-3);
+}
+.vs-drawer-tag-x {
+  /* library.css 0 3px, rounded to the hairline. */
+  padding: 0 2px;
+  font: inherit;
+  color: var(--text-3);
+  background: none;
+  border: none;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+}
+.vs-drawer-tag-x:hover,
+.vs-drawer-tag-x:focus-visible {
+  color: var(--text-1);
+}
+.vs-drawer-tag-input {
+  /* 80px to start (five 16px steps), padded 4px by 6px. */
+  flex: 1 1 calc(var(--space-4) * 5);
+  min-width: 0;
+  padding: var(--space-1) calc(var(--space-1) * 1.5);
+  font: inherit;
+  color: var(--text-1);
+  background: var(--surface-3);
+  border: 0;
+  border-radius: var(--radius-input);
+}
+.vs-drawer-tag-input::placeholder {
+  color: var(--text-3);
+}
+
+.vs-drawer-note {
+  margin: 0;
+  color: var(--text-3);
+  --text-size: var(--vs-text-label);
+}
+.vs-drawer-error {
+  color: var(--danger);
+}

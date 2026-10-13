@@ -1,0 +1,30 @@
+/* The updates dialog (Update.tsx): a core Modal; this file only sets its text. Contract variables
+   only. The Opaque scope is only a scope: it lays nothing out. */
+
+.vs-update {
+  display: contents;
+}
+
+.vs-update-dialog p,
+.vs-update-dialog ul {
+  margin: 0;
+}
+.vs-update-dialog ul {
+  padding-left: var(--space-4);
+}
+
+/* What's new: its own scroll, so a long release keeps the buttons in view. */
+.vs-update-notes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+/* Bold is a strong Text, code a code Text at the label size (--vs-text-label). */
+.vs-update-notes strong {
+  color: var(--text-1);
+}
+.vs-update-notes a {
+  color: var(--accent);
+}

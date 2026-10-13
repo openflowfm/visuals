@@ -1,0 +1,150 @@
+/* Live's effects panel (EffectsPanel.tsx): Home's side-panel material (a raised Surface, no
+   backdrop: the native picture under it can't be blurred; in the Stage's Opaque scope it draws its
+   solid), filling the slot the Stage gives it at the left under the header. Inside, no lines: the
+   held effects as pads, the amounts as slider rows, the switches as type, Back to normal a quiet
+   word at the foot. Contract variables only, plus the local knob declared in EffectsPanel.tsx:
+
+   --vs-effects-panel-pad  the pads' height (56px) */
+
+.vs-effects-panel {
+  --vs-effects-panel-pad: calc(var(--space-6) + var(--space-5)); /* 56px */
+  /* Raised: captions take the raised step. */
+  --text-3: var(--vs-caption-raised);
+  --lib-surface-backdrop: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: calc(var(--space-4) + var(--space-1)); /* 20px */
+  overflow: auto;
+  overscroll-behavior: contain;
+  border-radius: var(--radius-card);
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  pointer-events: auto;
+}
+
+/* The head: "Effects", and ✕ at its end. */
+.vs-effects-panel-head {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.vs-effects-panel-title {
+  margin: 0;
+  --text-size: var(--vs-text-heading);
+  color: var(--text-1);
+}
+.vs-effects-panel .lib-action-button-face.vs-effects-panel-close {
+  width: var(--control-h);
+  margin-right: calc(var(--space-2) * -1);
+  padding: 0;
+  color: var(--text-3);
+}
+.vs-effects-panel .lib-action-button-face.vs-effects-panel-close:hover {
+  color: var(--text-1);
+}
+
+.vs-effects-panel-caption {
+  margin: 0;
+  color: var(--text-3);
+}
+
+/* The held effects: four pads, two by two, each its name and its key across it. */
+.vs-effects-panel-hold {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.vs-effects-panel-pads {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.vs-effects-panel .vs-effects-hit {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--vs-effects-panel-pad);
+  padding: 0 calc(var(--space-3) + var(--space-1) / 2); /* 14px */
+  border-radius: var(--radius-control);
+  --text-size: var(--vs-text-body);
+}
+.vs-effects-panel .vs-effects-hit-key {
+  --text-size: var(--size-caption);
+  color: var(--text-3);
+}
+.vs-effects-panel .vs-effects-hit[data-on] .vs-effects-hit-key {
+  color: var(--text-1);
+}
+
+/* The amounts: the core slider's row (its name leading, its reading trailing, the groove under). */
+.vs-effects-panel-amounts {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.vs-effects-panel .vs-effects-panel-amount {
+  width: 100%;
+}
+.vs-effects-panel .vs-effects-panel-amount .lib-slider__caption {
+  color: var(--text-2);
+  --text-size: var(--size-caption);
+}
+.vs-effects-panel .vs-effects-panel-amount .lib-slider__readout {
+  color: var(--text-1);
+  --text-size: var(--size-caption);
+}
+
+/* The switches: a name, then its control at the row's end. */
+.vs-effects-panel-switches {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.vs-effects-panel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  --text-size: var(--size-caption);
+  color: var(--text-2);
+}
+.vs-effects-panel-row > .lib-segmented {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+/* Back to normal, at the foot. */
+.vs-effects-panel-fill {
+  flex: 1 1 0;
+}
+.vs-effects-panel-reset {
+  flex: none;
+  align-self: flex-start;
+}
+.vs-effects-panel-reset .lib-action-button-face {
+  gap: var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
+  color: var(--text-2);
+}
+.vs-effects-panel-key {
+  --text-size: var(--size-caption);
+  color: var(--text-3);
+}
+
+.vs-effects-panel :is(.lib-action-button-face, .vs-effects-hit):focus-visible,
+.vs-effects-panel .lib-slider__track:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}

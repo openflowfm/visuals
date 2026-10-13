@@ -1,0 +1,260 @@
+/* The header over a playlist's strip on the home (PlaylistHead.tsx): a small cover of its first
+   four thumbnails, then what it is, its name as the pane's title, how it plays, and its actions.
+   Since decision 68 it is on the window's surface with no fill, on the pane's padding so it lines
+   up with the strip, and its actions are type with no boxes: the one on (shuffle) in the ink and
+   underlined in the accent. Contract variables and visuals.css tokens only.
+
+   Type is Text's, refined by the knobs on each Text's own class. Where the original set no
+   leading, the Text keeps the one it inherits (`line-height: inherit`, a reset). */
+.vs-playlisthead {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+  /* 18px above: a step and a half of 12. */
+  padding: calc(var(--space-3) * 1.5) var(--mat-plate-inset) var(--space-3);
+  font-family: var(--font-sans);
+}
+.vs-playlisthead-cover {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  flex: none;
+  /* 96px: three of the 32px step. */
+  width: calc(var(--space-6) * 3);
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.vs-playlisthead-cover > div {
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--vs-thumb);
+}
+.vs-playlisthead-cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-playlisthead-text {
+  min-width: 0;
+}
+/* A caption at 500. */
+.vs-playlisthead-caps {
+  color: var(--text-3);
+  --text-size: calc(var(--size-caption) - 1px); /* playlisthead.css 11px: "Playlist" */
+  --text-weight: 500;
+  line-height: inherit;
+}
+/* A display Text at the heading size. */
+.vs-playlisthead .vs-playlisthead-name {
+  margin: 2px 0;
+  overflow: hidden;
+  color: var(--text-1);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.vs-playlisthead[data-variant='pane'] .vs-playlisthead-name {
+  line-height: inherit;
+}
+/* The rename box's type: the name's display face and weight at the heading size, the text's own
+   tracking and leading (the box reads them through visuals.css's form-control reset). It draws no
+   box of its own. */
+.vs-playlisthead-name-type {
+  display: contents;
+  --text-tracking: var(--tracking);
+  line-height: inherit;
+}
+.vs-playlisthead .vs-playlisthead-name-input {
+  display: block;
+  margin: 2px 0;
+  padding: 0 var(--space-2);
+  color: var(--text-1);
+  background: var(--surface-3);
+  border: 0;
+  border-radius: var(--radius-input);
+}
+.vs-playlisthead .vs-playlisthead-name-input:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+/* A tabular caption. */
+.vs-playlisthead-summary {
+  overflow: hidden;
+  color: var(--text-3);
+  word-spacing: var(--vs-sep-space);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.vs-playlisthead[data-variant='pane'] .vs-playlisthead-summary {
+  line-height: inherit;
+}
+.vs-playlisthead-acts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  /* 14px between actions (8 + 6). */
+  gap: var(--space-1) calc(var(--space-2) + var(--space-1) * 1.5);
+  margin: var(--space-2) 0 0 calc(-1 * var(--space-1));
+}
+.vs-playlisthead-confirm {
+  display: inline-flex;
+  gap: calc(var(--space-2) + var(--space-1) * 1.5);
+}
+
+/* The actions: type, no boxes. Play (and stop) in the ink; shuffle, while on, in the ink and underlined. */
+.vs-playlisthead .vs-playlisthead-btn,
+.vs-playlisthead .vs-popover-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* playlisthead.css 5px between icon and word (rounded to the 4px step), 28px tall (24 + 4). */
+  gap: var(--space-1);
+  height: calc(var(--space-5) + var(--space-1));
+  padding: 0 var(--space-1);
+  color: var(--text-2);
+  white-space: nowrap;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+/* Its word: a body Text (the body step) at 500; strong on the one on, 500 again while disabled. */
+.vs-playlisthead-word {
+  --text-weight: 500;
+  line-height: inherit;
+}
+.vs-playlisthead .vs-playlisthead-btn:hover:not(:disabled) {
+  color: var(--text-1);
+}
+.vs-playlisthead .vs-playlisthead-btn[data-on] {
+  color: var(--text-1);
+}
+.vs-playlisthead .vs-playlisthead-btn[data-on] > .vs-playlisthead-word {
+  --text-weight: var(--weight-strong);
+}
+.vs-playlisthead .vs-playlisthead-btn[aria-pressed='true'] {
+  color: var(--text-1);
+  text-decoration: underline 2px var(--vs-line-active);
+  text-underline-offset: calc(var(--space-1) * 1.5);
+}
+.vs-playlisthead .vs-playlisthead-btn[data-danger] {
+  color: var(--danger);
+}
+.vs-playlisthead .vs-playlisthead-btn:disabled {
+  color: var(--text-3);
+  cursor: default;
+}
+.vs-playlisthead .vs-playlisthead-btn:disabled > .vs-playlisthead-word {
+  --text-weight: 500;
+}
+.vs-playlisthead .vs-playlisthead-btn:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+.vs-playlisthead .vs-playlisthead-more .vs-popover-button {
+  color: var(--text-4);
+}
+.vs-playlisthead .vs-playlisthead-more .vs-popover-button:hover,
+.vs-playlisthead .vs-playlisthead-more .vs-popover-button[aria-expanded='true'] {
+  color: var(--text-1);
+}
+
+/* How it plays, in its popover. Its controls keep their own looks (they are form controls). A
+   setting changed live, away from the playlist's own, is marked. */
+.vs-playlisthead .vs-playlisthead-pop .vs-popover-panel[role='dialog'] {
+  padding: var(--space-3);
+}
+.vs-playlisthead .vs-playlisthead-settings {
+  /* 520px: sixteen of the 32px step and 8. */
+  max-width: calc(var(--space-6) * 16 + var(--space-2));
+}
+.vs-playlisthead .vs-playlisthead-settings > [data-part='body'] {
+  align-items: center;
+  /* 10px between lines: two and a half steps. */
+  gap: calc(var(--space-1) * 2.5) var(--space-4);
+}
+.vs-playlisthead .vs-playlisthead-setting {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-1) * 1.5);
+  color: var(--vs-caption-raised);
+  /* A caption Text, for its words and the fields in it. */
+  line-height: inherit;
+}
+/* Each setting is named beside its field, so the field's own caption above it would say it twice. */
+.vs-playlisthead .vs-playlisthead-setting [data-part='caption'] {
+  display: none;
+}
+/* The caution hue, not the accent: a live change must be seen. */
+.vs-playlisthead .vs-playlisthead-setting[data-tweaked] > span {
+  color: var(--warning);
+}
+.vs-playlisthead .vs-playlisthead-setting[data-tweaked] > span::after {
+  content: ' •';
+}
+
+@media (max-width: 899px) {
+  .vs-playlisthead[data-variant='pane'] .vs-playlisthead-cover {
+    /* 72px: three of the 24px step. */
+    width: calc(var(--space-5) * 3);
+  }
+  .vs-playlisthead[data-variant='pane'] .vs-playlisthead-name {
+    /* 18px: the heading a hairline pair smaller. */
+    --text-size: calc(var(--size-heading) - 2px);
+  }
+}
+
+/* In the inspector (variant='inspector'): a card down the panel's width, as the inspector shows a
+   preset: the cover across it, then the words under it, the name as large as a preset's and
+   wrapping, how it plays on as many lines as it takes, and the actions wrapping under them: no
+   playback controls, only how it plays ▾, add presets (quick add) and ⋯. The inspector's own
+   padding is its margin. */
+.vs-playlisthead[data-variant='inspector'] {
+  flex-direction: column;
+  align-items: stretch;
+  gap: calc(var(--space-2) + var(--space-1) * 1.5);
+  padding: var(--space-1) 0 0;
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-cover {
+  width: 100%;
+  border-radius: var(--radius-control);
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-name {
+  margin: var(--space-1) 0;
+  /* 22px: the heading a hairline pair larger, at strong weight (the Text's prop here). */
+  --text-size: calc(var(--size-heading) + 2px);
+  --text-leading: 1.2;
+  white-space: normal;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  text-wrap: balance;
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-name-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-name-type {
+  --text-size: calc(var(--size-heading) + 2px);
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-summary {
+  --text-leading: 1.45;
+  white-space: normal;
+}
+/* ⋯ at the right end of the actions' first line, its menu hung from there; the others wrap short of it. */
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-acts {
+  position: relative;
+  margin-top: var(--space-3);
+  padding-right: calc(var(--space-5) + var(--space-1));
+}
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-more {
+  position: absolute;
+  top: 0;
+  right: calc(-1 * var(--space-1));
+}
+/* How it plays opens across the actions (Popover's `across`): its settings take the whole width. */
+.vs-playlisthead[data-variant='inspector'] .vs-playlisthead-settings {
+  max-width: none;
+}

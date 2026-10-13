@@ -1,0 +1,17 @@
+/* VisualsApp's window (App.tsx `Framed`): the ground layer filling the page, and `.vs-root`
+   filling it, as each view (Home, Live) expects a whole window. */
+
+.vs-app {
+  position: relative;
+  height: 100vh;
+  overflow: hidden;
+}
+.vs-app > .vs-root {
+  height: 100%;
+}
+
+/* main.tsx's page outside the app. */
+.vs-app-outside {
+  margin: 0;
+  padding: var(--space-6);
+}

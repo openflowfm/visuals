@@ -1,0 +1,11 @@
+// The entry of the app's UI (`app/src/ui/`): visual[flow]'s whole UI on zen, for the app's
+// main.tsx. Its styles come from each part's own CSS plus `ui/visuals.css` (zen's from
+// `@satoramoto/zen/zen.css`).
+//
+//   setBridge(tauriBridge);          // once, before rendering
+//   createRoot(root).render(<StrictMode><VisualsApp /></StrictMode>);
+
+export { VisualsApp, type VisualsAppProps, type LabEditor } from './App/App';
+export { setBridge, currentBridge, type Bridge, type UnlistenFn, type Event, type EventCallback, type InvokeArgs, type DragDropEvent, type BridgeWindow, type BridgeWebview } from './model/ipc';
+
+export type { CameraController, CameraSettings, CameraState } from './model/camera';

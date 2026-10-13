@@ -4,20 +4,51 @@ Read [`README.md`](README.md) first. The product is the MilkDrop engine (`engine
 the player app (`app/`: the Tauri shell in `app/src-tauri`, its page in `app/src`);
 `docs/milkdrop-engine.md` is their plan and status. The preset editor is in **lab** builds
 only: the `lab` Cargo feature on `visuals-app` (its commands, `app/src-tauri/src/editor.rs`)
-and `VITE_LAB=1` for the page (`app/src/Lab.tsx`, which loads zen's editor: `@satoramoto/zen/visuals/lab`).
+and `VITE_LAB=1` for the page (`app/src/Lab.tsx`, which loads the editor: `app/src/ui/lab.ts`).
 The app people get is built without both.
 
-**The page is zen's.** The UI people get (the home, live mode, the sheets, the welcome
-flow, the prompts) is `VisualsApp` from the design OS zen (`@satoramoto/zen/visuals`,
-GitHub `satoramoto/zen`, `src/library/visuals/`), in its `visuals` pack. `app/src/main.tsx`
-installs the Tauri bridge (`app/src/zenBridge.ts`: zen reaches the app only through it)
-and renders it; `app/src/main.css` is the page's frame and Instrument Sans. Change a
-screen, a control or its look in zen, then move the dependency's pin here. The lab's
-editor is zen's too: `app/src/Lab.tsx` (a lab build only) renders `VisualsApp` with
-`lab={VisualsEditor}` from `@satoramoto/zen/visuals/lab`, zen's own entry for it, so none
-of the editor reaches the app's page. What stays in `app/src`: the command types and
-model modules the tests and Storybook's fake app use (`api.ts`, `playlists.ts`…),
-`stories/`, and `dev/`.
+**The UI is in `app/src/ui/`.** The page people get (the home, live mode, the sheets, the
+welcome flow, the prompts) is `VisualsApp` (`app/src/ui/index.ts`), built on the design OS
+zen (GitHub `satoramoto/zen`, pinned in `package.json`) in zen's `visuals` theme pack.
+`app/src/ui/README.md` is its convention: one folder per screen or part (`<Name>.tsx`,
+`<Name>.css`, `<Name>.stories.tsx`, tests), `model/` (the commands and state, `model/ipc.ts`
+the bridge every command goes through), `fixtures/` (the parts' stories' fake backend).
+`app/src/main.tsx` installs the Tauri bridge (`app/src/zenBridge.ts`: the UI reaches the
+app only through it) and renders it; `app/src/main.css` is the page's frame and Instrument
+Sans. The lab's editor is `app/src/ui/lab.ts` (`VisualsEditor`, the graph, the inspector;
+its commands in `ui/model/lab.ts`, never `ui/model/api.ts`): `app/src/Lab.tsx` (a lab build
+only) renders `VisualsApp` with `lab={VisualsEditor}`, so none of the editor reaches the
+app's page. The UI reaches zen only through its public entries: `@satoramoto/zen` (and its
+`@satoramoto/zen/zen.css`) everywhere, `@satoramoto/zen/storybook` in stories, tests and
+`ui/fixtures/` only; never a deeper path. The older modules beside it in `app/src`
+(`api.ts`, `playlists.ts`, `layout/`…) are what `app/src/stories/` (the App stories' fake
+Tauri app) and their tests use.
+
+**Working on the app and zen together.** A generic control, a token or a theme is zen's;
+a screen or a part of this app is `app/src/ui/`. To change both at once:
+
+1. `ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`app/design.sh`). It runs
+   `npm install --no-save "$ZEN_SOURCE"` (node_modules/@satoramoto/zen becomes a link to the
+   checkout); starts zen's own launcher, `PREVIEW_LABEL=Zen PREVIEW_PORT=4191
+   STORYBOOK_PORT=6022 npm --prefix "$ZEN_SOURCE" run dev`, unless something already answers
+   on 6022 (then it reuses it and never stops it); and starts this repo's Storybook,
+   `storybook dev --ci --no-open --host 127.0.0.1 -p 6006` (`STORYBOOK_PORT` for another
+   port; exit 1 when it's taken). It prints the one URL to open: this Storybook, with zen's
+   composed in under "zen". Ctrl-C (or either child ending) stops what it started.
+2. With `ZEN_SOURCE` set, `vite.app.config.ts` (and so `vite.dev.config.ts`) and
+   `.storybook/main.ts` follow zen's `zen-source` recipe: the `zen-source` export condition
+   first (zen's entries resolve to its TS/TSX source, hot-reloaded), React deduped, the
+   checkout allowed to be served; `.storybook/main.ts` adds the `zen` ref
+   (`ZEN_STORYBOOK_URL`, http://localhost:6022 by default). `ZEN_SOURCE=… npm run dev`
+   works the same way once the link is in place. Without `ZEN_SOURCE` nothing changes: the
+   pinned GitHub build (`lib/`) is used and there is no ref.
+3. Land the zen change first, as its own zen PR. Meanwhile this repo's branch may pin that
+   zen branch's head sha (`"@satoramoto/zen": "github:satoramoto/zen#<sha>"`, then
+   `npm install`); once the zen PR merges, pin zen's `main` sha and merge here. A plain
+   `npm install` puts the pinned build back after a `design` run.
+
+The library rules zen holds its own code to (only `toCssVars()` variables, no literal
+colours or radii, the tiers) still describe `app/src/ui/`, but nothing here tests them yet.
 
 | Command | What it checks | When to run |
 | --- | --- | --- |
@@ -29,10 +60,11 @@ model modules the tests and Storybook's fake app use (`api.ts`, `playlists.ts`�
 | `cargo fmt --all --check` | the Rust is formatted (`rustfmt.toml`: width 200; `cargo fmt --all` fixes it) | any `.rs` change |
 | `npm run format:check` | the editor page (`app/src`) is formatted with Prettier (`.prettierrc.json`: single quotes, width 200; `npx prettier --write app/src` fixes it) | any change under `app/src` |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
-| `npx vitest run --project unit <files>` | targeted unit tests; they run in node, and a file that mounts components in a DOM opts into happy-dom with `// @vitest-environment happy-dom` on its first line (Testing Library and user-event; `Library.dom.test.tsx` is the pattern) | the tests next to what you changed; CI runs them all (`npm test`) |
-| `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story (`app/src/*.stories.tsx`: the whole app, zen's `VisualsApp`, over `zenBridge.ts`) renders in headless Chromium without throwing, and its `play` checks pass; the stories run on fixtures from the starter set (`app/src/stories/`, answering Tauri's IPC), never the Rust app. Each screen's own stories are in zen's Storybook. Needs Playwright's Chromium once (`npx playwright install chromium`) | a change to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin |
-| `npm run storybook`, `npm run build-storybook` | Storybook with hot reload on port 6006 (or `PORT`), or built into `storybook-static/`: the whole app on zen, as main.tsx renders it. Agents add `-- --ci --no-open --host 127.0.0.1`, run it in the background with a `trap` that stops it, and check `ps` afterwards | to look at a component's states; `build-storybook` after a change to `.storybook/` |
-| `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks) | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
+| `npx vitest run --project unit <files>` | targeted unit tests (`app/src/**/*.test.{ts,tsx}`, `app/src/ui/` among them); they run in node, and a file that mounts components in a DOM opts into one on its first line: `// @vitest-environment happy-dom` (Testing Library and user-event; `useLibrary.dom.test.tsx` is the pattern) or `// @vitest-environment jsdom` (the tests that came from zen, in `app/src/ui/`). `app/src/ui/test-setup.ts` adds jest-dom's matchers and Testing Library's cleanup | the tests next to what you changed; CI runs them all (`npm test`) |
+| `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story renders in headless Chromium without throwing, and its `play` checks pass: the UI's parts (`app/src/ui/**/*.stories.tsx`, titled `open[flow]/visuals/…`, on `app/src/ui/fixtures/`) and the whole app (`app/src/App.stories.tsx`, over `zenBridge.ts`, on `app/src/stories/` answering Tauri's IPC), never the Rust app. A story tagged `!test` is left out: 13 of the UI's, whose plays never ran in zen and fail here, until they're fixed. Needs Playwright's Chromium once (`npx playwright install chromium`) | a change under `app/src/ui/`, to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin |
+| `npm run storybook`, `npm run build-storybook` | Storybook with hot reload on port 6006 (or `PORT`), or built into `storybook-static/`: the UI's parts and the whole app, with zen's toolbar (theme pack, mode, facets) and a Desk menu. Agents add `-- --ci --no-open --host 127.0.0.1`, run it in the background with a `trap` that stops it, and check `ps` afterwards | to look at a component's states; `build-storybook` after a change to `.storybook/` |
+| `ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`STORYBOOK_PORT` for another port than 6006) | the UI and zen's source together, hot-reloaded, in one Storybook window with zen's composed in (see "Working on the app and zen together" above). Leaves node_modules linked to the checkout: run a plain `npm install` afterwards | designing across the app and zen; agents run it in the background, stop it, check `ps`, then `npm install` |
+| `npm run app:build-ui` | the app's page builds into `dist-app/`, which the app crate needs to compile; it must have no `Lab-*` chunk and no editor command (CI checks), so nothing outside `Lab.tsx` may import `app/src/ui/lab.ts`, `Editor/`, `StageGraph/`, `StageInspector/` or `ui/model/lab.ts` | changes to `app/src`, `app/index.html` or `vite.app.config.ts` |
 | `npm run app:build-ui:lab` | the lab page (with the editor, as its own `Lab-*` chunk) builds into `dist-app/` | changes to `app/src`, `app/index.html` or `vite.app.config.ts`; run it before `app:build-ui`, which leaves the app's page in `dist-app/` |
 | `npm run check:no-dev-code` (add `-- --bin target/debug/visuals` after a plain `cargo build -p visuals-app`) | none of `npm run dev`'s bridge is in what ships: not in the app's page in `dist-app/` (no `app/src/dev/`, and no Storybook, `mockIPC` or `app/src/stories/` either), nor in a binary built without `dev-bridge` (no `bridge.rs`); exit 1 naming what it found, 2 without `dist-app/` (CI runs both) | after `npm run app:build-ui`, and after a change to `app/src/dev/`, `bridge.rs`, `vite.dev.config.ts` or `.storybook/` |
 | `npm run dev` (`npm run dev:lab` for the editor) | the app's page in a normal browser with HMR, driving the real app headless over its dev bridge: real commands, events, deck, library, audio and Link, and the bench's frames streamed into the preview. It also starts Storybook on `STORYBOOK_PORT` (6006, or a free port when taken; it ending by itself is reported and the rest keeps running); the page's port is `PORT`. Prints the URLs to open, with the bridge's token; opens it when run from a terminal (`VISUALS_DEV_OPEN=0` doesn't). Exits 1, stopping everything, when the app fails to build or quits | designing the page; agents load the URL with Playwright (`compare/`'s), then stop the run and check `ps` that no vite or `target/debug/visuals` is left |
@@ -101,14 +133,13 @@ In a debug build `VISUALS_FROST=<material>` gives the main window another frost 
 `tauri.conf.json`'s `hud`: `under-window`, `sidebar`, `hud`, `fullscreen-ui`, `popover`,
 `menu`, `header`, `content`, `window`, `glass` or `glass-clear` (macOS 26's Liquid Glass),
 or `off` for a solid window; `VISUALS_FROST_TINT=<0..1>` scales the page's tints over it
-(0: the material alone, 1: as shipped; zen's page doesn't read the tint or `data-frost` yet,
+(0: the material alone, 1: as shipped; the page (`app/src/ui/`) doesn't read the tint or `data-frost` yet,
 so only the material changes). Only a run on screen shows the frost: headless,
 the log says `VISUALS_FROST: the main window is …` and, but for `off`, `bench: stacked [Frost, Bench, Other]`.
 Home is the inspector view: the sidebar and the inspector either side of the main column
-(zen's `visuals/model/home-model.ts`; the app's copy, `app/src/layout/home-model.ts`, stays
-for its tests). The `VITE_HOME_*` flags below were read by the app's own page; zen's built
-package drops them (they sit behind its `import.meta.env.DEV`), so they do nothing until zen
-takes them another way. In a dev run `VITE_HOME_PANEL=1` opens the inspector at start and
+(`app/src/ui/model/home-model.ts`; the older copy, `app/src/layout/home-model.ts`, stays
+for its tests). The `VITE_HOME_*` flags below are read behind `import.meta.env.DEV`, so
+only a dev run (`npm run dev`, `npm run app`) takes them, never a build. In a dev run `VITE_HOME_PANEL=1` opens the inspector at start and
 `VITE_HOME_PANEL=0` starts it closed, at any width; `VITE_HOME_SIDEBAR=1` shows the sidebar at start and
 `VITE_HOME_SIDEBAR=0` hides it; `VITE_HOME_PICK=<path in the pack>` starts with that preset picked, shown in
 the inspector. `VITE_HOME_FILTER=<group>:<value>` (e.g. `style:Hypnotic`) starts the library with its filter
@@ -152,15 +183,17 @@ release: `npm run check:no-dev-code` checks the page and the binary.
 all touch. A change to them lands as its own small PR (a milestone's contract) before the
 lanes that need it; a lane that needs one asks for it rather than making it:
 `app/src/api.ts` (the commands' TS types), `app/src/main.tsx` and `app/src/zenBridge.ts`
-(what the page renders and the bridge zen runs on), `app/src/views.tsx`,
+(what the page renders and the bridge the UI runs on), `app/src/views.tsx`,
 `app/src/words.ts` (the plain words all UI copy uses: bench → preview, the one → bar
 start…), `app/src-tauri/src/main.rs` (modules and the command list),
 `app/src-tauri/src/settings.rs`, `app/src-tauri/Cargo.toml`, `Cargo.lock`,
 `app/src-tauri/tauri.conf.json` (each lane owns its own section, such as `plugins.updater`),
 `package.json` (zen's pin among it), `vite.app.config.ts`, `.github/workflows/ci.yml`, `AGENTS.md`, `README.md`
 and `app/src/layout/home-model.ts`. The screens' own contract files (`App`, `Numbers`,
-the home's and live's models) are zen's now (`src/library/visuals/`). The milestone
-notes below name files as they were before zen; the screens among them are in zen.
+the home's and live's models) are in `app/src/ui/` now (`App/`, `Numbers/`,
+`model/home-model.ts`, `model/live-model.ts`, `model/stage-model.ts`). The milestone
+notes below name files as they were before the UI moved to zen and back; the screens
+among them are in `app/src/ui/`.
 Stubs for a lane's commands live in the lane's own file (`pack.rs`, `updater.rs`,
 `testsound.rs`, `tap.rs`, `pack.ts`, `SourcePicker.tsx`) so the lane fills them in
 without touching these.
