@@ -1,0 +1,16 @@
+/* Live mode, as the Stage (Live.tsx): the picture full-bleed under the page and the header and
+   controls fading in over it. The Stage's parts style themselves; here is only Live's own root
+   and focus.
+
+   `.vs-live` takes no box: the Stage's shell lays out the window, and `.vs-live` only scopes the
+   rule below and carries what Live is doing (`data-windowed`, `data-pinned`). */
+
+.vs-live {
+  display: contents;
+}
+
+/* Focus on the sliders and the switch's choices here, in the ring every view uses (access.css). */
+.vs-live :is([role='slider'], [role='radio']):focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}

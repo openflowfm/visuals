@@ -1,0 +1,20 @@
+.vs-camera-body,
+.vs-camera-group,
+.vs-camera-power,
+.vs-camera-switches {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.vs-camera-group {
+  padding-block: var(--space-3);
+}
+/* The notes and status are caption Text (Camera.tsx); only their offset and ink are here. */
+.vs-camera-note,
+.vs-camera-status {
+  margin: 0;
+  color: var(--text-3);
+}
+.vs-camera-note p {
+  margin: 0;
+}

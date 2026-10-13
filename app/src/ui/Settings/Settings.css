@@ -1,0 +1,98 @@
+/* ⚙ Settings and the sheets (Settings.tsx's Sheet, which More effects uses too): the core Sheet
+   on an overlay layer, in an Opaque scope since it sits over the native preview (the layer's
+   solid, no blur). Sized for a finger: the sheets' controls are 44px, as the original's were.
+   Inside, no lines: sections are Groups told apart by space, each under the group's quiet
+   label; a setting is a row of type, its name first and its control at the row's end; any note
+   under both, quiet. Contract variables and visuals.css tokens only. */
+
+/* The sheets. */
+.vs-sheet {
+  /* The original's finger-sized targets in its sheets: 44px, the widest and the middle space steps. */
+  --vs-sheet-target: calc(var(--space-6) + var(--space-3));
+  --control-h: var(--vs-sheet-target);
+}
+/* The pane takes the Modal's body type (the sans at --size-body, which --vs-text-body is). */
+.vs-sheet .lib-modal__pane {
+  border-radius: var(--radius-card);
+  color: var(--text-2);
+}
+/* The title is the Modal's display Text: its size knob. */
+.vs-sheet .lib-modal__title {
+  --text-size: var(--vs-text-heading);
+}
+.vs-sheet .lib-modal__close {
+  min-width: var(--control-h);
+}
+
+/* Settings: the sections, set apart by space alone. A control Tab lands on scrolls into view
+   below the head, not under it. */
+.vs-settings .lib-modal__body {
+  gap: var(--mat-plate-gap);
+  scroll-padding-top: var(--space-6);
+}
+
+/* A quiet note: what a setting decides, who decides it, or why a change failed. Captions on the
+   overlay take the raised step, so they stay at 4.5:1 there. A caption Text (--vs-text-label) on
+   a roomier line. */
+.vs-sheet .vs-settings-line {
+  margin: 0;
+  color: var(--vs-caption-raised);
+  --text-leading: 1.45;
+}
+.vs-sheet .vs-settings-problem {
+  color: var(--danger);
+}
+
+/* A switch: its name first, the switch at the row's end, as the other rows end; under it, quiet,
+   what it means, who decides, or why a change failed. */
+.vs-settings-switch {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-1);
+}
+/* The row is the Switch's (the sans at --size-body); its name a strong Text (Settings.tsx). */
+.vs-settings-switch > .lib-switch-row {
+  min-height: var(--control-h);
+  color: var(--text-1);
+}
+.vs-settings-switch > .vs-settings-follow {
+  align-self: flex-start;
+}
+/* The button's face is a Text: its size knob. */
+.vs-settings-follow .lib-action-button-face {
+  color: var(--text-2);
+  --text-size: var(--vs-text-label);
+}
+
+/* Quality: the four levels across the panel, the line under them. */
+.vs-settings-quality {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* From the original's access.css (issue 100), for every view: keyboard focus shows as a ring in the
+   controls' ink, which stands out on every surface; views that draw their own ring keep it.
+   Pointer clicks don't light it: only :focus-visible. */
+.vs-root :is(button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex='-1']), [role='slider'], [role='switch'], [role='tab'], [role='option'], [role='menuitem']):focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+}
+/* A composite widget pointing at its active item (the library grid) rings that item, not itself. */
+.vs-root [aria-activedescendant]:focus-visible {
+  outline: none;
+}
+/* A dialog or sheet focused as a whole (on open) is announced, not ringed. */
+.vs-root [tabindex='-1']:focus {
+  outline: none;
+}
+/* Reduced motion: no animations or slides; changes land at once. */
+:root[data-reduced-motion] *,
+:root[data-reduced-motion] *::before,
+:root[data-reduced-motion] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

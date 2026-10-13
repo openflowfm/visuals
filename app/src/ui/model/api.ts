@@ -1,0 +1,387 @@
+import { invoke, listen, type UnlistenFn } from './ipc';
+
+/** `engine::preset::Wave`. */
+export interface Wave {
+  values: Record<string, number>;
+  init: string;
+  frame: string;
+  point: string;
+}
+
+/** `engine::preset::Shape`. */
+export interface Shape {
+  values: Record<string, number>;
+  init: string;
+  frame: string;
+}
+
+/** `engine::preset::Preset`: a `.milk` file read into its parts. */
+export interface Preset {
+  values: Record<string, number>;
+  init: string;
+  frame: string;
+  vertex: string;
+  waves: [Wave, Wave, Wave, Wave];
+  shapes: [Shape, Shape, Shape, Shape];
+  warp: string;
+  comp: string;
+}
+
+export interface Entry {
+  path: string;
+  name: string;
+  group: string;
+}
+
+export interface Problem {
+  /** `init`, `frame`, `vertex`, `wave0.point`, `shape2.frame`, `warp`, `comp`… */
+  stage: string;
+  message: string;
+  line: number | null;
+}
+
+export interface Report {
+  /** Equations that would not compile; the bench keeps drawing the last preset. */
+  equations: Problem[];
+  /** Shaders that would not compile and draw MilkDrop's default instead. */
+  shaders: Problem[];
+}
+
+export interface Input {
+  name: string;
+  channels: number;
+}
+
+export interface Stats {
+  fps: number;
+  cpu_ms: number;
+}
+
+/** `engine::runtime::Owner`: whose values a setting is. */
+export type Owner = { list: 'base' } | { list: 'waves' | 'shapes'; index: number };
+
+/** `engine::render::PREVIEW` (the base size), `PREVIEW_MAX` and `PREVIEWS`. */
+export const PREVIEW = { width: 192, height: 108, maxWidth: 768, count: 15 };
+
+export const presets = () => invoke<Entry[]>('presets');
+/** One setting, live. False means the preset needs applying whole instead. */
+export const setValue = (owner: Owner, key: string, value: number) => invoke<boolean>('set_value', { owner, key, value });
+/** Keep the stage pictures `which` (`PREVIEWS` indices) at `width`×`height`; none stops them. */
+export const setPreviews = (which: number[], width = PREVIEW.width, height = PREVIEW.height) => invoke<void>('set_previews', { which, width, height });
+/** The latest stage pictures, packed with a header (`unpack` in previews.ts). */
+export const previews = () => invoke<ArrayBuffer>('previews');
+/** MilkDrop's default `warp` or `comp` shader as code to start from, with this
+ * preset's decay, gamma and echo written in as numbers so it runs in any player
+ * (`engine::shader::written_default`). */
+export const defaultShader = (preset: Preset, which: 'warp' | 'comp') => invoke<string>('default_shader', { preset, which });
+/** `library::Opened`: a preset opened on the preview, and what of it failed to compile. */
+export interface Opened {
+  preset: Preset;
+  report: Report;
+}
+export const open = (path: string) => invoke<Opened>('open', { path });
+export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
+export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
+export const inputs = () => invoke<Input[]>('inputs');
+/** `size` (the input's channel count) tells apart inputs that share a name. */
+export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) => invoke<string>('listen_to', { name, size, left, right });
+
+/** What the bench hears: the input and the two channels, counted from 1. */
+export interface Heard {
+  choice: { name: string; left: number; right: number; size: number } | null;
+  channels: number;
+  /** A tap is heard but macOS refused it other apps' sound, so it hears silence. */
+  denied?: boolean;
+}
+export const listening = () => invoke<Heard>('listening');
+/** The loudest sample in the left and right channels' latest windows, 0–1. */
+export const levels = () => invoke<[number, number]>('levels');
+export const stats = () => invoke<Stats>('stats');
+
+/** `listen::SourceId`: an app's sound (a running DAW…), everything the Mac plays, or an input device. */
+export type SourceId = { kind: 'app'; bundle: string } | { kind: 'system' } | { kind: 'device'; name: string; size: number; uid?: string };
+
+/** `listen::Source`: something to listen to, as the source picker names it. */
+export interface Source {
+  id: SourceId;
+  name: string;
+  channels: number;
+}
+
+/** `listen::AudioSources`. */
+export interface AudioSources {
+  /** Apps and the whole Mac can be listened to (a Core Audio process tap, macOS 14.4+). */
+  taps: boolean;
+  sources: Source[];
+}
+
+export const audioSources = () => invoke<AudioSources>('audio_sources');
+/** Listen to `source`, channels `left` and `right` counted from 1. Resolves to the source's name. */
+export const listenToSource = (source: SourceId, left = 1, right = 2) => invoke<string>('listen_to', { source, left, right });
+
+/** True until the welcome flow has been finished or skipped once. */
+export const firstRun = () => invoke<boolean>('first_run');
+/** The welcome flow is done: `firstRun` reads false from now on. */
+export const firstRunDone = () => invoke<void>('first_run_done');
+
+/** `updater::Update`: a newer version, and what's new in it. */
+export interface Update {
+  version: string;
+  notes: string;
+  date: string | null;
+}
+/** A newer version on this build's channel, or null when this one is the latest. */
+export const updateCheck = () => invoke<Update | null>('update_check');
+/** Which builds updates come from: `release` (each published version) or `latest` (every build from main). */
+export type UpdateChannelName = 'release' | 'latest';
+/** The update channel in use, and the one a fresh install starts on. */
+export interface UpdateChannel {
+  channel: UpdateChannelName;
+  default: UpdateChannelName;
+}
+/** The update channel in use. */
+export const updateChannel = () => invoke<UpdateChannel>('update_channel');
+/** Change the update channel. Rejects with why when it couldn't be saved; it still applies until quit. */
+export const updateChannelSet = (channel: UpdateChannelName) => invoke<UpdateChannel>('update_channel_set', { channel });
+/** Download and install the update `updateCheck` found, then relaunch. */
+export const updateInstall = () => invoke<void>('update_install');
+
+/** Play (or stop) the test sound into the engine, as if it were heard. */
+export const testSound = (on: boolean) => invoke<void>('test_sound', { on });
+
+/** `engine::index::Level`. */
+export type Level = 'low' | 'mid' | 'high';
+
+/** `engine::index::Look`: what a preset looks like, measured from its pictures. */
+export interface Look {
+  /** Dominant hues in degrees, the strongest first; empty when it's grey. */
+  hues: number[];
+  /** Mean luma, 0–1. */
+  brightness: number;
+  /** Mean block motion per step; null when there was nothing to follow. */
+  speed: number | null;
+  /** Mean frame difference per step, luma 0–255. */
+  intensity: number;
+  brightness_level: Level;
+  speed_level: Level;
+  intensity_level: Level;
+}
+
+/** `catalog::Row`: one preset in the library, as its index has it. */
+export interface LibraryRow {
+  /** Folder-relative, `/`-separated (`cream-of-the-crop/Dancer/…/x.milk`); what `LibraryData` is keyed by. */
+  key: string;
+  /** The file, to `open`. */
+  path: string;
+  /** SHA-256 of the file in hex; empty when no index lists it. */
+  hash: string;
+  style: string;
+  sub_style: string | null;
+  /** Case-folded, originals first; `unknown` when the name doesn't credit one. */
+  authors: string[];
+  title: string;
+  /** A URL for an `<img>` (`thumb:` scheme); null when there's none. */
+  thumbnail: string | null;
+  /** Null when it hasn't been drawn. */
+  look: Look | null;
+  /** From the bundled starter set rather than the presets folder. */
+  starter: boolean;
+  /** A curated pick: one of the starter set's presets, also once found again in the presets folder by key or content hash. Browsing the library lists these first (decision 68). Rust always says; a row the page makes itself may leave it out. */
+  curated?: boolean;
+}
+
+/** Every preset in the library (the starter set and the presets folder, once each), sorted by key. */
+export const libraryIndex = () => invoke<LibraryRow[]>('library_index');
+
+/** `userlib::Overrides`: the user's own values for a preset's automatic groups; one left out keeps the index's. */
+export interface Overrides {
+  style?: string;
+  sub_style?: string;
+  authors?: string[];
+  title?: string;
+  hues?: number[];
+  brightness?: Level;
+  speed?: Level;
+  intensity?: Level;
+}
+
+/**
+ * `userlib::PresetTune`: the user's own pace for one preset, multiplying the playlist's or live
+ * value while it plays. Each 0.25–4; one left out is 1 (as made), and 1 is never kept.
+ */
+export interface PresetTune {
+  speed?: number;
+  sensitivity?: number;
+}
+
+/** `userlib::TUNE_MIN`, `TUNE_MAX`: the range a preset's speed and sensitivity are clamped to. */
+export const TUNE_MIN = 0.25;
+export const TUNE_MAX = 4;
+
+/** `userlib::Mine`: what the user keeps about one preset; a field left out is false, empty or none. */
+export interface Mine {
+  hash?: string;
+  star?: boolean;
+  tags?: string[];
+  /** Never played by random or auto-advance. */
+  hidden?: boolean;
+  /** 1–5 stars; left out when unrated. */
+  rating?: number;
+  overrides?: Overrides;
+  /** Left out when the preset plays as made. */
+  tune?: PresetTune;
+}
+
+/** `userlib::LibraryData` (`library.json`): only the presets the user has touched, by key. */
+export interface LibraryData {
+  version: number;
+  presets: Record<string, Mine>;
+}
+
+/** `userlib::Change`: made to each preset `librarySet` is given; a field left out changes nothing. */
+export interface LibraryChange {
+  star?: boolean;
+  hidden?: boolean;
+  /** 1–5 stars; 0 takes the rating off. */
+  rating?: number;
+  add_tags?: string[];
+  remove_tags?: string[];
+  /** Drop the preset's overrides before `overrides` is applied. */
+  clear_overrides?: boolean;
+  /** Values to set; the ones left out stay. */
+  overrides?: Overrides;
+  /** Put the preset's speed and sensitivity back to 1 before `tune` is applied (the inspector's reset). */
+  clear_tune?: boolean;
+  /** Values to set (clamped to `TUNE_MIN`–`TUNE_MAX`); the ones left out stay, and 1 takes one off. */
+  tune?: PresetTune;
+}
+
+export const libraryData = () => invoke<LibraryData>('library_data');
+/** Make `change` to each preset at `keys`; resolves to the data after it, also sent as `LIBRARY_CHANGED_EVENT`. */
+export const librarySet = (keys: string[], change: LibraryChange) => invoke<LibraryData>('library_set', { keys, change });
+
+/** `userlib::CHANGED`: the user's library data changed; the payload is the whole `LibraryData`. */
+export const LIBRARY_CHANGED_EVENT = 'library-changed';
+export const onLibraryChanged = (f: (data: LibraryData) => void): Promise<UnlistenFn> => listen<LibraryData>(LIBRARY_CHANGED_EVENT, (e) => f(e.payload));
+
+/** The library's groups, as its chips name them. */
+export type LibraryGroup = 'style' | 'author' | 'colour' | 'speed' | 'intensity' | 'star' | 'tags';
+
+/** A library filter: AND across groups, OR within one, and the search text. */
+export interface LibraryQuery {
+  groups: Partial<Record<LibraryGroup, string[]>>;
+  text: string;
+  /** Only presets among the last this many played, newest first. */
+  recent?: number;
+  /**
+   * The library pane's grid as it browses (decision 68): curated picks first, and utility presets (a style
+   * starting with "!") left out unless the style group or the search asks for them. Only the library's grid
+   * and the deck following it set this; a saved smart playlist never has it, so it resolves by key, with every match.
+   */
+  browse?: boolean;
+}
+
+/** Save `query` as a smart playlist named `name`, `starter` marking one of the home's starters; resolves to its id, and a `lists` event follows. */
+export const smartPlaylistSave = (name: string, query: LibraryQuery, starter?: string) => invoke<string>('smart_playlist_save', { name, query, starter: starter ?? null });
+
+/** How much the renderer draws: chosen by the user, or `auto` to follow the machine. */
+export type QualityLevel = 'auto' | 'low' | 'medium' | 'high';
+/** `quality::Quality`: the level chosen, and the one in effect (what `auto` came to). */
+export interface Quality {
+  chosen: QualityLevel;
+  effective: Exclude<QualityLevel, 'auto'>;
+  /** One line on why it is at `effective`: what auto measured, or that it was chosen. */
+  reason: string;
+}
+/** The render quality now: the level chosen, the one in effect, and why. */
+export const qualityGet = () => invoke<Quality>('quality_get');
+/** Choose the render quality, kept for next launch and drawn at from now on; resolves to it in effect. */
+export const qualitySet = (level: QualityLevel) => invoke<Quality>('quality_set', { level });
+
+/** `access::Motion`: whether to calm the motion, and whether that came from macOS's own setting. */
+export interface Motion {
+  reduced: boolean;
+  /** No choice made in the app: macOS's "Reduce motion" decides. */
+  system: boolean;
+}
+export const reducedMotion = () => invoke<Motion>('reduced_motion');
+/** Reduce motion (true), don't (false), or follow macOS (null). */
+export const reducedMotionSet = (on: boolean | null) => invoke<Motion>('reduced_motion_set', { on });
+/** Whether "I understand" was chosen on the flashing warning, kept in `access.json` so it is asked once (and not in dev runs or headless captures after that). */
+export const flashWarningUnderstood = () => invoke<boolean>('flash_warning_understood');
+/** Keep that "I understand" was chosen on the flashing warning. */
+export const flashWarningUnderstand = () => invoke<void>('flash_warning_understand');
+
+/** `crash::Report`: a crash kept on this Mac. */
+export interface CrashReport {
+  id: string;
+  /** Unix seconds. */
+  when: number;
+  summary: string;
+  text: string;
+  /** Already opened as an issue. */
+  sent: boolean;
+}
+/** The crash reports kept on this Mac, unsent and sent. */
+export const crashReports = () => invoke<CrashReport[]>('crash_reports');
+/** Open a GitHub issue prefilled with the report, for the user to look over and submit; nothing goes to a server of ours. */
+export const crashReportOpen = (id: string) => invoke<void>('crash_report_open', { id });
+/** Whether crashes are kept to report. */
+export const crashReportsEnabled = () => invoke<boolean>('crash_reports_enabled');
+export const crashReportsEnable = (on: boolean) => invoke<void>('crash_reports_enable', { on });
+
+/** `resume::Resume`: where the last session left off, to pick it up again. */
+export interface Resume {
+  playlist: string | null;
+  index: number | null;
+  current: string | null;
+  source: SourceId | null;
+  /** The unsaved filter playing (a mood, or the library's grid followed); played again when no playlist was. */
+  query?: LibraryQuery | null;
+  /** The deck's live tweaks put back; null when none differed. */
+  tweaks?: Tweaks | null;
+  /** HOLD was on. */
+  hold?: boolean;
+}
+/** `resume::Tweaks`: the deck's live tweaks kept; one left out wasn't tweaked away from the playlist's. */
+export interface Tweaks {
+  auto?: boolean;
+  seconds?: number;
+  bars?: number;
+  transition?: number;
+  speed?: number;
+  trails?: number;
+  hue?: number;
+}
+/** Where the last session left off, being picked up; null on a first run, when started on a given preset, or when nothing was playing. The page opens a preset of its own only when it is null. */
+export const resumeState = () => invoke<Resume | null>('resume_state');
+/** `resume::presets_failed`: the presets (by `path`) that failed to open or draw; live skips them, the library marks them. */
+export const presetsFailed = () => invoke<string[]>('presets_failed');
+/** Sent with the whole list each time a preset fails. */
+export const PRESETS_FAILED_EVENT = 'presets-failed';
+export const onPresetsFailed = (f: (paths: string[]) => void): Promise<UnlistenFn> => listen<string[]>(PRESETS_FAILED_EVENT, (e) => f(e.payload));
+/** `resume::SKIPPED`: sent with its path each time next, previous, random or auto-advance skips a preset that won't load. */
+export const onPresetSkipped = (f: (path: string) => void): Promise<UnlistenFn> => listen<string>('preset-skipped', (e) => f(e.payload));
+/** `resume::STOPPED`: stepping past presets that panic drawing stopped, with how many in a row wouldn't draw (`resume::BUDGET`); the picture holds. Not a skip. */
+export const onSkippingStopped = (f: (inARow: number) => void): Promise<UnlistenFn> => listen<number>('preset-skipping-stopped', (e) => f(e.payload));
+
+/** `settings::Problem`: a settings file (`audio.json`, `playlists.json`…) that couldn't be read or kept, in plain words. */
+export interface SettingsProblem {
+  file: string;
+  message: string;
+}
+/** The settings files that couldn't be read or kept this run; empty when all is well. */
+export const settingsProblems = () => invoke<SettingsProblem[]>('settings_problems');
+/** Sent with the whole list each time it changes. */
+export const SETTINGS_PROBLEMS_EVENT = 'settings-problems';
+export const onSettingsProblems = (f: (problems: SettingsProblem[]) => void): Promise<UnlistenFn> => listen<SettingsProblem[]>(SETTINGS_PROBLEMS_EVENT, (e) => f(e.payload));
+
+/** Menu event: Check for Updates… was chosen. Listened to by #87. */
+export const UPDATE_CHECK_EVENT = 'update-check';
+/** Menu event: Welcome… was chosen. Listened to by #88. */
+export const WELCOME_EVENT = 'welcome';
+/** Menu event: Credits was chosen. Listened to by #86. */
+export const CREDITS_EVENT = 'credits';
+/** Menu event: Settings… (⌘,) was chosen; the page opens its Settings sheet (`useSheet` in views.tsx). */
+export const MENU_SETTINGS_EVENT = 'menu-settings';
+export const onMenuSettings = (f: () => void): Promise<UnlistenFn> => listen(MENU_SETTINGS_EVENT, () => f());

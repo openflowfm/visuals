@@ -12,7 +12,7 @@ export default defineConfig({
   test: {
     projects: [
       {
-        test: { name: 'unit', include: ['app/src/**/*.test.{ts,tsx}'], environment: 'node' },
+        test: { name: 'unit', include: ['app/src/**/*.test.{ts,tsx}'], environment: 'node', setupFiles: ['app/src/ui/test-setup.ts'] },
       },
       {
         plugins: [storybookTest({ configDir: '.storybook' })],

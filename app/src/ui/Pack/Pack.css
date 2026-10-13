@@ -1,0 +1,78 @@
+/* The pack bar (Pack.tsx): the library's foot and ⚙ Settings' Presets section, and the download's
+   progress bar it shares with PackOffer. Near borderless: no rule above it, no box round the
+   progress, only a tone step. Contract variables and visuals.css tokens only. */
+
+.vs-pack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.vs-pack-get {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.vs-pack-download,
+.vs-pack-download .lib-action-button-face {
+  width: 100%;
+}
+.vs-pack-download .lib-action-button-face {
+  height: auto;
+  min-height: var(--control-h);
+  white-space: normal;
+  /* The face is a Text: its leading knob. */
+  --text-leading: 1.3;
+}
+
+/* The progress: a tone step, filled in the accent. It fills at once (nothing animates). */
+.vs-pack-progress {
+  position: relative;
+  display: block;
+  min-height: var(--control-h);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--surface-2);
+}
+.vs-pack-progress-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.vs-pack-progress-label {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  padding: 0 var(--space-3);
+  color: var(--text-1);
+  /* A tabular body Text on the control's line. */
+  --text-size: var(--vs-text-control);
+  --text-leading: var(--control-h);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vs-pack-note {
+  margin: 0;
+  color: var(--text-3);
+  /* A caption Text (--vs-text-label) on a roomier line. */
+  --text-leading: 1.45;
+  overflow-wrap: anywhere;
+}
+.vs-pack-note[data-error] {
+  color: var(--danger);
+}
+
+.vs-pack-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.vs-pack-count {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+  /* A strong, tabular body Text. */
+  --text-size: var(--vs-text-body);
+  white-space: nowrap;
+}

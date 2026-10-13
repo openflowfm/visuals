@@ -1,0 +1,233 @@
+/* The Stage's header (StageHead.tsx): one row of bare type on the window buttons' line over the
+   full-bleed picture, on the shell's scrim, as Home's header is type on its tint. No capsules: the
+   popovers' panels are the only solid layers, opaque in the Stage's scope (a blur never reaches the
+   native picture). The empty line between the switch and the lights is the title bar: a drag
+   there moves the window. The notices are quiet words before Beat (no toasts), and "Full screen
+   on…" is in the Output popover.
+
+   Tuning knobs: none. */
+
+.vs-stagehead {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  color: var(--text-2);
+  font-family: var(--font-sans);
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+.vs-stagehead > * {
+  flex: none;
+}
+/* Tauri's drag region takes only presses on the element itself: the spacer lets them through to the header. */
+.vs-stagehead > .vs-stagehead-fill {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  pointer-events: none;
+}
+
+/* Home | Live: the theme's plain-text switch, at the row's start. */
+.vs-stagehead-switch {
+  display: inline-flex;
+}
+
+/* The mixer, the camera, ?, settings and ✕: Home's quiet glyph tools, in Home's order, brighter on
+   hover and while what they open shows. The mixer is Home's folded audio input (its glyph and
+   meter, the source in its popover). */
+.vs-stagehead-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+.vs-stagehead-tools > .vs-transport-right {
+  margin-right: var(--space-1);
+  /* A label Text, which the audio input inherits. */
+  --text-size: var(--vs-text-label);
+  color: var(--text-3);
+}
+
+/* The hairline between the status area and the icons. */
+.vs-stagehead-rule {
+  align-self: center;
+  width: var(--border-width);
+  height: calc(var(--space-4) + var(--space-1)); /* 20px */
+  background: var(--border);
+}
+
+/* The status area's notes (no toasts): quiet caption words before Beat, one line, cut short. */
+.vs-stagehead > .vs-stagehead-note {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(var(--space-6) * 8 + var(--space-1)); /* 260px */
+  overflow: hidden;
+  color: var(--text-3);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* A failure: its words, and its quiet ✕ to dismiss it. */
+.vs-stagehead > .vs-stagehead-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0;
+  background: none;
+  color: var(--text-2);
+  --text-size: var(--size-caption);
+}
+.vs-stagehead-notice .vs-notice-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-stagehead .lib-action-button-face.vs-stagehead-tool {
+  width: var(--control-h);
+  padding: 0;
+  color: var(--text-3);
+}
+.vs-stagehead .lib-action-button-face.vs-stagehead-tool:hover,
+.vs-stagehead .lib-action-button-face.vs-stagehead-tool[aria-expanded='true'] {
+  color: var(--text-1);
+}
+.vs-stagehead .lib-action-button-face.vs-stagehead-tool:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+
+/* The lights: a dot and a few words, in the Popover button's own type; the figures are Texts at
+   its size and weight, tabular. */
+.vs-stagehead-num {
+  --text-weight: 500;
+}
+.vs-stagehead-light-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text-3);
+}
+.vs-stagehead-light-text {
+  display: inline-block;
+  max-width: calc(var(--control-h) * 6); /* 180px */
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  color: var(--text-3);
+}
+/* The Output light: white while the picture is on a display, grey while it plays in this window. */
+.vs-stagehead-light-text[data-on] {
+  color: var(--text-1);
+}
+/* The Output light's dot: the ink while the picture is on a display, quiet while in this window. */
+.vs-stagehead-output-dot {
+  display: inline-block;
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  margin-right: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+  vertical-align: middle;
+}
+.vs-stagehead-output-dot[data-on] {
+  background: var(--text-1);
+}
+.vs-stagehead-beat-dot {
+  flex: none;
+  width: var(--space-2);
+  height: var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-3);
+}
+.vs-stagehead-beat-dot[data-on] {
+  background: var(--vs-playing);
+}
+
+/* The frame rate, only while it is low, and the skipped note, quiet; one line, cut short, its
+   tooltip whole. Fading, the note goes at once. */
+.vs-stagehead-fps {
+  color: var(--warning);
+  white-space: nowrap;
+}
+.vs-stagehead > .vs-stagehead-skipped {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(var(--space-6) * 8 + var(--space-1)); /* 260px */
+  overflow: hidden;
+  color: var(--text-4);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.vs-stagehead-skipped[data-fading] {
+  visibility: hidden;
+}
+
+/* The lights' panels' contents: the popover's float layer is opaque in the Stage's scope, so its
+   captions take the raised step. */
+.vs-stagehead-pop {
+  --text-3: var(--vs-caption-raised);
+  display: grid;
+  gap: var(--space-3);
+  min-width: calc(var(--space-6) * 8 + var(--space-5)); /* 280px */
+  padding: var(--space-2);
+  white-space: normal;
+}
+.vs-stagehead-pop[data-pop='beat'] > :first-child {
+  width: 100%;
+}
+
+/* The short form (STAGE_HEAD_FORMS, a narrow window): the words shorten so the row keeps to one line. */
+.vs-stagehead[data-form='short'] {
+  gap: var(--space-2);
+}
+.vs-stagehead[data-form='short'] .vs-stagehead-light-text {
+  max-width: calc(var(--control-h) * 3 + var(--space-4) + var(--space-1)); /* 110px */
+}
+.vs-stagehead[data-form='short'] > :is(.vs-stagehead-skipped, .vs-stagehead-note) {
+  max-width: calc(var(--control-h) * 4); /* 120px */
+}
+
+/* "Full screen on…": at the top of the Output popover while the picture plays in this window; the
+   popover's panel is its surface. */
+.vs-stagehead-offer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  margin: 0 calc(var(--space-2) * -1);
+  color: var(--text-2);
+}
+.vs-stagehead-offer .lib-action-button-face.vs-stagehead-offer-go {
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-2);
+  --text-weight: var(--weight-body);
+}
+.vs-stagehead-offer .vs-stagehead-offer-name {
+  color: var(--text-1);
+}
+.vs-stagehead-offer .lib-action-button-face.vs-stagehead-offer-go:hover {
+  color: var(--text-1);
+}
+.vs-stagehead-offer .lib-action-button-face.vs-stagehead-offer-go:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+.vs-stagehead-offer-note {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--text-3);
+}
+
+/* The error note's slot: only marks it (`[data-note]`), lays nothing out. */
+.vs-stagehead-noteslot {
+  display: contents;
+}

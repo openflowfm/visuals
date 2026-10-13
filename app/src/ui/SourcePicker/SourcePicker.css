@@ -1,0 +1,120 @@
+/* The source picker (SourcePicker.tsx), from app.css's `.audio-input`, `.vf-meters` and
+   `.vf-warning`, and audio.css: the picker, the levels, and Advanced holding the channel pickers. */
+
+.vs-audio-input {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+/* The levels, left above right: two thin bars lit in the signal's green. */
+/* The two bars span the text's cap height beside "Mixer": left at the caps' top, right on the
+   baseline. Each Meter's empty caption and readout rows take no room. */
+.vs-meters {
+  display: inline-flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 1cap;
+  margin-left: 2px;
+}
+.vs-meters .lib-meter {
+  gap: 0;
+}
+
+/* Caution, in a control's size (a Text at the label size, --vs-text-control): nothing to hear, a
+   source gone, a refusal. */
+.vs-audio-input .vs-warning {
+  color: var(--warning);
+}
+/* app.css's 280px: a note's widest, a measure the scale has no step for. */
+.vs-audio-note {
+  --vs-audio-note-width: calc(var(--space-2) * 35);
+  max-width: var(--vs-audio-note-width);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Advanced: type, not a box (a caption Text, --vs-text-label); open, the channel pickers float
+   under it. */
+.vs-audio-advanced {
+  position: relative;
+  display: inline-block;
+}
+.vs-audio-advanced > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 2px var(--space-1);
+  color: var(--text-3);
+}
+.vs-audio-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.vs-audio-advanced > summary:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-control);
+}
+.vs-audio-advanced[open] > summary {
+  color: var(--text-1);
+}
+.vs-audio-advanced-body {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 20;
+  display: inline-flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-card);
+}
+
+/* Shown under the picker (Settings): a caption (a caption Text, capitalised in code), then the
+   two pickers. */
+.vs-audio-channels {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.vs-audio-channels-name {
+  color: var(--text-3);
+}
+
+.vs-audio-lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+/* Lane names and the combined level are caption Text (SourcePicker.tsx); only their ink is here. */
+.vs-audio-lane-name,
+.vs-audio-mix-levels {
+  color: var(--text-2);
+}
+.vs-audio-optional {
+  color: var(--text-3);
+}
+.vs-audio-mixer-shown {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.vs-audio-mix-levels {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Folded (Home): the mixer's popover, roomy. Lanes stand apart by the theme's steps, the panel
+   pads them in from its edge, and a width wide enough that no Select is squeezed. */
+.vs-audio-fold {
+  --vs-audio-fold-width: calc(var(--control-h) * 9);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  width: var(--vs-audio-fold-width);
+  max-width: 100%;
+  padding: var(--space-3);
+}

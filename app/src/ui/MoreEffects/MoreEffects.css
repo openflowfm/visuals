@@ -1,0 +1,122 @@
+/* The More effects drawer (MoreEffects.tsx): along the bottom, the show above it left uncovered,
+   every control big enough to hit blind (the sheet's --control-h, Settings.css). The pane is the
+   core Sheet's overlay layer in an Opaque scope (it sits over the native preview). Inside, no
+   lines: the switches are type, Punch is a pad, Reset a quiet word. Contract variables and
+   visuals.css tokens only, plus the local one declared in MoreEffects.tsx (MoreFx's Tuning knobs):
+
+   --vs-more-fx-punch  the column Punch takes beside the switches (168px, as the original) */
+
+.vs-more-fx {
+  --vs-more-fx-punch: calc(var(--space-5) * 7); /* effects.css 168px */
+}
+
+/* The body: Speed, Colour and Trails across the top, the switches down the left under them,
+   Punch beside the switches, Reset under both. */
+.vs-more-fx-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--vs-more-fx-punch);
+  grid-template-areas:
+    'speed speed'
+    'hue hue'
+    'trails trails'
+    'mirror punch'
+    'invert punch'
+    'reset reset';
+  gap: var(--space-1) var(--space-5);
+}
+.vs-more-fx-speed {
+  grid-area: speed;
+}
+.vs-more-fx-hue {
+  grid-area: hue;
+}
+.vs-more-fx-trails {
+  grid-area: trails;
+}
+.vs-more-fx-mirror {
+  grid-area: mirror;
+}
+.vs-more-fx-invert {
+  grid-area: invert;
+}
+.vs-more-fx-body > .vs-more-fx-hits {
+  grid-area: punch;
+}
+.vs-more-fx-body > .vs-more-fx-reset {
+  grid-area: reset;
+  justify-self: start;
+}
+
+.vs-more-fx-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-width: 0;
+  color: var(--text-2);
+}
+
+/* Speed, Colour, Trails: the slider with its reading inside, filling the row beside its name. */
+.vs-more-fx-row > .lib-slider {
+  flex: 0 1 calc(100% - var(--space-1) * 23); /* effects.css 100% - 92px: the name's room */
+  min-width: 0;
+}
+/* Mirror: four words. */
+.vs-more-fx-row > .lib-segmented {
+  flex: 0 1 calc(var(--space-3) * 25); /* effects.css 300px (spaces, not --control-h: the sheet's is 44px) */
+  min-width: 0;
+}
+/* Invert: the switch, its state read at the row's end. */
+.vs-more-fx-row > .lib-toggle {
+  width: calc(var(--space-5) * 5); /* effects.css 120px */
+}
+
+/* Punch: a pad, as the Stage's are. Its name at the foot, its key in the corner; held, it lights. */
+.vs-more-fx-hits {
+  display: flex;
+}
+.vs-more-fx-hits .vs-effects-hit {
+  position: relative;
+  flex: 1;
+  align-items: flex-start;
+  justify-content: flex-end;
+  height: auto;
+  min-height: calc(var(--space-1) * 23.5); /* effects.css 94px */
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-card);
+  /* The face is a label Text (strong): its size knob. */
+  --text-size: var(--size-body);
+}
+.vs-more-fx-hits .vs-effects-hit-key {
+  --text-size: var(--size-caption);
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  color: var(--vs-caption-raised);
+}
+.vs-more-fx-hits .vs-effects-hit[data-on] .vs-effects-hit-key {
+  color: var(--text-1);
+}
+
+/* Reset: a quiet word, type until pointed at. */
+.vs-more-fx-reset .lib-action-button-face {
+  color: var(--vs-caption-raised);
+}
+
+/* Narrow: one column, Punch the width of the drawer between the switches and Reset. */
+@media (max-width: 560px) {
+  .vs-more-fx-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'speed'
+      'hue'
+      'trails'
+      'mirror'
+      'invert'
+      'punch'
+      'reset';
+  }
+  .vs-more-fx-hits .vs-effects-hit {
+    min-height: calc(var(--space-6) * 2); /* effects.css 64px */
+  }
+}

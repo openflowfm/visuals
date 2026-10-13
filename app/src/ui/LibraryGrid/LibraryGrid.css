@@ -1,0 +1,176 @@
+/* The library grid (LibraryGrid.tsx), from the original's library.css and tile.css: only the rows
+   in view are drawn, inside a box as tall as all of them. On the home its tiles are PresetTile's;
+   outside the app's root, the lab editor's 4:3 column below. Near borderless: the only lines are
+   the selection ring, the focus ring and the playing mark. */
+
+.vs-lib-grid {
+  position: relative;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+  /* On the home, reaching up behind the pinned preview (`--vs-grid-reach`, Home.css) and down
+     behind the pinned transport bar (`--vs-grid-reach-down`): homeLook's `under` keeps the first
+     row below the one, its `over` the last row above the other. */
+  margin-top: calc(var(--vs-grid-reach, 0) * -1px);
+  margin-bottom: calc(var(--vs-grid-reach-down, 0) * -1px);
+}
+/* On the home, no scrollbar (owner's call): it still scrolls by trackpad, wheel and keys. */
+.vs-root .vs-lib-grid {
+  scrollbar-width: none;
+}
+.vs-root .vs-lib-grid::-webkit-scrollbar {
+  display: none;
+}
+/* With no tile highlighted the grid rings itself, inside: it scrolls, and would clip a ring drawn outside. */
+.vs-lib-grid:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: -2px;
+}
+/* Pointing at its active tile, it rings that tile instead, not itself. */
+.vs-lib-grid[aria-activedescendant]:focus-visible {
+  outline: none;
+}
+.vs-lib-grid-space {
+  position: relative;
+}
+.vs-lib-grid-window {
+  display: grid;
+  will-change: transform;
+}
+
+/* The home's tiles, while the grid has focus: the keyboard's tile shows the focus ring (over a
+   selection's) and its +. */
+.vs-lib-grid:focus-visible .vs-tile[data-active] .vs-tile-pic {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}
+.vs-lib-grid:focus-visible .vs-tile[data-active] .vs-tile-add {
+  display: grid;
+}
+/* While adding, a tile not yet in the playlist offers + on hover, as a cue that a click adds: a
+   22px chip (16 + 6) where PresetTile's ✓ sits, 8px in, its + at 14px (the 12px caption and a
+   hairline). A Text the tile renders last over its picture only while adding and not added. */
+.vs-lib-cue {
+  --text-size: calc(var(--size-caption) + 2px);
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: none;
+  place-items: center;
+  width: calc(var(--space-4) + var(--space-1) * 1.5);
+  height: calc(var(--space-4) + var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  color: var(--key-white);
+  background: color-mix(in oklab, var(--key-black) 45%, transparent);
+}
+.vs-tile:hover .vs-lib-cue {
+  display: grid;
+}
+
+/* The lab editor's tile: a 4:3 picture and a title line under it. */
+.vs-lib-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  cursor: pointer;
+  color: var(--text-2);
+  border-radius: var(--radius-control);
+}
+.vs-lib-thumb {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--vs-thumb);
+}
+.vs-lib-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-lib-thumb-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: var(--space-1);
+  box-sizing: border-box;
+  color: var(--text-3);
+  text-align: center;
+  overflow: hidden;
+}
+/* The title, the style stand-in and the star are caption-size Texts at the page's normal leading. */
+.vs-lib-title {
+  padding: 2px 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vs-lib-star {
+  position: absolute;
+  top: 2px;
+  left: var(--space-1);
+  color: var(--key-white);
+  text-shadow: 0 0 2px var(--key-black);
+}
+/* A preset that failed to open or draw this run: live mode skips it. Bottom corner: the star has
+   the top left, + the top right. A 14px dot (8 + 6), 4px in (library.css: 3px); a strong Text,
+   its line the dot's height. */
+.vs-lib-failed {
+  --text-size: var(--vs-text-annot);
+  --text-leading: calc(var(--space-2) + var(--space-1) * 1.5);
+  position: absolute;
+  bottom: var(--space-1);
+  right: var(--space-1);
+  width: calc(var(--space-2) + var(--space-1) * 1.5);
+  height: calc(var(--space-2) + var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: var(--warning-text);
+  text-align: center;
+  pointer-events: none;
+}
+.vs-lib-tile[data-failed] .vs-lib-thumb img {
+  opacity: 0.55;
+}
+.vs-lib-tile[aria-selected='true'] .vs-lib-thumb {
+  outline: 2px solid var(--text-1);
+  outline-offset: -2px;
+}
+.vs-lib-tile[data-playing] .vs-lib-title {
+  --text-weight: var(--weight-strong);
+  color: var(--text-1);
+}
+/* Playing: the playing mark, green; a Text the tile renders last over its picture while playing. */
+.vs-lib-playing {
+  --text-size: var(--vs-text-annot);
+  position: absolute;
+  right: var(--space-1);
+  bottom: 2px;
+  color: var(--vs-playing);
+  text-shadow: 0 0 2px var(--key-black);
+}
+.vs-lib-tile[data-hidden] .vs-lib-thumb img,
+.vs-lib-tile[data-hidden] .vs-lib-title {
+  opacity: 0.4;
+}
+/* The highlighted tile's ring replaces a selection's, so it has one ring, not two. */
+.vs-lib-grid:focus-visible .vs-lib-tile[data-active] .vs-lib-thumb {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: -2px;
+}
+.vs-lib-add {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  display: none;
+}
+.vs-lib-tile:hover .vs-lib-add,
+.vs-lib-tile[data-active] .vs-lib-add {
+  display: block;
+}

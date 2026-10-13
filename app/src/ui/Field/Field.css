@@ -1,0 +1,170 @@
+/* The inspector's field (Field.tsx), read like an instrument's XY display: every measured preset
+   a faint dot by speed (across, slow to fast) and brightness (up, dark to bright), tinted by its
+   strongest hue's band; the preset playing lit in its own hue, with a fine cursor through it and
+   a ring as wide as it is intense. No frame and no grid: the edges carry a scale's markings (five hairline ticks, the
+   middle one longer, a small cross at the centre) and four words in tiny type, as an
+   oscilloscope's graticule is engraved. The dot under the pointer, or the keyboard's cursor, gets
+   a fine ring and its name in a small floating tip. Contract variables and visuals.css tokens
+   only. */
+
+.vs-field {
+  /* The markings' hairline: the ink at a fifth (field.css's white at 0.22). */
+  --vs-field-hair: color-mix(in oklab, var(--text-1) 22%, transparent);
+  /* The tip's place across, 0–1 (set inline from the dot). */
+  --vs-field-at: 0.5;
+  /* model/field.ts's bandColour names the grey band `var(--caption)`: the raised caption here. */
+  --caption: var(--vs-caption-raised);
+  /* The tip's widest (field.css's 200px), a measure the scale has no step for. */
+  --vs-field-tip-width: calc(var(--space-2) * 25);
+  position: relative;
+  /* field.css: 6px above, 16px over the plot and 18px under it for the axis words. */
+  margin: calc(var(--space-1) * 1.5) 0 0;
+  padding: var(--space-4) 0 calc(var(--space-3) * 1.5);
+}
+.vs-field-plot {
+  position: relative;
+  border-radius: var(--radius-control);
+  outline: none;
+}
+.vs-field-plot:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: var(--space-1);
+}
+.vs-field-scope {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+.vs-field-scope[data-hot] {
+  cursor: pointer;
+}
+.vs-field-axis {
+  position: absolute;
+  left: 0;
+  color: var(--vs-caption-raised);
+  /* A body Text on a tight line, in capitals (Field.tsx's Axis): an engraved scale's words, the
+     one place the source sets type in capitals. */
+  --text-size: var(--vs-text-annot);
+  --text-weight: 500;
+  --text-tracking: 0.06em;
+  pointer-events: none;
+  user-select: none;
+}
+.vs-field-axis-top {
+  top: 2px;
+}
+.vs-field-axis-low {
+  /* field.css: 30px up and 10px in, at the plot's low corner. */
+  bottom: calc(var(--space-3) * 2.5);
+  left: calc(var(--space-1) * 2.5);
+  opacity: 0.8;
+}
+.vs-field-axis-x {
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+}
+.vs-field-ticks path {
+  stroke: var(--vs-field-hair);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.vs-field-ticks .vs-field-centre {
+  stroke: color-mix(in oklab, var(--text-1) 14%, transparent);
+}
+
+/* The dots: each band one path, each dot a zero-length segment a round cap draws as a disc 2.7 units across. */
+.vs-field-dots path {
+  fill: none;
+  stroke-width: 2.7;
+  stroke-linecap: round;
+  opacity: 0.55;
+}
+/* With a preset lit the rest step back, so it reads first. */
+.vs-field-dots[data-dim] path {
+  opacity: 0.32;
+}
+
+/* The presets the user has sped up or slowed down: a hairline ring, and a hairline back to a small tick where it sits as made. */
+.vs-field-tuned {
+  fill: none;
+  stroke: var(--vs-field-hair);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.vs-field-lit {
+  fill: none;
+  stroke: currentColor;
+}
+.vs-field-cursor {
+  stroke-width: 1;
+  stroke-dasharray: 1 3;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+.vs-field-cursor-tick {
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+.vs-field-ring {
+  stroke-width: 1;
+  opacity: 0.85;
+  vector-effect: non-scaling-stroke;
+}
+.vs-field-glow {
+  fill: currentColor;
+  stroke: none;
+  opacity: 0.25;
+}
+.vs-field-point {
+  fill: var(--text-1);
+  stroke: currentColor;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The dot under the pointer or the keyboard's cursor. */
+.vs-field-hot {
+  fill: none;
+  stroke: var(--text-1);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+/* Its name: a float above the dot, slid along so it stays inside the panel. */
+.vs-field-tip.lib-layer {
+  position: absolute;
+  z-index: 1;
+  max-width: var(--vs-field-tip-width);
+  /* field.css's 3px 7px, on the nearest steps. */
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
+  color: var(--text-1);
+  /* A caption Text (--vs-text-label, 1.3), a touch heavier. */
+  --text-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transform: translate(calc(var(--vs-field-at) * -100%), calc(-100% - var(--space-2)));
+  pointer-events: none;
+}
+.vs-field-tip-note {
+  color: var(--vs-caption-raised);
+}
+
+/* Said to a screen reader, not shown. */
+.vs-field-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

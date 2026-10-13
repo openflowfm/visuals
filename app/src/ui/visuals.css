@@ -1,0 +1,88 @@
+/* visual[flow]'s own tokens, on the library's contract. Every visuals screen sits inside
+   `.vs-root` (story.tsx's frame puts it there; the app's root wears it too).
+
+   Most of the original's tokens map one to one onto a contract variable, and screens should
+   use the contract variable directly rather than an alias:
+
+     --fg                 → --text-1        the ink
+     --ui                 → --text-2        controls and running text
+     --caption (home.css) → --text-3        small grey text, 4.5:1 over the lightest frost
+     --detail, --caption (palette.css) → --text-4   the faint step
+     --primary, --line-active → --accent    the active control's underline, selection
+     --green, --playing   → --success       the signal, the playing mark
+     --amber, --caution   → --warning
+     --red                → --danger
+     --bd, --bd3          → --border         (near borderless: rarely drawn)
+     --surface-0..3 (home.css) → --surface-0..3, or the base / raised layers
+     --surface-float, --glass, --glass-edge → Layer level="float" (its fill, backdrop, edge)
+     --surface-corner     → --layer-base-solid (the frost's opaque tone, round the preview's corners)
+     --lift               → --layer-float-cast (the shadow a hovered tile lifts on)
+     --pad                → --mat-plate-inset; --lay-section-gap → --mat-plate-gap
+     --ctl-h              → --control-h
+     --sans, --font-ui, --font-display, --font-num → --font-sans, --font-display, --font-readout
+     --weight-strong      → --weight-strong; the wordmark's 650 → --weight-display
+
+   Below are only what the contract has no name for.
+
+   **Tuning knobs**
+     --vs-playing, --vs-line-active, --vs-focus-ring   one meaning each (the signal, the active
+                                                       underline, the focus ring) on a palette slot
+     --vs-caption-raised                               the caption a step lighter on raised tints
+     --vs-thumb                                        the dark backing behind a tile's picture
+     --vs-sep-space                                    the widened space on " · " lines
+     --vs-text-*                                       the widgets' type ramp on the contract sizes */
+
+.vs-root {
+  /* home.css --playing (the green): the playing mark. One meaning, the signal. */
+  --vs-playing: var(--success);
+  /* home.css --line-active (the primary): the active control's 2px underline. */
+  --vs-line-active: var(--accent);
+  /* access.css --vf-focus-ring (the ui ink): the focus ring is the controls' ink, not the accent. */
+  --vs-focus-ring: var(--text-2);
+  /* home.css --caption-raised (#b0b0b8): the caption a step lighter on raised tints and glass,
+     so it stays at 4.5:1 there. #b0b0b8 sits about a sixth of the way from --caption to --fg. */
+  --vs-caption-raised: color-mix(in oklab, var(--text-3), var(--text-1) 17%);
+  /* home.css --surface-thumb (rgba(0, 0, 0, 0.4)): the dark backing behind a tile's picture. The
+     black key is dark in every mode, as the backing must be. */
+  --vs-thumb: color-mix(in oklab, var(--key-black) 40%, transparent);
+  /* app.css --sep-space (0.1em): Instrument Sans's narrow space widened on lines joined with " · ". */
+  --vs-sep-space: 0.1em;
+
+  /* The widgets' type ramp (type.css --text-annot … --text-title), by the names the original's
+     stylesheets use, on the contract's sizes. Home set its captions at 12, its body at 13 and its
+     titles at 20, which the roomy scale's caption, body and heading are. */
+  --vs-text-annot: calc(var(--size-caption) - 2px); /* --text-annot: the smallest marks */
+  --vs-text-label: var(--size-caption); /* --text-label: captions, metadata */
+  --vs-text-control: var(--size-label); /* --text-control: a control's words */
+  --vs-text-body: var(--size-body); /* --text-body */
+  --vs-text-lead: var(--size-body); /* --text-lead: the page's base size */
+  --vs-text-heading: calc((var(--size-body) + var(--size-heading)) / 2); /* --text-heading: a sheet's title */
+  --vs-text-title: var(--size-heading); /* --text-title: a pane's title */
+
+  /* Base type (app.css body): one sans in the controls' ink, at the lead size. The root is a body
+     Text (App.tsx `Framed`), so the lead size is its knob; its weight, tracking and leading are
+     the body role's. Everything inside inherits it. */
+  --text-size: var(--vs-text-lead);
+  font-family: var(--font-sans);
+  color: var(--text-2);
+}
+
+/* app.css: plain controls inherit the type rather than the browser's. A control that is a Text
+   sets its own type (its rules have no specificity, so this reset would otherwise undo them). */
+.vs-root :where(button, select, input, textarea):not(.lib-text) {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+/* app.css .quiet: a caption-coloured aside. */
+.vs-root .vs-quiet {
+  color: var(--text-3);
+}
+
+/* Readouts and counts: tabular figures, not a monospace (decision 69). The figures are the
+   element's: a `Text` with `tabular` (or the numeral role); this sets the readout face and the
+   widened " · " space. */
+.vs-root .vs-num {
+  font-family: var(--font-readout);
+  word-spacing: var(--vs-sep-space);
+}

@@ -1,27 +1,27 @@
 import { lazy, StrictMode, Suspense } from 'react';
 import { createRoot } from 'react-dom/client';
-import { VisualsApp } from '@satoramoto/zen/visuals';
 import '@satoramoto/zen/zen.css';
-import '@satoramoto/zen/visuals.css';
+import { VisualsApp } from './ui';
 import './main.css';
 import { createCameraController } from './camera/capture';
 import modelLicenseUrl from './camera/person-assets/LICENSE.mediapipe?url';
 import { installTauriBridge } from './zenBridge.ts';
 
-// The page is zen's visual[flow] UI (`@satoramoto/zen/visuals`): the home, live
-// mode, the sheets, the welcome flow and the prompts, in its own theme scope
-// with the `visuals` pack, dark as the window's frost is. Every command and
-// event goes through the bridge installed here, over Tauri. Served on its own
-// (a browser tab on the dev port) there is no Tauri behind the page and no
-// bridge to install; zen's UI then says it has no backend.
+// The page is the app's UI (`./ui`, built on zen's public entry
+// `@satoramoto/zen`): the home, live mode, the sheets, the welcome flow and the
+// prompts, in its own theme scope with zen's `visuals` pack, dark as the
+// window's frost is. Each part imports its own stylesheet; zen's is zen.css.
+// Every command and event goes through the bridge installed here, over Tauri.
+// Served on its own (a browser tab on the dev port) there is no Tauri behind
+// the page and no bridge to install; the UI then says it has no backend.
 if ('__TAURI_INTERNALS__' in window) installTauriBridge();
 
 // The editor, only in a lab build: without `VITE_LAB` this is `null` at build
-// time, and the editor's code (zen's `@satoramoto/zen/visuals/lab`: the graph,
-// the inspector, the edits and their commands) never reaches the bundle.
+// time, and the editor's code (`./ui/lab.ts`: the graph, the inspector, the
+// edits and their commands) never reaches the bundle.
 const Lab = import.meta.env.VITE_LAB ? lazy(() => import('./Lab.tsx')) : null;
 
-// The camera runs in the host (the browser's capture and the local person model), handed to zen's UI.
+// The camera runs in the host (the browser's capture and the local person model), handed to the UI.
 const cameraController = Object.assign(createCameraController(), { modelLicenseUrl });
 
 createRoot(document.getElementById('root')!).render(

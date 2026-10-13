@@ -1,0 +1,44 @@
+/* The library map (LibraryMap.tsx): the inspector region's bottom section, a Group whose label is
+   the heading ("Library map") with its count and axes as the aside, then the Field. A plain part
+   of the panel: no fill, no shadow, a hairline over it. The section sets no inset of its own; the
+   inspector gives it the panel's (Inspector.css). Contract variables and visuals.css tokens only. */
+
+.vs-map {
+  /* The hairline over the section: the ink at a tenth, quieter than the Field's markings. */
+  --vs-map-hair: color-mix(in oklab, var(--text-1) 10%, transparent);
+  flex: none;
+  min-width: 0;
+  border-top: 1px solid var(--vs-map-hair);
+  /* The original's 14px under the hairline, as the inspector's top. */
+  padding-top: calc(var(--space-1) * 3.5);
+}
+/* The heading and the count: the tune's heading type (Tune.css), the label step a touch under strong. */
+.vs-map > .lib-group__head .lib-group__label,
+.vs-map-aside {
+  --text-size: var(--vs-text-label);
+  --text-weight: 500;
+}
+.vs-map > .lib-group__head .lib-group__label {
+  color: var(--vs-caption-raised);
+}
+.vs-map > .lib-group__head {
+  min-width: 0;
+}
+.vs-map-aside {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--vs-caption-raised);
+}
+.vs-map > .lib-group__head .lib-group__aside {
+  min-width: 0;
+  overflow: hidden;
+}
+/* Nothing playing: what the dots are, under the heading. */
+.vs-map-help {
+  margin: var(--space-2) 0 0;
+  color: var(--vs-caption-raised);
+  --text-leading: 1.45;
+}

@@ -1,0 +1,242 @@
+/* The Now Playing card (Hero.tsx), in the hero's slot at the top of the screen, from the original's
+   hero.css. The picture is one 16:9 box with nothing over it: in the app the native preview's
+   hole (Views' `Preview`), so nothing behind it paints. Its spread shadow paints the main column
+   instead, the window's tint (--surface-0) out to the column's edges (HomeLayout clips it there,
+   and the grid and the bar sit above it), which also rounds its corners: the corners are
+   --vs-lay-hero-radius (the preview's --vs-hole-radius, for its opaque painted corners). Its
+   height is capped at --vs-hero-cap, so its width is too and it keeps its shape. In a card of
+   680px and up the words and actions sit beside it, along its foot; narrower, under it. Near
+   borderless (decision 68): the card is space, not a panel; the actions are type with a glyph,
+   the pressed one brighter. A still or thumbnail (stories) has the thumb backing behind it, so the
+   card takes the raised caption. */
+
+.vs-hero {
+  /* The picture's tallest: about two fifths of the window's height, never under 160px or over 440px, so the grid under it keeps its room. */
+  --vs-hero-cap: clamp(calc(var(--space-6) * 5), 38vh, calc(var(--space-6) * 14 - var(--space-2)));
+  /* The name: 24px, a fifth over the heading. */
+  --vs-hero-name-size: calc(var(--size-heading) * 1.2);
+  container: vs-hero / inline-size;
+  font-family: var(--font-sans);
+}
+.vs-hero > * {
+  /* The container is the card; its one child lays the two parts out. */
+  min-width: 0;
+}
+
+/* The picture's box: the story's still, or the app's Preview placed straight in the row. */
+.vs-hero .vs-hero-pic,
+.vs-hero .vs-hero-row > .vs-preview {
+  --vs-hole-radius: var(--vs-lay-hero-radius);
+  position: relative;
+  width: min(100%, calc(var(--vs-hero-cap) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--vs-hole-radius);
+  /* The theme's float lift first, so it paints over the spread tint, outside the box (an outer
+     shadow never paints under the picture), then the spread. */
+  box-shadow:
+    var(--layer-float-cast),
+    0 0 0 100vmax var(--surface-0);
+}
+/* The app's preview: the native view under the hole is square and no clip reaches it, so the hole
+   paints its corners (Views.css) in the spread's tone. Clipping here would cut those corners away
+   too, leaving the native view's square ones showing. */
+.vs-hero .vs-hero-row > .vs-preview {
+  --vs-hole-corner: var(--surface-0);
+  overflow: visible;
+}
+/* A still or thumbnail (and the empty box) has the dark backing behind it; the preview's hole
+   paints nothing once it draws (Views.css backs it while loading). */
+.vs-hero .vs-hero-pic:not(.vs-preview) {
+  background: var(--vs-thumb);
+}
+/* The picture alone (round 2: the name is in the transport bar): centred, as wide as its room at
+   16:9, and never taller than the room the assembled screen gave the hero: its slot
+   (.vs-lay-hero) is a size container, so 100cqh is the slot's height (outside one, the
+   viewport's, which is fine for a story). Capped by height it narrows and stays centred. */
+.vs-hero[data-only] {
+  --vs-hero-cap: 100cqh;
+}
+.vs-hero[data-only] .vs-hero-pic,
+.vs-hero[data-only] .vs-hero-row > .vs-preview {
+  margin-inline: auto;
+}
+.vs-hero .vs-hero-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-hero .vs-hero-pic-none {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--vs-caption-raised);
+  user-select: none;
+}
+
+/* After the picture, so above its spread shadow. */
+.vs-hero .vs-hero-info {
+  position: relative;
+  min-width: 0;
+  padding-top: var(--space-4);
+}
+.vs-hero .vs-hero-label {
+  margin: 0 0 calc(var(--space-1) * 1.5); /* 6px */
+  color: var(--text-4);
+  --text-size: calc(var(--size-caption) - 1px);
+}
+/* A strong Text (Hero.tsx) in the display face, at the name's size. */
+.vs-hero .vs-hero-name {
+  margin: 0;
+  color: var(--text-1);
+  font-family: var(--font-display);
+  --text-size: var(--vs-hero-name-size);
+  --text-leading: 1.2;
+  /* A long name takes two lines, then an ellipsis. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.vs-hero .vs-hero-name[data-none] {
+  color: var(--vs-caption-raised);
+  --text-weight: var(--weight-body);
+}
+.vs-hero .vs-hero-by,
+.vs-hero .vs-hero-from {
+  margin: var(--space-1) 0 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--vs-caption-raised);
+}
+.vs-hero .vs-hero-by {
+  color: var(--text-2);
+}
+.vs-hero .vs-hero-from {
+  word-spacing: var(--vs-sep-space);
+}
+
+/* The actions: type keys with a glyph, no boxes. 14px above, 6px out to the left (the keys' own
+   padding), 18px between keys; a key 32px tall, its glyph 8px from its word (7px before). */
+.vs-hero .vs-hero-actions {
+  margin: calc(var(--space-3) + var(--space-1) / 2) 0 0 calc(var(--space-1) * -1.5);
+}
+.vs-hero .vs-hero-actions > .lib-group__body {
+  gap: var(--space-1) calc(var(--space-3) * 1.5);
+}
+.vs-hero .vs-hero-act {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--space-6);
+  padding: 0 calc(var(--space-1) * 1.5);
+  border: 0;
+  border-radius: var(--vs-lay-key-radius);
+  background: none;
+  color: var(--text-2);
+  font: inherit;
+  cursor: pointer;
+}
+.vs-hero .vs-hero-act:hover:not(:disabled),
+.vs-hero .vs-hero-act[aria-pressed='true'] {
+  color: var(--text-1);
+}
+.vs-hero .vs-hero-act[aria-pressed='true'] .vs-icon {
+  fill: currentColor;
+}
+.vs-hero .vs-hero-act:disabled {
+  color: var(--vs-caption-raised);
+  cursor: default;
+  opacity: 0.6;
+}
+.vs-hero .vs-hero-act:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 0;
+}
+/* Play and pause lead, a step larger. */
+.vs-hero .vs-hero-play .vs-hero-act-word {
+  --text-size: calc(var(--vs-text-body) + 1px);
+}
+
+/* A wide card: the picture on the left up to its cap, the words beside it (at least 240px), along
+   its foot. From 680px, so the pinned hero stays short beside a docked inspector too. */
+@container vs-hero (min-width: 680px) {
+  .vs-hero:not([data-only]) .vs-hero-row {
+    display: grid;
+    grid-template-columns: minmax(0, calc(var(--vs-hero-cap) * 16 / 9)) minmax(calc(var(--control-h) * 8), 1fr);
+    align-items: end;
+    column-gap: var(--space-6);
+  }
+  .vs-hero:not([data-only]) .vs-hero-row > :is(.vs-hero-pic, .vs-preview) {
+    width: 100%;
+  }
+  .vs-hero .vs-hero-row .vs-hero-info {
+    padding: 0 0 var(--space-1);
+  }
+}
+
+/* With floating controls (`controls`): the picture and the controls share one box the picture's
+   size (the stage takes the picture's width and shape; the picture fills it), so the controls lie
+   over the picture's foot whatever its size. */
+.vs-hero .vs-hero-stage {
+  --vs-hero-fade: 160ms;
+  --vs-hero-scrim: 85%;
+  position: relative;
+  width: min(100%, calc(var(--vs-hero-cap) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  container: vs-hero-stage / inline-size;
+}
+.vs-hero[data-only] .vs-hero-stage {
+  margin-inline: auto;
+}
+.vs-hero .vs-hero-stage > :is(.vs-hero-pic, .vs-preview) {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+/* The controls: along the picture's foot, on a scrim (a Surface whose fill is a gradient of the
+   window's tint, rising from the foot to clear; the native preview under a transparent page can't
+   be blurred, so no backdrop), the picture's bottom corners. Hidden until the picture is hovered,
+   focus is inside them or one of their popovers or menus is open; always shown with no hover. */
+.vs-hero .vs-hero-controls {
+  position: absolute;
+  /* The whole picture: the title row at its top, the keys at its foot, each on its own scrim;
+     clicks pass through the clear middle to the picture. */
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--vs-lay-hero-radius, var(--radius-card));
+  pointer-events: none;
+  --lib-surface-fill:
+    linear-gradient(to bottom, color-mix(in oklab, var(--surface-0) var(--vs-hero-scrim), transparent), transparent calc(var(--space-6) * 2)),
+    linear-gradient(
+      to top,
+      color-mix(in oklab, var(--surface-0) var(--vs-hero-scrim), transparent),
+      color-mix(in oklab, var(--surface-0) calc(var(--vs-hero-scrim) * 0.6), transparent) calc(var(--space-6) * 1.2),
+      transparent calc(var(--space-6) * 2.5)
+    );
+  opacity: 0;
+  transition: opacity var(--vs-hero-fade) ease;
+}
+.vs-hero .vs-hero-stage:hover > .vs-hero-controls,
+.vs-hero .vs-hero-controls:focus-within,
+.vs-hero .vs-hero-controls:has([aria-expanded='true']) {
+  opacity: 1;
+}
+@media (hover: none) {
+  .vs-hero .vs-hero-controls {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-hero .vs-hero-controls {
+    transition: none;
+  }
+}

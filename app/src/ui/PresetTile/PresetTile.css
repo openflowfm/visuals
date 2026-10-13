@@ -1,0 +1,307 @@
+/* One tile (PresetTile.tsx) for the home's library grid and a playlist's strip (decision 68),
+   from the original's tile.css: a 16:9 picture, cover-cropped, with 6px corners and no edge; its
+   name and author on the picture's foot, over a soft scrim that fades up into the picture (no box,
+   no line). States differ by kind, not by more lines: hover lifts the picture, the selection is a
+   ring with a gap, playing is green (level bars before the name), and the keyboard's tile shows
+   the focus ring. Nothing sits under the picture, which LibraryGrid's `homeLook` counts on
+   (label 0). Nothing animates. */
+
+.vs-tile {
+  /* The picture's corners: 6px, a step under a row's 8px pill. */
+  --vs-tile-radius: calc(var(--radius-control) - 2px);
+  /* The ink on the picture (--key-white) and the scrim under it: light over dark in every mode, as
+     the picture is. */
+  --vs-tile-ink-2: color-mix(in oklab, var(--key-white) 72%, transparent);
+  --vs-tile-shade: color-mix(in oklab, var(--key-black) 50%, transparent);
+  --vs-tile-chip: color-mix(in oklab, var(--key-black) 60%, transparent);
+  /* Nothing under the picture: the name and author are on it. */
+  --vs-tile-label: 0px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-2);
+  cursor: pointer;
+  user-select: none;
+}
+.vs-tile-pic {
+  position: relative;
+  flex: none;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: var(--vs-tile-radius);
+  background: var(--vs-thumb);
+}
+.vs-tile-pic img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.vs-tile-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  /* 6px: a step and a half. */
+  padding: calc(var(--space-1) * 1.5);
+  box-sizing: border-box;
+  color: var(--text-3);
+  /* A caption Text at the annotation size. */
+  --text-size: var(--vs-text-annot);
+  line-height: inherit;
+  text-align: center;
+  overflow: hidden;
+}
+/* The hovered preset moving (LibraryGrid's TileMotion): over the thumbnail, under the name, shown
+   with its first picture (at once: nothing fades). */
+.vs-tile-motion {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  pointer-events: none;
+}
+.vs-tile-motion[data-drawn] {
+  opacity: 1;
+}
+
+/* The name and author on the picture's foot, over a scrim darkest at the edge and gone by the
+   middle, so a bright picture or a dark one reads the same and the picture above stays whole. */
+/* The name and author pinned to the picture's top, as the preview's are: 8px in at the top and
+   sides, the scrim falling 22px (16 + 6) below them. */
+.vs-tile-caption {
+  position: absolute;
+  inset: 0 0 auto 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-2) calc(var(--space-4) + var(--space-1) * 1.5);
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--key-black) 66%, transparent), color-mix(in oklab, var(--key-black) 38%, transparent) 45%, transparent);
+  color: var(--key-white);
+  text-shadow: 0 1px 2px var(--vs-tile-shade);
+  pointer-events: none;
+}
+.vs-tile-name,
+.vs-tile-by {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* Caption Texts: the name at the label size (the caption's) and 500, the author at the annotation size. */
+.vs-tile-name {
+  --text-weight: 500;
+  /* 16px: the 12px label and a step. */
+  --text-leading: calc(var(--vs-text-label) + var(--space-1));
+}
+.vs-tile-by {
+  color: var(--vs-tile-ink-2);
+  --text-size: var(--vs-text-annot);
+  /* 14px: the 10px annotation and a step. */
+  --text-leading: calc(var(--vs-text-annot) + var(--space-1));
+}
+/* The tools at the top right (a strip's ✕, the library's +) show on hover: the name gives way. */
+.vs-tile:is(:hover, :focus-within) .vs-tile-caption {
+  padding-right: calc(var(--space-5) + var(--space-3));
+}
+
+/* Hover: the picture lifts, no line. */
+.vs-tile:hover .vs-tile-pic {
+  transform: translateY(-2px);
+  box-shadow: var(--layer-float-cast);
+}
+/* Selected (a grid's option, or a strip's pick): a ring in the ink, a gap off the picture. An
+   outline, so the gap shows the translucent pane behind it rather than a painted band. */
+.vs-tile[aria-selected='true'] .vs-tile-pic,
+.vs-tile[data-picked] .vs-tile-pic {
+  outline: 2px solid var(--text-1);
+  outline-offset: 2px;
+}
+/* A focused tile (a strip's place) rings its picture, not itself as well: one ring. */
+.vs-tile:focus-visible {
+  outline: none;
+}
+.vs-tile:focus-visible .vs-tile-pic {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}
+
+/* Playing: the name goes bold, and a dark chip at the bottom left says so, the transport's loop
+   glyph before "Playing" (an annotation-size caption). */
+.vs-tile[data-playing] .vs-tile-name {
+  --text-weight: var(--weight-display);
+}
+.vs-tile-live {
+  --text-size: var(--vs-text-annot);
+  position: absolute;
+  left: var(--space-2);
+  bottom: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px var(--space-2) 1px calc(var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  background: var(--vs-tile-chip);
+  color: var(--key-white);
+  pointer-events: none;
+}
+
+/* Starred: a light star, bottom right (8px in). */
+.vs-tile-star {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
+  color: var(--key-white);
+  /* A caption Text at the annotation size. */
+  --text-size: var(--vs-text-annot);
+  line-height: inherit;
+  text-shadow: 0 1px 2px color-mix(in oklab, var(--key-black) 80%, transparent);
+  pointer-events: none;
+}
+/* A preset that failed to open or draw: live mode skips it. Caution, not decoration. A 14px dot
+   (8 + 6), 8px in from the corner. */
+.vs-tile-failed {
+  position: absolute;
+  bottom: var(--space-2);
+  right: var(--space-2);
+  width: calc(var(--space-2) + var(--space-1) * 1.5);
+  height: calc(var(--space-2) + var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  background: var(--warning);
+  color: var(--warning-text);
+  /* A strong Text (LibraryGrid renders it). */
+  --text-size: var(--vs-text-annot);
+  --text-leading: calc(var(--space-2) + var(--space-1) * 1.5);
+  text-align: center;
+  pointer-events: none;
+}
+.vs-tile[data-failed] .vs-tile-pic img {
+  opacity: 0.55;
+}
+/* Never played: quieter. */
+.vs-tile[data-hidden] .vs-tile-pic img {
+  opacity: 0.4;
+}
+.vs-tile[data-hidden] .vs-tile-caption {
+  opacity: 0.6;
+}
+
+/* Quick add: ✓ on a preset already in the playlist being filled, top right where + would be. A
+   22px chip (16 + 6), 8px in from the corner. */
+.vs-tile-added {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: grid;
+  place-items: center;
+  width: calc(var(--space-4) + var(--space-1) * 1.5);
+  height: calc(var(--space-4) + var(--space-1) * 1.5);
+  border-radius: var(--radius-pill);
+  color: var(--key-white);
+  background: var(--vs-tile-chip);
+  /* A strong, tight Text (LibraryGrid renders it). */
+  --text-size: var(--vs-text-label);
+  pointer-events: none;
+}
+
+/* +: a small round dark button, top right, on hover (LibraryGrid also shows it on the keyboard's
+   tile). 24px, 8px in from the corner, its + at 14px (the 12px caption and a hairline). */
+.vs-tile-add {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: none;
+  place-items: center;
+  width: var(--space-5);
+  height: var(--space-5);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-pill);
+  color: var(--key-white);
+  background: color-mix(in oklab, var(--key-black) 55%, transparent);
+  font-family: var(--font-sans);
+  /* A tight Text button (LibraryGrid renders it). */
+  --text-size: calc(var(--size-caption) + 2px);
+  cursor: pointer;
+}
+.vs-tile-add:hover {
+  background: color-mix(in oklab, var(--key-black) 75%, transparent);
+}
+.vs-tile:hover .vs-tile-add {
+  display: grid;
+}
+
+/* A playlist's strip (Home), on the tile's own data attributes ("next" is Home's own chip,
+   .vs-home-tile-next). ✕ takes it out: tools top right, on hover or focus. */
+.vs-tile-tools {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: none;
+}
+.vs-tile:hover .vs-tile-tools,
+.vs-tile:focus-within .vs-tile-tools {
+  display: block;
+}
+.vs-tile[data-missing] .vs-tile-pic {
+  opacity: 0.4;
+}
+.vs-tile[data-dragged] {
+  opacity: 0.35;
+}
+/* Where a dragged preset would land: a 2px bar before or after the tile it is over, centred in
+   the 12px gap, the picture's height. */
+.vs-tile[data-over]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: var(--vs-tile-label);
+  width: 2px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+.vs-tile[data-over='before']::before {
+  left: calc(var(--space-3) / -2 - 1px);
+}
+.vs-tile[data-over='after']::before {
+  right: calc(var(--space-3) / -2 - 1px);
+}
+
+/* The preset being dragged (TileGhost): a lifted card on the float layer, no outline; brighter
+   over a place it can land. At most 240px (eight control heights), its picture 56px (32 + 24). */
+.vs-tile-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: calc(var(--control-h) * 8);
+  padding: var(--space-1) calc(var(--space-1) * 2.5) var(--space-1) var(--space-1);
+  color: var(--text-1);
+  border-radius: var(--radius-control);
+  pointer-events: none;
+  opacity: 0.7;
+}
+.vs-tile-ghost[data-ok] {
+  opacity: 1;
+}
+.vs-tile-ghost img {
+  width: calc(var(--space-6) + var(--space-5));
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  /* 4px: half a row's pill. */
+  --vs-tile-ghost-radius: calc(var(--radius-control) / 2);
+  border-radius: var(--vs-tile-ghost-radius);
+}
+/* Its name: a caption Text (the label size). */
+.vs-tile-ghost-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: inherit;
+}

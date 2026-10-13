@@ -1,0 +1,69 @@
+/* "For this preset" (Tune.tsx): its own speed and how much it reacts, a Group of two library
+   Slider rows. The group's label is the heading ("for this preset"), "as made" a quiet word as
+   its aside, as the panel's back is. Each slider is the Apple-style `row`: its name leading, the
+   reading trailing, a thin groove lit from 1× to the value in the system accent, with the 1×
+   detent a tick at the groove's centre. Contract variables and visuals.css tokens only. */
+
+/* The original's 22px above the card: the plate's inset. */
+.vs-tune {
+  margin-top: var(--mat-plate-inset);
+  gap: var(--space-2);
+}
+/* The heading and "as made": the original's 11px, on the label step (12). Both are Texts (the
+   group's label, and the reset key) a touch under strong. */
+.vs-tune > .lib-group__head .lib-group__label,
+.vs-tune-reset {
+  --text-size: var(--vs-text-label);
+  --text-weight: 500;
+}
+.vs-tune > .lib-group__head .lib-group__label {
+  color: var(--vs-caption-raised);
+}
+
+.vs-tune-reset {
+  flex: none;
+  padding: 0 2px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: none;
+  color: var(--vs-caption-raised);
+  cursor: pointer;
+}
+.vs-tune-reset:hover {
+  color: var(--text-1);
+}
+.vs-tune-reset:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}
+
+/* One slider row: the name in the controls' ink, the reading in the ink, tabular (the slider's
+   caption and readout are Texts: their knobs). */
+.vs-tune .vs-tune-slider[data-layout='row'] {
+  width: 100%;
+  min-width: 0;
+}
+.vs-tune .vs-tune-slider[data-layout='row'] .lib-slider__caption {
+  color: var(--text-2);
+  --text-size: var(--size-caption);
+}
+.vs-tune .vs-tune-slider[data-layout='row'] .lib-slider__readout {
+  color: var(--text-1);
+  --text-size: var(--size-caption);
+  --text-weight: 500;
+}
+/* The 1× detent: a tick through the groove at its centre. */
+.vs-tune .vs-tune-slider[data-layout='row'] .lib-slider__track::after {
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 50%;
+  width: 1px;
+  background: var(--text-3);
+  pointer-events: none;
+  content: '';
+}
+.vs-tune .vs-tune-slider .lib-slider__track:focus-visible {
+  outline: 2px solid var(--vs-focus-ring);
+  outline-offset: 2px;
+}
