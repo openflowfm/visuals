@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react';
-import { Group } from '@satoramoto/zen';
+import { useEffect, useRef, useState } from 'react';
+import { Button, Group } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
-import type { LibraryRow } from '../model/api';
-import { Say } from '../model/words';
+import type { LibraryChange, LibraryRow } from '../model/api';
+import { say, Say } from '../model/words';
 import type { Prepared } from '../model/librarySearch';
 import { characterOf, colourNames, listed, type InspectorProps } from '../model/inspector-model';
 import { TagEditor } from '../TagEditor/TagEditor';
@@ -31,8 +31,10 @@ export interface InspectorMap {
  * measures read out as one line of words, its colours as dots, my tags), then its own speed and
  * how much it reacts ("for this preset", Tune) and the playlists holding it. It is about the
  * preset playing, or one picked (a tile the Home passes in) until "back". For several picked
- * together (`chosen`), "n selected", their styles and tags, their pictures, and the actions over
- * all of them in the header (a tune is one preset's, so none shows for several). With no preset,
+ * together (`chosen`), "n selected", their styles and tags, their pictures, their tune ("for these
+ * presets", "Mixed" where they differ) and the actions over all of them in the header. Never play
+ * goes on at once and is undone from a toast under the header (gone after `TOAST_FOR`, or on
+ * Escape before the panel closes), never a confirm. With no preset,
  * the source the Home passes (`source`, a playlist's head); with neither, it says nothing plays.
  * A dot in the map plays that preset (`onPick`), so the details follow it as they follow any
  * change of what plays; the dot playing goes back to it (`onBack`) while the details are about
@@ -66,7 +68,22 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
   const lit = playingPreset !== undefined ? playingPreset : aboutPlaying ? p : null;
   // A dot plays (the Home's `onPick`); the dot playing brings the details back to it, and does nothing while they show it.
   const pick = (row: LibraryRow) => (row.key !== playing ? onPick(row) : aboutPlaying ? undefined : onBack());
-  useEscape(onClose);
+
+  const [toast, setToast] = useState<NeverToast | null>(null);
+  const dismiss = () => setToast(null);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), TOAST_FOR);
+    return () => clearTimeout(t);
+  }, [toast]);
+  useEscape(onClose, toast ? dismiss : undefined);
+  // Never play goes on at once, and the toast keeps what to put back: only those that weren't already never played.
+  const onNever = (keys: string[], change: LibraryChange) => {
+    onSet(keys, change);
+    if (change.hidden) setToast({ restore: (on ?? []).filter((x) => !x.hidden).map((x) => x.row.key), n: keys.length });
+    else setToast(null);
+  };
+
   return (
     <div className="vs-inspector" data-none={many || p || source ? undefined : ''}>
       <div className="vs-inspector-details">
@@ -84,11 +101,34 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
                 {picked && <PlayAction className="vs-inspector-key" onPlay={onPlay} children="" />}
                 <StarAction className="vs-inspector-key" chosen={on} onSet={onSet} children="" />
                 <AddAction className="vs-inspector-key" chosen={on} playlists={playlists} onAddTo={onAddTo} children="" />
-                <NeverAction className="vs-inspector-key" chosen={on} onSet={onSet} children="" />
+                <NeverAction className="vs-inspector-key" chosen={on} onSet={onNever} children="" />
                 {!many && <EditAction className="vs-inspector-key" onEdit={onEdit} children="" />}
               </Group>
             )}
             <CloseAction className="vs-inspector-close" onClose={onClose} />
+          </div>
+        )}
+        {toast && (
+          <div
+            className="vs-inspector-toast"
+            role="status"
+            onKeyDown={(ev) => {
+              if (ev.key !== 'Escape') return;
+              ev.preventDefault();
+              dismiss();
+            }}
+          >
+            <Text role="caption" className="vs-inspector-toast-words">
+              {say(toast.n > 1 ? 'never toast many' : 'never toast one')}
+            </Text>
+            <Button
+              label="Undo"
+              variant="quiet"
+              onPress={() => {
+                if (toast.restore.length) onSet(toast.restore, { hidden: false });
+                dismiss();
+              }}
+            />
           </div>
         )}
         {many ? <Selected {...props} chosen={many} /> : !p && source ? <div className="vs-inspector-source">{source}</div> : <Scope {...props} />}
@@ -103,19 +143,35 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
   );
 }
 
-/** Escape calls `onClose`, unless something inside took it first (a popover, the tag box, a rename) or it was typed in a text box. */
-export function useEscape(onClose: InspectorProps['onClose']) {
+/** How long the Never toast stays, in ms. */
+export const TOAST_FOR = 6000;
+
+/** The Never toast: how many it turned on for, and the keys to turn back off on Undo. */
+interface NeverToast {
+  restore: string[];
+  n: number;
+}
+
+/**
+ * Escape dismisses the toast while one shows (`dismiss`), else calls `onClose`, unless something
+ * inside took it first (a popover, the tag box, a rename) or it was typed in a text box.
+ */
+export function useEscape(onClose: InspectorProps['onClose'], dismiss?: () => void) {
   const close = useRef(onClose);
   close.current = onClose;
-  const on = !!onClose;
+  const toast = useRef(dismiss);
+  toast.current = dismiss;
+  const on = !!onClose || !!dismiss;
   useEffect(() => {
     if (!on) return;
     const key = (ev: KeyboardEvent) => {
       if (ev.key !== 'Escape' || ev.defaultPrevented) return;
       const t = ev.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+      const act = toast.current ?? close.current;
+      if (!act) return;
       ev.preventDefault();
-      close.current?.();
+      act();
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -183,7 +239,7 @@ function Scope({ subject: p, playlists, onSet }: InspectorProps) {
         </div>
       </Group>
 
-      <TuneCard key={p.row.key} subject={p} onSet={onSet} />
+      <TuneCard key={p.row.key} subjects={[p]} onSet={onSet} />
 
       {inLists && (
         <Text as="p" role="caption" className="vs-inspector-quiet vs-inspector-in">
@@ -205,7 +261,7 @@ export function stylesSaid(chosen: readonly Prepared[]): string {
   return `${styles.slice(0, 2).join(', ')} and ${rest} other styles`;
 }
 
-/** Several presets picked together: how many, their styles and tags over all of them, and their pictures under those (star, add and never play over all of them are in the header). */
+/** Several presets picked together: how many, their styles and tags over all of them, their pictures under those, then their tune (star, add and never play over all of them are in the header). */
 function Selected({ chosen, onSet }: InspectorProps & { chosen: Prepared[] }) {
   const n = chosen.length;
   const more = n - PICTURES;
@@ -235,6 +291,7 @@ function Selected({ chosen, onSet }: InspectorProps & { chosen: Prepared[] }) {
           </Text>
         )}
       </div>
+      <TuneCard key={chosen.map((p) => p.row.key).join('\n')} subjects={chosen} onSet={onSet} />
     </>
   );
 }
