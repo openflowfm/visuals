@@ -72,6 +72,27 @@
   color: var(--text-1);
 }
 
+/* The toast's live region, always there: no box of its own, so no gap while empty. */
+.vs-inspector-toast-region {
+  display: contents;
+}
+
+/* The Never toast, under the header: what it did, and Undo. A quiet well, not a box of its own. */
+.vs-inspector-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin: calc(var(--space-1) * -1) 0 var(--space-3);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--mat-well-fill);
+  color: var(--text-1);
+}
+.vs-inspector-toast-words {
+  min-width: 0;
+}
+
 /* Something that failed: one line under the rest, in the caution colour, no box. */
 .vs-inspector-error {
   margin: var(--space-4) 0 0;

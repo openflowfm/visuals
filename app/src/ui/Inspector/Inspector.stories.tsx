@@ -344,7 +344,7 @@ export const Picked: S = {
   },
 };
 
-/** "For this preset": the preset playing kept at half speed and reacting 1.5×; the arrows step speed, and "as made" puts both back to 1×. */
+/** "For this preset": the preset playing kept at half speed and reacting 1.5×; the arrows step speed to the next detent, Shift nudges a twelfth, and "as made" puts both back to 1×. */
 export const ForThisPreset: S = {
   name: 'For this preset',
   args: { tuned: true },
@@ -353,13 +353,13 @@ export const ForThisPreset: S = {
     const group = within(panel.getByRole('group', { name: 'for this preset' }));
     const speed = group.getByRole('slider', { name: 'speed' });
     const reacts = group.getByRole('slider', { name: 'how much it reacts' });
-    await expect(speed).toHaveAttribute('aria-valuetext', '0.5×');
-    await expect(reacts).toHaveAttribute('aria-valuetext', '1.5×');
+    await expect(speed).toHaveAttribute('aria-valuetext', '½×');
+    await expect(reacts).toHaveAttribute('aria-valuetext', '1.50×');
     speed.focus();
     await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.53×'));
-    await userEvent.keyboard('{ArrowRight}');
-    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '0.56×'));
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1×'));
+    await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}');
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1.06×'));
     await userEvent.click(group.getByRole('button', { name: 'as made' }));
     await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '1×'));
     await expect(reacts).toHaveAttribute('aria-valuetext', '1×');
@@ -408,6 +408,30 @@ export const Several: S = {
     // On all of them: no count beside it.
     await waitFor(() => expect(panel.getByRole('button', { name: 'take the tag set off' })).toBeInTheDocument());
     await expect(panel.getByRole('button', { name: 'add to a playlist' })).toBeVisible();
+    // Their tune: one card over all of them, a step setting it on every one.
+    const tune = within(panel.getByRole('group', { name: 'for these presets' }));
+    const speed = tune.getByRole('slider', { name: 'speed' });
+    speed.focus();
+    await userEvent.keyboard('{ArrowRight}');
+    await waitFor(() => expect(speed).toHaveAttribute('aria-valuetext', '2×'));
+    await new Promise((r) => setTimeout(r, 400));
+    await expect(speed).toHaveAttribute('aria-valuetext', '2×');
+    await expect(tune.getByRole('button', { name: 'as made' })).toBeVisible();
+  },
+};
+
+/** Never play goes on at once: a toast under the header says so, and Undo puts it back. */
+export const NeverUndone: S = {
+  name: 'Never, undone',
+  play: async ({ canvasElement }) => {
+    const panel = within(panelOf(within(canvasElement)));
+    const never = panel.getByRole('button', { name: 'never play' });
+    await userEvent.click(never);
+    await waitFor(() => expect(never).toHaveAttribute('aria-pressed', 'true'));
+    await expect(await panel.findByText('Won’t play it on its own')).toBeVisible();
+    await userEvent.click(panel.getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(never).toHaveAttribute('aria-pressed', 'false'));
+    await expect(panel.queryByText('Won’t play it on its own')).toBeNull();
   },
 };
 

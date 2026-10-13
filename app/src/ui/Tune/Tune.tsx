@@ -1,53 +1,55 @@
 import { useEffect, useRef, useState } from 'react';
 import { Group } from '@satoramoto/zen';
-import { Slider } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
-import type { Param } from '@satoramoto/zen';
 import type { PresetTune } from '../model/api';
-import { formatMultiplier } from '../model/controls';
 import type { Prepared } from '../model/librarySearch';
 import { say } from '../model/words';
-import { asMade, TUNE_POSITION_MAX, TUNE_POSITION_MIN, TUNE_STEPS, tuneAt, tuneOf, tunePosition, type InspectorProps, type Tune } from '../model/inspector-model';
+import { tuneOf, tuneShared, type InspectorProps, type Tune } from '../model/inspector-model';
+import { TuneSlider } from './TuneSlider';
 import './Tune.css';
 
 /** How long a slider rests before its value is kept: a drag or held arrow key sends once, not on every step. */
 export const TUNE_SEND_AFTER = 300;
 
-const position = (name: string): Param => ({ kind: 'float', min: TUNE_POSITION_MIN, max: TUNE_POSITION_MAX, defaultValue: 0, steps: TUNE_STEPS, name });
-const SPEED = position(say('preset speed'));
-const SENSITIVITY = position(say('preset sensitivity'));
+/** Each value shown: a multiplier, or null where the presets differ ("Mixed"). */
+type Shown = { [K in keyof Tune]: number | null };
 
 /**
  * **Job.** "For this preset": the preset's own speed and how much it reacts, each a multiplier on
  * the playlist's or live value while it plays, for a preset that moves too fast (or too little)
- * beside the rest. Two sliders on a log scale, ¼× to 4× with 1× in the middle (filled from there),
- * and "as made" to put both back once either differs. What the sliders show runs ahead of what is
- * kept: a change is sent as `onSet([key], { tune })` once the slider rests, and any still waiting
- * is sent when the inspector moves to another preset. Mount it keyed by the preset's key.
+ * beside the rest. Two `TuneSlider`s on a log rail, ¼× to 4× with 1× in the middle and detents at
+ * each doubling, and "as made" to put both back once either differs.
  *
- * **Changed.** The card is a `Group` named by its heading, with "as made" as the group's aside.
- * The sliders are the library's Apple-style `Slider` row (`row`: the name leading, the reading
- * trailing, a thin groove lit from 1× in the system accent, the knob the slider's own, a tick at
- * the 1× detent); the kit's tokens the original read aren't part of the contract.
+ * With several presets ("for these presets") a value they share shows as it is and one they differ
+ * on reads "Mixed"; moving it sets it on all of them, and "as made" clears all of them.
  *
- * **Kept.** The behaviour (log scale, steps, the rest before sending, double-click back to 1×,
- * sending what waits on unmount), the names, titles and words.
+ * What the sliders show runs ahead of what is kept: a change is sent as `onSet(keys, { tune })` once
+ * the slider rests, and any still waiting is sent when the card goes. Mount it keyed by its
+ * presets' keys.
+ *
+ * **Changed.** The card is a zen `Group` named by its heading, with "as made" as the group's aside;
+ * the sliders are TuneSlider (zen's `Slider` row with the original's detents, labels, "Mixed" and
+ * typed readout), no longer zen's plain Slider row.
+ *
+ * **Kept.** The behaviour (log scale, the rest before sending, double-click back to 1×, sending what
+ * waits on unmount), the names, titles and words.
  */
-export function TuneCard({ subject, onSet }: { subject: Prepared; onSet: InspectorProps['onSet'] }) {
-  const key = subject.row.key;
-  const kept = tuneOf(subject.mine);
-  const [shown, setShown] = useState<Tune>(kept);
+export function TuneCard({ subjects, onSet }: { subjects: readonly Prepared[]; onSet: InspectorProps['onSet'] }) {
+  const keys = subjects.map((s) => s.row.key);
+  const tunes = subjects.map((s) => tuneOf(s.mine));
+  const kept: Shown = { speed: tuneShared(tunes, 'speed'), sensitivity: tuneShared(tunes, 'sensitivity') };
+  const [shown, setShown] = useState<Shown>(kept);
   const waiting = useRef<PresetTune | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // Sends whatever waits; read through a ref so the timer and the unmount see the latest `onSet`.
+  // Sends whatever waits; read through a ref so the timer and the unmount see the latest keys and `onSet`.
   const send = useRef(() => {});
   send.current = () => {
     clearTimeout(timer.current);
     timer.current = undefined;
     const tune = waiting.current;
     waiting.current = null;
-    if (tune) onSet([key], { tune });
+    if (tune && keys.length) onSet(keys, { tune });
   };
   useEffect(() => () => send.current(), []);
 
@@ -56,8 +58,7 @@ export function TuneCard({ subject, onSet }: { subject: Prepared; onSet: Inspect
     if (!waiting.current) setShown({ speed: kept.speed, sensitivity: kept.sensitivity });
   }, [kept.speed, kept.sensitivity]);
 
-  const change = (which: keyof Tune, at: number) => {
-    const value = tuneAt(at);
+  const change = (which: keyof Tune, value: number) => {
     setShown((t) => (t[which] === value ? t : { ...t, [which]: value }));
     waiting.current = { ...waiting.current, [which]: value };
     clearTimeout(timer.current);
@@ -68,43 +69,46 @@ export function TuneCard({ subject, onSet }: { subject: Prepared; onSet: Inspect
     timer.current = undefined;
     waiting.current = null;
     setShown({ speed: 1, sensitivity: 1 });
-    onSet([key], { clear_tune: true });
+    onSet(keys, { clear_tune: true });
   };
 
-  const slider = (param: Param, which: keyof Tune, title: string) => (
-    <Slider
-      param={param}
-      value={tunePosition(shown[which])}
-      onChange={(at) => change(which, at)}
-      display={formatMultiplier(shown[which])}
-      orientation="horizontal"
-      layout="row"
-      fill
-      origin="center"
-      length="auto"
-      name={param.name}
-      label={param.name}
-      className="vs-tune-slider"
-      title={`${title} (double-click puts it back to 1×)`}
-    />
-  );
+  // "as made" shows while any of them differs from 1× (a "Mixed" value always does).
+  const tuned = shown.speed !== 1 || shown.sensitivity !== 1;
+  const several = subjects.length > 1;
+  const it = several ? 'them' : 'it';
 
   return (
     <Group
-      name={say('preset tune')}
+      name={several ? say('preset tune many') : say('preset tune')}
       direction="column"
       gap={2}
       className="vs-tune"
       aside={
-        !asMade(shown) && (
-          <Text as="button" type="button" className="vs-tune-reset" onClick={reset} title={`Play it ${say('preset tune reset')}: its own speed and ${say('preset sensitivity')}`}>
+        tuned && (
+          <Text
+            as="button"
+            type="button"
+            className="vs-tune-reset"
+            onClick={reset}
+            title={`Play ${it} ${say('preset tune reset')}: ${several ? 'their' : 'its'} own speed and ${say('preset sensitivity')}`}
+          >
             {say('preset tune reset')}
           </Text>
         )
       }
     >
-      {slider(SPEED, 'speed', 'How fast this preset moves, whatever plays it')}
-      {slider(SENSITIVITY, 'sensitivity', `How much this preset reacts to the music, whatever plays it`)}
+      <TuneSlider
+        name={say('preset speed')}
+        value={shown.speed}
+        onChange={(v) => change('speed', v)}
+        title={`How fast ${several ? 'these presets move' : 'this preset moves'}, whatever plays ${it} (double-click puts it back to 1×)`}
+      />
+      <TuneSlider
+        name={say('preset sensitivity')}
+        value={shown.sensitivity}
+        onChange={(v) => change('sensitivity', v)}
+        title={`How much ${several ? 'these presets react' : 'this preset reacts'} to the music, whatever plays ${it} (double-click puts it back to 1×)`}
+      />
     </Group>
   );
 }

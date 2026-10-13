@@ -1,6 +1,26 @@
 import { describe as group, expect, it } from 'vitest';
 import type { LibraryRow, Look } from './api';
-import { asMade, characterOf, colourNames, fieldSays, listed, scaleOf, TUNE_STEPS, tuneAt, tuneOf, tunePosition } from './inspector-model';
+import {
+  asMade,
+  characterOf,
+  colourNames,
+  detentSays,
+  fieldSays,
+  listed,
+  scaleOf,
+  TUNE_CATCH,
+  TUNE_DETENTS,
+  TUNE_STEPS,
+  tuneAt,
+  tuneDragged,
+  tuneNudged,
+  tuneOf,
+  tunePosition,
+  tuneSays,
+  tuneShared,
+  tuneStepped,
+  tuneTyped,
+} from './inspector-model';
 import { prepareRow } from './librarySearch';
 
 const look: Look = { hues: [278, 5], brightness: 0.1, speed: 0.5, intensity: 3, brightness_level: 'low', speed_level: 'low', intensity_level: 'low' };
@@ -102,5 +122,55 @@ group("a preset's tune", () => {
     expect(tuneAt(Number.NaN)).toBe(1);
     // What is kept reads back onto the same step.
     expect(tuneAt(tunePosition(tuneAt(5 / 12)))).toBe(tuneAt(5 / 12));
+  });
+
+  it('says fractions on the detents and two decimals between', () => {
+    expect(TUNE_DETENTS.map(tuneSays)).toEqual(['¼×', '½×', '1×', '2×', '4×']);
+    expect(TUNE_DETENTS.map(detentSays)).toEqual(['¼', '½', '1', '2', '4']);
+    expect(tuneSays(0.707)).toBe('0.71×');
+    expect(tuneSays(3)).toBe('3.00×');
+    expect(tuneSays(1.059)).toBe('1.06×');
+  });
+
+  it('catches a drag on a detent within a sixth of a doubling, and lands on twelfths elsewhere', () => {
+    expect(TUNE_CATCH).toBeCloseTo(1 / 6);
+    expect(tuneDragged(0.15)).toBe(1);
+    expect(tuneDragged(-1.1)).toBe(0.5);
+    expect(tuneDragged(1.85)).toBe(4);
+    expect(tuneDragged(0.5)).toBe(1.414);
+    expect(tuneDragged(0.25)).toBe(tuneAt(0.25));
+    expect(tuneDragged(Number.NaN)).toBe(1);
+  });
+
+  it('steps to the next detent either way, and nudges a twelfth', () => {
+    expect(tuneStepped(1.2, -1)).toBe(1);
+    expect(tuneStepped(1.2, 1)).toBe(2);
+    expect(tuneStepped(1, 1)).toBe(2);
+    expect(tuneStepped(1, -1)).toBe(0.5);
+    expect(tuneStepped(4, 1)).toBe(4);
+    expect(tuneStepped(0.25, -1)).toBe(0.25);
+    expect(tuneNudged(1, 1)).toBe(1.059);
+    expect(tuneNudged(1.059, -1)).toBe(1);
+    expect(tuneNudged(4, 1)).toBe(4);
+  });
+
+  it('reads a typed multiple in its usual forms, clamped and to three decimals', () => {
+    expect(tuneTyped('0.5')).toBe(0.5);
+    expect(tuneTyped(' .75 ')).toBe(0.75);
+    expect(tuneTyped('1/2')).toBe(0.5);
+    expect(tuneTyped('½')).toBe(0.5);
+    expect(tuneTyped('¼×')).toBe(0.25);
+    expect(tuneTyped('2x')).toBe(2);
+    expect(tuneTyped('2 ×')).toBe(2);
+    expect(tuneTyped('2/3')).toBe(0.667);
+    expect(tuneTyped('9')).toBe(4);
+    expect(tuneTyped('0.01')).toBe(0.25);
+    for (const bad of ['', 'fast', '0', '-1', '1/0', '1..2', 'x']) expect(tuneTyped(bad)).toBeNull();
+  });
+
+  it('shares a value several presets agree on, and none where they differ', () => {
+    expect(tuneShared([], 'speed')).toBe(1);
+    expect(tuneShared([tuneOf({ tune: { speed: 2 } }), tuneOf({ tune: { speed: 2, sensitivity: 3 } })], 'speed')).toBe(2);
+    expect(tuneShared([tuneOf({ tune: { speed: 2 } }), tuneOf({ tune: { speed: 2, sensitivity: 3 } })], 'sensitivity')).toBeNull();
   });
 });
