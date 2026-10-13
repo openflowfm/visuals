@@ -51,20 +51,43 @@ function useChanges(value: unknown): number {
 export function useDeckSet(live: LiveState): { whole: boolean; paths: string[] | null; failed: boolean } {
   const libraryChanges = useChanges(live.data);
   const key = deckSetKey(live.deck, live.lists?.playlists, libraryChanges);
-  const [read, setRead] = useState<{ key: string; paths: string[] | null } | null>(null);
+  const scope = deckScope(live.deck);
+  const [read, setRead] = useState<DeckRead | null>(null);
   useEffect(() => {
     if (key === null) return;
     let on = true;
     pl.deckItems().then(
-      (paths) => on && setRead({ key, paths }),
-      () => on && setRead({ key, paths: null }),
+      (paths) => on && setRead({ key, scope, paths }),
+      () => on && setRead({ key, scope, paths: null }),
     );
     return () => {
       on = false;
     };
+    // `scope` follows `key` (the key names the playlist and filter).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (key === null) return { whole: true, paths: null, failed: false };
-  // While reading again, the last set read stays shown (a star needn't empty the map for a moment).
-  const done = read?.key === key;
-  return { whole: false, paths: read?.paths ?? null, failed: done && read.paths === null };
+  return { whole: false, ...shownSet(read, key, scope) };
+}
+
+/** One read of `deck_items`: for which key, which playlist and filter (`deckScope`), and what came back. */
+export interface DeckRead {
+  key: string;
+  scope: string;
+  paths: string[] | null;
+}
+
+/** Which set the deck plays from: its playlist and filter (not the contents, order or count). */
+export function deckScope(deck: pl.Deck | null | undefined): string {
+  return `${deck?.playlist ?? ''}|${JSON.stringify(deck?.query ?? null)}`;
+}
+
+/**
+ * What "this set" shows given the last read: while reading again the same playlist and filter, the
+ * last set read stays shown (a star needn't empty the map for a moment); after a switch to another
+ * playlist or filter, nothing until its own read returns.
+ */
+export function shownSet(read: DeckRead | null, key: string, scope: string): { paths: string[] | null; failed: boolean } {
+  if (!read || read.scope !== scope) return { paths: null, failed: false };
+  return { paths: read.paths, failed: read.key === key && read.paths === null };
 }

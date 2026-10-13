@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import type { LibraryQuery } from '../model/api';
 import { EMPTY_DECK, manual, type Deck, type Item, type Playlist } from '../model/playlists';
-import { deckSetKey } from './deckSet';
+import { deckScope, deckSetKey, shownSet } from './deckSet';
+
+describe('shownSet', () => {
+  const readA = { key: 'k1', scope: deckScope({ ...EMPTY_DECK, playlist: 'a' }), paths: ['a.milk'] };
+
+  it('keeps the last set while the same playlist reads again', () => {
+    expect(shownSet(readA, 'k2', deckScope({ ...EMPTY_DECK, playlist: 'a' })).paths).toEqual(['a.milk']);
+  });
+
+  it('shows none of the old set after a switch to another playlist', () => {
+    expect(shownSet(readA, 'k3', deckScope({ ...EMPTY_DECK, playlist: 'b' }))).toEqual({ paths: null, failed: false });
+  });
+});
 
 const item = (path: string, hash: string | null = null): Item => ({ path, name: path, group: '', missing: false, hash });
 const QUERY: LibraryQuery = { groups: { star: ['yes'] }, text: '' };
