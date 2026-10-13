@@ -18,6 +18,8 @@ export interface LibraryMapProps {
   playing: Prepared | null;
   /** A dot picked (click, or Enter on the keyboard's cursor): the caller plays it. */
   onPick(row: LibraryRow): void;
+  /** The keys of several presets picked together, each ringed on the map (none or one: no rings). */
+  marked?: readonly string[];
 }
 
 /** "Speed × Brightness": the axes the map shows, across × up. */
