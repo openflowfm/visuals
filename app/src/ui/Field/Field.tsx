@@ -14,6 +14,7 @@ import {
   endsOf,
   groupColour,
   M,
+  marksPath,
   nearest,
   step,
   stylesOf,
@@ -55,6 +56,8 @@ export interface FieldProps {
   hue: string;
   /** What the field says about the preset playing ("Slow and dark, among 250 presets"), or the library with none. */
   description: string;
+  /** Several presets picked together, by key: each one's dot gets a small ring in the accent (none or one: no rings; one with no dot is skipped). The preset playing stays lit as ever. */
+  marked?: readonly string[];
   /** A dot picked, by click or Enter: the caller plays it (the field is a way through the library, not a second selection). */
   onPick(row: LibraryRow): void;
 }
@@ -84,9 +87,12 @@ const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
  * it. From the keyboard the field is one stop, a listbox whose one rendered option is the dot
  * under its cursor: the arrows move the cursor to the nearest dot that way, Enter (or Space)
  * plays it, and the cursor starts on the preset playing. Its name shows in the same tip as
- * hover's. Mount it in `LibraryMap`, the inspector region's section for it.
+ * hover's. With several presets picked (`marked`), each one's dot is ringed in the accent, all as
+ * one path under the lit dot, and the rest step back as they do for a lit one. Mount it in
+ * `LibraryMap`, the inspector region's section for it.
  *
- * **Changed.** A dot picked plays (`onPick`; the Home plays it as a library tile's play does), so
+ * **Changed.** The rings round several picked are back (`marked`, `marksPath`), lost in the move
+ * to zen. A dot picked plays (`onPick`; the Home plays it as a library tile's play does), so
  * the lit dot is always the one playing: the field no longer follows what a panel beside it is
  * about (it has no `subject`, and no second mark for a preset playing while another is shown),
  * and its words say "Enter plays one". The tip is a `Layer level="float"` (it floats over the field, so it takes the
@@ -108,7 +114,7 @@ const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
  * - `--vs-field-at`: the tip's place across, 0–1 (set inline from the dot).
  * - `--vs-field-tip-width`: the tip's widest.
  */
-export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape = BOX, name, playing, intensity, hue, description, onPick }: FieldProps) {
+export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape = BOX, name, playing, intensity, hue, description, marked, onPick }: FieldProps) {
   const { w: W, h: H } = shape;
   const box = useMemo(() => ({ w: W, h: H }), [W, H]);
   const dots = useMemo(() => dotsOf(library, mine, axes, box), [library, mine, axes, box]);
@@ -117,6 +123,8 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape
   const needStyles = axes.colour === 'style' || axes.across === 'style' || axes.up === 'style';
   const styles = useMemo(() => (needStyles ? stylesOf(library, mine) : []), [needStyles, library, mine]);
   const trailAt = useMemo(() => (trail?.length ? trailPoints(dots, trail) : []), [dots, trail]);
+  const marks = useMemo(() => marksPath(dots, marked), [dots, marked]);
+  const ringed = useMemo(() => new Set(marks ? marked : []), [marks, marked]);
   const across = axisOf(axes.across);
   const up = axisOf(axes.up);
   const acrossEnds = endsOf(axes.across, styles);
@@ -214,13 +222,14 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape
             ))}
             <path className="vs-field-centre" d={`M${xOf(0.5, box) - 2.5} ${yOf(0.5, box)} h5 M${xOf(0.5, box)} ${yOf(0.5, box) - 2.5} v5`} />
           </g>
-          <g className="vs-field-dots" data-dim={lit >= 0 ? '' : undefined}>
+          <g className="vs-field-dots" data-dim={lit >= 0 || marks ? '' : undefined}>
             {paths.map((p) => (
               <path key={p.band} d={p.d} stroke={groupColour(axes.colour, p.band, styles)} />
             ))}
           </g>
           {tuned && <path className="vs-field-tuned" d={tuned} />}
           {trailAt.length > 1 && <Trail points={trailAt} />}
+          {marks && <path className="vs-field-marked" d={marks} />}
           {lit >= 0 && <Lit dot={dots[lit]} box={box} ring={ring} hue={hue} />}
           {tip && <circle className="vs-field-hot" cx={tip.x} cy={tip.y} r={4} />}
         </svg>
@@ -238,7 +247,7 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape
           </Layer>
         )}
         {active && (
-          <span className="vs-field-sr" role="option" id={optionId} aria-selected={active.row.key === playing} aria-setsize={dots.length} aria-posinset={cursor + 1}>
+          <span className="vs-field-sr" role="option" id={optionId} aria-selected={active.row.key === playing || ringed.has(active.row.key)} aria-setsize={dots.length} aria-posinset={cursor + 1}>
             {optionName(active, playing)}
           </span>
         )}

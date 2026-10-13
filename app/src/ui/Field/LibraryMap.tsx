@@ -50,7 +50,7 @@ const BY: Record<AxisId, string> = {
  * and colour is the page's (`useMapAxes`): kept across restarts and shared with live mode's map.
  * It shows the whole library always, the preset playing lit with its ring, whatever the details
  * above it are about (the preset playing, a tile picked, several, a playlist, or nothing). A dot
- * played is the Field's `onPick`. With nothing playing, a line under the heading says what the
+ * played is the Field's `onPick`. With several picked (`marked`), each is ringed. With nothing playing, a line under the heading says what the
  * dots are and that a click plays one.
  *
  * **Changed.** The axes and the colour are a choice (pickers on the Field's edges and in the
@@ -66,7 +66,7 @@ const BY: Record<AxisId, string> = {
  * **Tuning knobs**
  * - `--vs-map-hair`: the hairline over the section.
  */
-export function LibraryMap({ library, mine, playing, onPick }: LibraryMapProps) {
+export function LibraryMap({ library, mine, playing, onPick, marked }: LibraryMapProps) {
   const [axes, setAxes] = useMapAxes();
   const c = useMemo(() => (playing ? characterOf(playing) : null), [playing]);
   const drawn = useMemo(() => library.reduce((n, r) => (r.look ? n + 1 : n), 0), [library]);
@@ -99,6 +99,7 @@ export function LibraryMap({ library, mine, playing, onPick }: LibraryMapProps) 
         intensity={c?.intensity.at ?? null}
         hue={c?.hues[0]?.css ?? 'var(--text-1)'}
         description={fieldSays(c, drawn, library.length, [axes.across, axes.up])}
+        marked={marked}
         onPick={onPick}
       />
     </Group>

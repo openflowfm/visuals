@@ -11,6 +11,7 @@ import {
   dotsOf,
   groupColour,
   M,
+  marksPath,
   nearest,
   step,
   stylesOf,
@@ -246,6 +247,30 @@ describe('trailPoints', () => {
   });
   it('is empty with nothing played', () => {
     expect(trailPoints(dots, [])).toEqual([]);
+  });
+});
+
+describe('marksPath', () => {
+  const dots = dotsOf([row('a', { look: look({ speed: 0 }) }), row('b', { look: look({ speed: 8 }) }), row('c'), row('u', { look: null })]);
+  /** How many rings a path draws: each is a move and two arcs. */
+  const rings = (d: string) => (d.match(/M/g) ?? []).length;
+  it('rings each picked dot once, as one path, skipping a pick with no dot', () => {
+    const d = marksPath(dots, ['b', 'a', 'u', 'a']);
+    expect(rings(d)).toBe(2);
+    expect((d.match(/a/g) ?? []).length).toBe(4);
+    expect(d.startsWith(`M${(dots[0].x - 3.6).toFixed(1)} ${dots[0].y.toFixed(1)}a`)).toBe(true);
+    expect(d).toContain(`M${(dots[1].x - 3.6).toFixed(1)} ${dots[1].y.toFixed(1)}a`);
+  });
+  it('rings nothing for none or one pick, however often it is given', () => {
+    expect(marksPath(dots, undefined)).toBe('');
+    expect(marksPath(dots, [])).toBe('');
+    expect(marksPath(dots, ['a'])).toBe('');
+    expect(marksPath(dots, ['a', 'a'])).toBe('');
+  });
+  it('rings every drawn pick of three, at the radius asked', () => {
+    const d = marksPath(dots, ['a', 'b', 'c'], 5);
+    expect(rings(d)).toBe(3);
+    expect(d).toContain('a5 5 0 1 0 10 0');
   });
 });
 

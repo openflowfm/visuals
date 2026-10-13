@@ -20,13 +20,13 @@ const defaultAxes = () => {
 };
 
 /** The map on its own in the inspector's panel, at its width: a dot played lights up, as the Home's would. */
-function Story({ nothing }: { nothing: boolean }) {
+function Story({ nothing, marked }: { nothing: boolean; marked?: readonly string[] }) {
   const [playing, setPlaying] = useState<LibraryRow | null>(nothing ? null : NOW.preset);
   return (
     <div style={{ display: 'flex' }}>
       <InspectorPanel>
         <div style={{ padding: 'var(--space-5)' }}>
-          <LibraryMap library={ROWS} mine={DATA.presets} playing={playing ? prepareRow(playing, DATA.presets[playing.key]) : null} onPick={setPlaying} />
+          <LibraryMap library={ROWS} mine={DATA.presets} playing={playing ? prepareRow(playing, DATA.presets[playing.key]) : null} onPick={setPlaying} marked={marked} />
         </div>
       </InspectorPanel>
     </div>
@@ -92,6 +92,36 @@ export const NothingPlaying: S = {
     const map = mapOf(canvasElement);
     await expect(within(map).getByText(/each dot is a preset/i)).toBeVisible();
     await expect(map.querySelector('.vs-field-lit')).toBeNull();
+  },
+};
+
+/** Three presets drawn on the map, other than the one playing, and one with no look (not drawn yet). */
+const PICKED = ROWS.filter((r) => r.look && r.key !== NOW.preset!.key)
+  .slice(0, 3)
+  .map((r) => r.key);
+const UNDRAWN = ROWS.find((r) => !r.look)?.key;
+/** How many rings the marks' path draws: one move each. */
+const ringsOf = (map: HTMLElement) => (map.querySelector('.vs-field-marked')?.getAttribute('d')?.match(/M/g) ?? []).length;
+
+/** Several picked: each one's dot ringed in the accent (a pick not drawn yet has none), and the preset playing still lit. */
+export const SeveralPicked: S = {
+  name: 'Several picked',
+  args: { marked: UNDRAWN ? [...PICKED, UNDRAWN] : PICKED },
+  play: async ({ canvasElement }) => {
+    const map = mapOf(canvasElement);
+    await expect(ringsOf(map)).toBe(PICKED.length);
+    await expect(map.querySelector('.vs-field-lit')).not.toBeNull();
+  },
+};
+
+/** One picked: the inspector's subject, not a set, so no rings. */
+export const OnePicked: S = {
+  name: 'One picked',
+  args: { marked: PICKED.slice(0, 1) },
+  play: async ({ canvasElement }) => {
+    const map = mapOf(canvasElement);
+    await expect(map.querySelector('.vs-field-marked')).toBeNull();
+    await expect(map.querySelector('.vs-field-lit')).not.toBeNull();
   },
 };
 
