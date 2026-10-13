@@ -1,5 +1,7 @@
 # visual[flow] on zen
 
+Moved here from zen's `src/library/visuals/` (zen commit `985972d`). It reaches zen only through `@satoramoto/zen` (and `@satoramoto/zen/storybook` in stories, tests and `fixtures/`); the links below to `docs/`, `../themes/` and `tiers.test.ts` are zen's files (github.com/satoramoto/zen), and zen's tests of the rules below (contract variables only, the tiers) don't run here yet.
+
 **Where does this go?** This is the app tier and its screens and regions: data, behaviour, which regions go where. A look is a primitive, an interaction a control in `components/`, spacing a Group's `gap`; a folder here arranges them. See [`docs/tiers.md`](../../../docs/tiers.md); `src/library/tiers.test.ts` counts breaches per folder against `../tiers.baseline.json`, and a folder's `--vs-*` properties are listed under **Tuning knobs** in its component's doc comment.
 
 visual[flow] 1.0's UI (openflowfm/visuals, `app/src/`), rebuilt on zen's contract, layout primitives and generic controls, worn in the `visuals` pack (palette `frost`, faces `instrument`, scale `roomy`, materials `frost`). The rules for the look are `../themes/principles/visuals.md`. The lab's preset editor is ported too (`Editor/`, `StageGraph/`, `StageInspector/`), as its own package entry, `@satoramoto/zen/visuals/lab` (`lab.ts`), which a lab build passes as `<VisualsApp lab={VisualsEditor} />`; its editor-only commands are in `model/lab.ts`, never `model/api.ts`, so none of them reaches an app built without it.
