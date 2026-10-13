@@ -1,36 +1,64 @@
 #!/usr/bin/env bash
 # `npm run app`: runs `cargo tauri dev` in app/src-tauri, which starts vite (the
-# editor page) and then the app, with vite on PORT or a free port.
+# editor page) and then the app, with vite on PORT or a free port, against the
+# zen node_modules holds (the pinned one after a plain `npm install`).
 #
-# They run in a process group of their own, and the whole group is stopped when
-# this script ends, is stopped (Ctrl-C, SIGTERM, hangup) or its parent goes away,
-# so killing this script never leaves vite, cargo-tauri or the app running.
+# `npm run dev:app` is the same with `VISUALS_DEV_APP=1`, which first, as
+# `npm run dev` does (`app/dev-zen.sh`), links the local zen
+# (`npm install --no-save "$ZEN_SOURCE"`, ZEN_SOURCE ~/Code/satoramoto/zen by
+# default), so vite resolves zen to its source and hot-reloads it in the app's
+# window, and starts the Storybooks: zen's launcher unless a Storybook already
+# answers on `ZEN_STORYBOOK_PORT` (6022), and this repo's on `STORYBOOK_PORT`
+# (6006, or a free port) with zen's composed in under "zen". It prints what runs
+# and the Storybook URL. Storybook ending by itself is reported; the app keeps
+# running.
+#
+# Each runs in a process group of its own, and every group it started is stopped
+# when this script ends (the app quits), is stopped (Ctrl-C, SIGTERM, hangup) or
+# its parent goes away, so killing this script never leaves vite, cargo-tauri,
+# the app or a Storybook running.
 set -u
-cd "$(dirname "$0")/src-tauri" || exit 1
+cd "$(dirname "$0")/.." || exit 1
+ZEN_ME=app/run.sh
+. app/dev-zen.sh
 
-PORT=${PORT:-$(node -e "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")}
+PORT=${PORT:-$(zen_free_port)}
 export PORT
 
-# Job control: the background job below gets a process group of its own, whose
-# id is its pid. Its input is /dev/null, so nothing in it waits on the terminal.
-set -m
-cargo tauri dev --config "{\"build\":{\"devUrl\":\"http://127.0.0.1:$PORT\"}}" "$@" </dev/null &
-group=$!
+dev_app=
+if [ "${VISUALS_DEV_APP:-}" = 1 ]; then
+	dev_app=1
+	link_zen
+	plan_storybooks
+fi
 
+group=
 stop() {
 	trap - EXIT INT TERM HUP
-	kill -TERM -- "-$group" 2>/dev/null || return 0
-	for _ in 1 2 3 4 5 6 7 8 9 10; do
-		kill -0 -- "-$group" 2>/dev/null || return 0
-		sleep 0.5
-	done
-	kill -KILL -- "-$group" 2>/dev/null
+	stop_group "$group"
+	stop_storybooks
 	return 0
 }
 trap stop EXIT
 trap 'stop; exit 130' INT
 trap 'stop; exit 143' TERM
 trap 'stop; exit 129' HUP
+
+# Job control: each background job gets a process group of its own, whose id is
+# its pid. Their input is /dev/null, so nothing in them waits on the terminal.
+set -m
+if [ -n "$dev_app" ]; then
+	start_storybooks
+fi
+(cd app/src-tauri && exec cargo tauri dev --config "{\"build\":{\"devUrl\":\"http://127.0.0.1:$PORT\"}}" "$@") </dev/null &
+group=$!
+
+if [ -n "$dev_app" ]; then
+	echo
+	echo "  visual[flow] dev:app: the app's window (cargo tauri dev), its page on http://127.0.0.1:$PORT/, hot-reloaded"
+	print_storybooks
+	echo
+fi
 
 # The processes that started this script, each with its parent, up to launchd:
 # when one of them dies, the chain changes (npm, say, outliving the shell that
@@ -47,6 +75,7 @@ while kill -0 "$group" 2>/dev/null; do
 		echo "app/run.sh: what started it went away, stopping" >&2
 		exit 1
 	fi
+	check_storybooks
 	sleep 1
 done
 wait "$group"

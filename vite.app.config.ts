@@ -9,7 +9,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 /**
  * A local zen, with hot reload of its source: `ZEN_SOURCE=~/Code/satoramoto/zen`
  * (the checkout), after `npm install --no-save "$ZEN_SOURCE"` has made
- * `node_modules/@satoramoto/zen` a link to it (`npm run design` does both). zen's
+ * `node_modules/@satoramoto/zen` a link to it (`npm run dev` and `npm run dev:app`
+ * do both, through `app/dev-zen.sh`). zen's
  * `zen-source` export condition, first, resolves each of its entries to the TS/TSX
  * source (its CSS entries to an empty sheet: in source each component imports its
  * own), React comes from here only, and the checkout may be served. Without

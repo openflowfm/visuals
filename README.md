@@ -119,11 +119,11 @@ macOS, with Node (see `.nvmrc`), Rust, the Tauri CLI (`cargo install tauri-cli`)
 git clone https://github.com/openflowfm/visuals.git
 cd visuals
 npm ci
-npm run app      # the player: app/run.sh runs cargo tauri dev, with the page's vite on $PORT or a free port
+npm run app      # the player: app/run.sh runs cargo tauri dev, with the page's vite on $PORT or a free port, against the pinned zen
 npm run app:lab  # the lab build: the same with the preset editor
-npm run dev      # the player's page in your browser with hot reload, driving the real app headless, plus Storybook on port 6006 (dev:lab for the editor)
+npm run dev      # the player's page in your browser with hot reload, driving the real app headless, plus Storybook on port 6006 with zen's composed in, against the local zen (dev:lab for the editor)
+npm run dev:app  # the player's real window with hot reload (app/run.sh), plus the same Storybook, against the local zen (dev:app:lab for the editor)
 npm run storybook  # every screen and part, and the whole page, on a fake app, with hot reload, on port 6006 (or $PORT); no app needed
-ZEN_SOURCE=~/Code/satoramoto/zen npm run design  # the UI and a local zen together, hot-reloaded, in one Storybook (see below)
 ```
 
 The page's UI lives in `app/src/ui/` (`VisualsApp`: the home, live mode, the sheets and
@@ -141,15 +141,26 @@ stand-in for the frosted window between a dark desktop, a light one and Reduce
 transparency. `npm run build-storybook` builds it into `storybook-static/`. None of it
 reaches the app's build.
 
-To change a screen here and a control or token in zen at once, run
-`ZEN_SOURCE=~/Code/satoramoto/zen npm run design` (`app/design.sh`). It links
-node_modules/@satoramoto/zen to that checkout (`npm install --no-save "$ZEN_SOURCE"`),
-starts zen's own launcher (its Storybook on 6022) unless 6022 is already serving, and
-starts this Storybook on 6006 resolving zen to its source (zen's `zen-source` export
-condition) with zen's Storybook composed in under "zen"; it prints the one URL to open and
-stops what it started when you press Ctrl-C. Land the zen change as a zen PR first (pin
-its branch's sha here meanwhile), then pin zen's merged sha. A plain `npm install` puts
-the pinned zen back.
+`npm run dev` and `npm run dev:app` work on this app and zen together. First they link
+node_modules/@satoramoto/zen to your zen checkout (`npm install --no-save "$ZEN_SOURCE"`;
+`ZEN_SOURCE` is `~/Code/satoramoto/zen` by default) and set `ZEN_SOURCE` for vite and
+Storybook, which then resolve zen to its source (zen's `zen-source` export condition), so
+an edit in zen hot-reloads in the app. With no checkout there, or `ZEN_SOURCE=` (empty),
+they say so and use the pinned zen. Both then start the Storybooks (`app/dev-zen.sh`):
+zen's own launcher (`PREVIEW_LABEL=Zen PREVIEW_PORT=$ZEN_PREVIEW_PORT
+STORYBOOK_PORT=$ZEN_STORYBOOK_PORT npm --prefix "$ZEN_SOURCE" run dev`, ports 4191 and
+6022 by default) unless a Storybook already answers on `ZEN_STORYBOOK_PORT`, and this
+Storybook (on `$STORYBOOK_PORT`, 6006, or a free port) with zen's composed in under "zen".
+Then:
+
+- `npm run dev` (`app/dev.sh`) runs the app headless with its dev bridge and vite (on
+  `$PORT`), and prints the page's URL (open it in your browser) and Storybook's.
+- `npm run dev:app` (`app/run.sh` with `VISUALS_DEV_APP=1`) runs `cargo tauri dev`, the
+  real window with hot reload, and prints Storybook's URL.
+
+Ctrl-C stops what they started and nothing else. The link stays afterwards: a plain
+`npm install` puts the pinned zen back. Land a zen change as a zen PR first (pin its
+branch's sha here meanwhile), then pin zen's merged sha.
 
 The lab build adds the editor: the preset as MilkDrop's stage graph, each stage's picture,
 its EEL or HLSL and numbers, and every edit reloading the preset as it plays. It's the

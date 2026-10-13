@@ -28,8 +28,9 @@
     "app:lab": "VITE_LAB=1 app/run.sh --features lab",
     "dev": "app/dev.sh",
     "dev:lab": "VITE_LAB=1 app/dev.sh --features lab",
-    "check:no-dev-code": "node app/no-dev-code.mjs",
-    "design": "app/design.sh"
+    "dev:app": "VISUALS_DEV_APP=1 app/run.sh",
+    "dev:app:lab": "VITE_LAB=1 VISUALS_DEV_APP=1 app/run.sh --features lab",
+    "check:no-dev-code": "node app/no-dev-code.mjs"
   },
   "dependencies": {
     "@satoramoto/zen": "github:satoramoto/zen#3672b5f912832d11404976a74f0d8a8cae9217e0",
