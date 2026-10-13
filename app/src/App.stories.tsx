@@ -4,7 +4,7 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { VisualsApp } from './ui';
 import { install, type World } from './stories/backend.ts';
 import { PLAYING_DECK, STILL, WARM_UP } from './stories/fixtures.ts';
-import { SEEDED_KEY } from './home.ts';
+import { SEEDED_KEY } from './ui/model/home';
 import { installTauriBridge } from './zenBridge.ts';
 import './main.css';
 

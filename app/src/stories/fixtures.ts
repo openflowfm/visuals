@@ -5,12 +5,12 @@
  * Storybook imports this (`.storybook/`, `*.stories.tsx`); the app's build never
  * sees it. `backend.ts` serves it to the page as the Tauri commands.
  */
-import type * as api from '../api.ts';
-import type * as fx from '../fx.ts';
-import type * as link from '../link.ts';
-import type * as output from '../output.ts';
-import type * as pack from '../pack.ts';
-import * as pl from '../playlists.ts';
+import type * as api from '../ui/model/api';
+import type * as fx from '../ui/model/fx';
+import type * as link from '../ui/model/link';
+import type * as output from '../ui/model/output';
+import type * as pack from '../ui/model/pack';
+import * as pl from '../ui/model/playlists';
 import index from '../../src-tauri/presets/starter/cream-of-the-crop/index.json';
 
 /** Where the app keeps the starter set; the rows' and entries' paths are under it. */

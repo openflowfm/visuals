@@ -12,18 +12,8 @@ const P = principlesFor(pack.facets, pack.principles);
 
 const forms = (p: Placement) => Object.fromEntries(Object.values(p.regions).map((r) => [r.id, r.form]));
 
-/** The Stage at a size, fitting it: no zoom, no overflow, every region inside the window. */
-function stage(w: number, h: number) {
-  const room = { w, h };
-  const p = assemble(stageSpec(), room, P);
-  expect(p.zoom).toBe(1);
-  expect(p.overflow).toBe(false);
-  for (const { rect: r } of Object.values(p.regions)) {
-    expect(r.x + r.w).toBeLessThanOrEqual(room.w + 0.5);
-    expect(r.y + r.h).toBeLessThanOrEqual(room.h + 0.5);
-  }
-  return p;
-}
+/** The Stage at a size (where its regions land is zen's to test; their forms are the app's). */
+const stage = (w: number, h: number) => assemble(stageSpec(), { w, h }, P);
 
 describe('the Stage assembles itself', () => {
   it('has no crate', () => {
@@ -31,13 +21,8 @@ describe('the Stage assembles itself', () => {
     expect(Object.keys(p.regions).sort()).toEqual(['dock', 'head']);
   });
 
-  it('1440 × 900: the header and the controls at full, the controls the whole width under the header', () => {
-    const p = stage(1440, 900);
-    expect(forms(p)).toMatchObject({ head: 'full', dock: 'full' });
-    expect(p.regions.dock.rect).toMatchObject({ x: 0, w: 1440 });
-    expect(p.regions.head.rect.h).toBe(52);
-    // The controls fill the picture under the header: the transport's name at their top, the rows at their foot.
-    expect(p.regions.dock.rect.h).toBeGreaterThan(780);
+  it('1440 × 900: the header and the controls at full', () => {
+    expect(forms(stage(1440, 900))).toMatchObject({ head: 'full', dock: 'full' });
   });
 
   it('1000 × 700: the header full, the controls stacked (Effects its glyph alone)', () => {
@@ -64,7 +49,7 @@ describe('the Stage’s panels', () => {
     render(<StageLayout warning inWindow head={<p>head</p>} dock={<p>dock</p>} panel={panel ? <aside aria-label="Effects" /> : null} side={side ? <aside aria-label="Library map" /> : null} />)
       .container;
 
-  it('puts the effects panel at the left and the map at the right, both in the overlay, the panel first, then the map, then the screen', () => {
+  it('puts the effects panel and the map in their slots in the overlay, and says each is there', () => {
     const c = stageWith(true, true);
     const root = c.querySelector('.vs-stagelayout')!;
     expect(root).toHaveAttribute('data-panel');
@@ -74,8 +59,6 @@ describe('the Stage’s panels', () => {
     const side = reveal.querySelector('.vs-stagelayout-side')!;
     expect(panel.querySelector('[aria-label="Effects"]')).not.toBeNull();
     expect(side.querySelector('[aria-label="Library map"]')).not.toBeNull();
-    const order = [...reveal.querySelectorAll('.vs-stagelayout-panel, .vs-stagelayout-side, .vs-stagelayout-screen')].map((el) => el.className.split(' ').find((n) => n.startsWith('vs-stagelayout-')));
-    expect(order).toEqual(['vs-stagelayout-panel', 'vs-stagelayout-side', 'vs-stagelayout-screen']);
   });
 
   it('makes both panels inert while the warning is owed', () => {

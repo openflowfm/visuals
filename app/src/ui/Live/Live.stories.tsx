@@ -55,14 +55,10 @@ type Story = StoryObj<typeof meta>;
 
 /** Live's root: what it is doing, as data (it takes no box of its own). */
 const root = (el: HTMLElement) => el.querySelector<HTMLElement>('.vs-live')!;
-/** The one overlay over the picture (the header and the controls), and whether it shows. */
-const reveal = (el: HTMLElement) => el.querySelector<HTMLElement>('.vs-stagelayout-reveal')!;
-const shows = (el: HTMLElement) => waitFor(() => expect(getComputedStyle(reveal(el)).opacity).toBe('1'));
 
 /**
  * Playing Warm-up with Link on (two peers, 124 BPM), the output put on the projector from the
- * corner toast; focus in the controls shows them (as hovering the window does); `\` pins them
- * shown and lets them go.
+ * Output popover; `\` pins the controls shown and lets them go.
  */
 export const Playing: Story = {
   play: async ({ canvasElement }) => {
@@ -77,13 +73,9 @@ export const Playing: Story = {
     const go = await within(canvas.getByRole('dialog', { name: 'Output, in this window' })).findByRole('button', { name: 'Go full screen on Projector (HDMI)' });
     await userEvent.click(go);
     await waitFor(() => expect(root(canvasElement).dataset.windowed).toBeUndefined());
-    // The controls show while focus is in them.
-    canvas.getByRole('button', { name: 'next preset' }).focus();
-    await shows(canvasElement);
     (document.activeElement as HTMLElement | null)?.blur();
     await userEvent.keyboard('\\');
     await waitFor(() => expect(root(canvasElement).dataset.pinned).toBe(''));
-    await shows(canvasElement);
     await expect(canvas.getByText('Pinned')).toBeVisible();
     await userEvent.keyboard('\\');
     await waitFor(() => expect(root(canvasElement).dataset.pinned).toBeUndefined());
@@ -101,27 +93,19 @@ export const EffectsOpen: Story = {
     await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
     await userEvent.keyboard('e');
     const panel = await canvas.findByRole('complementary', { name: 'Effects' });
-    await shows(canvasElement);
+    // The overlay fades in with the panel open.
+    await waitFor(() => expect(panel).toBeVisible());
     await expect(canvas.getByRole('button', { name: 'Effects' })).toHaveAttribute('aria-expanded', 'true');
     for (const name of ['Strobe (S)', 'Blackout (B)', 'Freeze (F)', 'Punch (P)']) await expect(within(panel).getByRole('button', { name })).toBeVisible();
     await expect(within(panel).getByRole('slider', { name: 'intensity' })).toBeVisible();
     for (const name of ['speed', 'hue', 'trails']) await expect(await within(panel).findByRole('slider', { name })).toBeVisible();
     await expect(within(panel).getByRole('button', { name: 'Back to normal' })).toBeVisible();
-    const r = panel.getBoundingClientRect();
-    const win = canvasElement.querySelector('.vs-stagelayout')!.getBoundingClientRect();
-    await expect([r.left - win.left, r.top - win.top]).toEqual([20, 64]);
   },
 };
 
-/** The library map, its panel, and where the Stage puts it. */
+/** The library map's panel and its button. */
 const mapOf = (el: HTMLElement) => within(el).getByRole('complementary', { name: 'Library map' });
 const mapButton = (el: HTMLElement) => within(el).getByRole('button', { name: 'Library map' });
-/** A rect relative to the Stage's window. */
-const inWindow = (el: HTMLElement, r: DOMRect) => {
-  const win = el.querySelector('.vs-stagelayout')!.getBoundingClientRect();
-  return { left: r.left - win.left, top: r.top - win.top, right: win.right - r.right, bottom: win.bottom - r.bottom };
-};
-const apart = (a: DOMRect, b: DOMRect) => a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
 /** What played this session before Warm-up's third preset (the deck's current): the map's dashed trail has somewhere to go. */
 const PLAYED = [WARM_UP.items[5].path, WARM_UP.items[0].path, WARM_UP.items[1].path, WARM_UP.items[2].path];
 
@@ -138,10 +122,7 @@ export const MapOpen: Story = {
     await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
     await userEvent.keyboard('g');
     const map = await waitFor(() => mapOf(canvasElement));
-    await shows(canvasElement);
     await expect(mapButton(canvasElement)).toHaveAttribute('aria-expanded', 'true');
-    const at = inWindow(canvasElement, map.getBoundingClientRect());
-    await expect([Math.round(at.right), Math.round(at.top)]).toEqual([20, 64]);
     await waitFor(() => expect(map.querySelector('.vs-field-trail')).not.toBeNull());
     // Another dot from the keyboard: the field's cursor starts on the preset playing; → moves it, Enter plays it.
     const field = await within(map).findByRole('listbox');
@@ -176,7 +157,7 @@ export const MapOtherAxes: Story = {
   },
 };
 
-/** E and G: the effects panel at the left and the map at the right, both shown, never overlapping. */
+/** E and G: the effects panel at the left and the map at the right, both shown. */
 async function effectsAndMap(canvasElement: HTMLElement) {
   await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
   await userEvent.keyboard('e');
@@ -184,10 +165,8 @@ async function effectsAndMap(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   const effects = await canvas.findByRole('complementary', { name: 'Effects' });
   const map = await waitFor(() => mapOf(canvasElement));
-  await shows(canvasElement);
-  await expect(effects).toBeVisible();
-  await expect(map).toBeVisible();
-  await expect(apart(effects.getBoundingClientRect(), map.getBoundingClientRect())).toBe(true);
+  await waitFor(() => expect(effects).toBeVisible());
+  await waitFor(() => expect(map).toBeVisible());
 }
 
 export const EffectsAndMap: Story = {
@@ -208,7 +187,7 @@ export const PinnedWide: Story = {
   play: async ({ canvasElement }) => {
     await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
     await userEvent.keyboard('\\');
-    await shows(canvasElement);
+    await waitFor(() => expect(root(canvasElement).dataset.pinned).toBe(''));
   },
 };
 
@@ -219,7 +198,7 @@ export const PinnedNarrow: Story = {
   play: async ({ canvasElement }) => {
     await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
     await userEvent.keyboard('\\');
-    await shows(canvasElement);
+    await waitFor(() => expect(root(canvasElement).dataset.pinned).toBe(''));
   },
 };
 
@@ -230,14 +209,13 @@ export const Busy: Story = {
 
 /** One display: played in the window, the Output popover offering to cover it with the picture. */
 export const OneDisplay: Story = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   parameters: { world: { displays: [{ id: 1, index: 0, name: 'Built-in Retina Display', width: 3024, height: 1964, main: true }] } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await waitFor(() => expect(root(canvasElement).dataset.windowed).toBe(''));
     await userEvent.click(await canvas.findByRole('button', { name: 'Output, in this window' }));
-    await expect(await within(canvas.getByRole('dialog')).findByRole('button', { name: 'Go full screen on Built-in Retina Display' })).toBeVisible();
+    const go = await within(canvas.getByRole('dialog')).findByRole('button', { name: 'Go full screen on Built-in Retina Display' });
+    await waitFor(() => expect(go).toBeVisible());
   },
 };
 

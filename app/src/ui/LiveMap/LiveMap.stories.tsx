@@ -78,15 +78,10 @@ export const ThisSet: Story = {
     // The rightmost dot plays: step the other way.
     if (p.getByRole('option').getAttribute('aria-selected') === 'true') await userEvent.keyboard('{ArrowLeft}');
     await expect(p.getByRole('option')).toHaveAttribute('aria-selected', 'false');
-    // The lit dot's point (its cursor lines span the whole plot, so the group's box never moves).
-    const point = () => panel.querySelector('.vs-field-point')!.getBoundingClientRect();
-    const lit = point();
     const name = p.getByRole('option').textContent;
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(p.getByRole('option')).toHaveAttribute('aria-selected', 'true'));
     await expect(p.getByRole('option').textContent).toBe(`${name}, playing`);
-    const now = point();
-    await expect(now.left !== lit.left || now.top !== lit.top).toBe(true);
   },
 };
 

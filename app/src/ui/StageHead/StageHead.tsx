@@ -135,7 +135,7 @@ function OutputLight({ live }: { live: LiveState }) {
 }
 
 /** Whether nothing has been heard for a few seconds (Onboarding's `silenceWatch` over the input's levels, read four times a second). */
-function useSilent(): boolean {
+export function useSilent(): boolean {
   const [quiet, setQuiet] = useState(false);
   useEffect(() => {
     const watch = silenceWatch();

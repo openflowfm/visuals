@@ -37,7 +37,7 @@ function Title() {
  * `run` sends a change and shows the frame it answers with, or a failure saying
  * what couldn't be done; `trouble` is that failure's banner, if any.
  */
-function useLink() {
+export function useLink() {
   const [frame, setFrame] = useState<link.Frame | null>(null);
   const { notice, dismiss, fail } = useNotice();
 

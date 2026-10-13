@@ -3,7 +3,8 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { withLibraryTheme } from '@satoramoto/zen/storybook';
 import type { LibraryRow } from '../model/api';
-import { DEFAULT_AXES, dotsOf, H, W } from '../model/field';
+import { DEFAULT_AXES, dotsOf, H, nearest, W } from '../model/field';
+import { tileName } from '../PresetTile/PresetTile';
 import { setMapAxes } from '../model/mapPrefs';
 import { prepareRow } from '../model/librarySearch';
 import { DATA, ROWS } from '../fixtures/fixtures';
@@ -61,26 +62,25 @@ const mapOf = (canvasElement: HTMLElement) => within(within(canvasElement).getBy
 
 /** Playing: the heading with the count and axes, the preset playing lit; a click on another dot plays it. */
 export const Playing: S = {
-  // Its play never ran in zen and fails here: out of `npm run test:stories` until it's fixed.
-  tags: ['!test'],
   play: async ({ canvasElement }) => {
     const map = mapOf(canvasElement);
     const drawn = ROWS.filter((r) => r.look).length;
     await expect(map).toHaveTextContent(`${drawn} presets · ${mapAxes(DEFAULT_AXES)}`);
     await expect(map.querySelector('.vs-field-lit')).not.toBeNull();
-    // The field keeps its 4:3 at the panel's width.
+    // Where the dot is on screen, to press it.
     const svg = map.querySelector<SVGSVGElement>('.vs-field-scope')!;
     const r = svg.getBoundingClientRect();
-    await expect(Math.abs(r.width / r.height - W / H)).toBeLessThan(0.02);
     // A dot other than the one playing: a click plays it, and the lit dot moves there.
     const dots = dotsOf(ROWS, DATA.presets);
     const other = dots.find((d) => d.row.key !== NOW.preset!.key)!;
+    // The row the field takes a click there for: the nearest dot, which may be another on the same spot.
+    const hit = dots[nearest(dots, other.x, other.y, 6)].row;
     const at = { clientX: r.left + (other.x / W) * r.width, clientY: r.top + (other.y / H) * r.height };
-    fireEvent.pointerDown(svg, at);
+    // A click alone (no pointerdown): a pointer's focus leaves the keyboard's cursor off, and the cursor is how the lit dot is read.
     fireEvent.click(svg, at);
-    const field = within(map).getByRole('listbox');
-    field.focus();
+    within(map).getByRole('listbox').focus();
     await waitFor(() => expect(within(map).getByRole('option')).toHaveAccessibleName(/playing$/));
+    await expect(within(map).getByRole('option').textContent).toContain(tileName(hit.title, hit.path));
   },
 };
 

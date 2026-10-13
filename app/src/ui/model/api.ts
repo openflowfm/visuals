@@ -81,7 +81,7 @@ export interface Opened {
 }
 export const open = (path: string) => invoke<Opened>('open', { path });
 export const apply = (preset: Preset) => invoke<Report>('apply', { preset });
-export const placeBench = (r: { x: number; y: number; width: number; height: number }) => invoke<void>('place_bench', r);
+export const placeBench = (r: { x: number; y: number; width: number; height: number; radius?: number }) => invoke<void>('place_bench', r);
 export const inputs = () => invoke<Input[]>('inputs');
 /** `size` (the input's channel count) tells apart inputs that share a name. */
 export const listenTo = (name: string | null, left = 1, right = 2, size: number | null = null) => invoke<string>('listen_to', { name, size, left, right });

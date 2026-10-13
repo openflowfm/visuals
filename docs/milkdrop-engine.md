@@ -108,7 +108,7 @@ default. It is a tool for working on the engine, not a product phase.
 
 **Stage pictures.** Each node shows its stage's picture, rendered by the engine
 (`Renderer::set_previews(wanted, size)`, `read_previews`) and polled by the page about
-fifteen times a second (`app/src/previews.ts`). The page asks only for the pictures whose
+fifteen times a second (`app/src/ui/model/previews.ts`). The page asks only for the pictures whose
 canvases are on screen in the graph pane (a layer's also needs the warp's, which it is
 drawn over), and at a size from the device pixels they cover — CSS width × the nodes'
 `--wdg-node-zoom` × the graph's zoom (read from its `viewRef` at each poll) × the display's

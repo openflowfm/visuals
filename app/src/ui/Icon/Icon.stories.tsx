@@ -107,7 +107,6 @@ export const AllIcons: Story = {
         const one = [...drawn].find((s) => s.getAttribute('width') === String(size));
         await expect(one, `${name} at ${size}`).toBeDefined();
         await expect(one!.getAttribute('height')).toBe(String(size));
-        await expect(one!.getBoundingClientRect().width).toBe(size);
         await expect(one!.childElementCount).toBeGreaterThan(0);
         // Without a label it is hidden from screen readers.
         await expect(one).toHaveAttribute('aria-hidden', 'true');

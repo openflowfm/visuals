@@ -177,7 +177,7 @@ const VALUES_CAP = 150;
  * The index rows, read again (debounced) as the presets folder changes; null until read, or when it can't be.
  * `settled` is whether the first read has answered or failed: until then the fallback rows are a guess the deck shouldn't follow.
  */
-function useIndex(): { index: LibraryRow[] | null; settled: boolean } {
+export function useIndex(): { index: LibraryRow[] | null; settled: boolean } {
   const [index, setIndex] = useState<LibraryRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -201,7 +201,7 @@ function useIndex(): { index: LibraryRow[] | null; settled: boolean } {
 }
 
 /** The user's library data, followed through `library-changed`; null until read. */
-function useLibraryData(): [LibraryData | null, (answer: Promise<LibraryData>) => Promise<void>] {
+export function useLibraryData(): [LibraryData | null, (answer: Promise<LibraryData>) => Promise<void>] {
   const [data, setData] = useState<LibraryData | null>(null);
   // Every answer and event takes a ticket; one older than the newest applied is dropped.
   const order = useRef(inOrder()).current;
