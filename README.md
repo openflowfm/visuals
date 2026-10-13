@@ -183,8 +183,10 @@ inspector (the pane about the preset) open or closed, `VITE_HOME_SIDEBAR=1` or `
 the sidebar shown or hidden, and `VITE_HOME_PICK=<path in the pack>` with that preset
 picked and shown in the inspector. `AGENTS.md` lists the rest.
 
-At build time, `VISUALS_CHANNEL=beta` or `latest` picks the update channel (otherwise
-stable), and `VISUALS_BUILD=<n>` is a latest build's number; `release.yml` sets both.
+At build time, `VISUALS_CHANNEL=latest` makes `latest` the update channel the app follows
+until one is chosen in Settings (otherwise `release`), and `VISUALS_BUILD=<n>` is the
+build's number; `release.yml` sets both. [`docs/releasing.md`](docs/releasing.md) says
+how the channels work and how to cut a release.
 
 ### The engine on its own
 

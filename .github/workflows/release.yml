@@ -1,26 +1,25 @@
-# The signed, notarised macOS build of the Tauri app (`app/`), for the three
-# update channels (`docs/releasing.md` says how a release goes out):
+# The signed, notarised macOS build of the Tauri app (`app/`), for the two
+# update channels (`docs/releasing.md` says how a release goes out). The app
+# follows the one chosen in its Settings; until then, the one it was built for.
 #
 # - latest: every push to `main` builds it and puts it on the `latest`
 #   prerelease in place of the one before, so its link never changes:
 #   https://github.com/openflowfm/visuals/releases/download/latest/visual-flow-latest_aarch64.dmg
-#   A newer push cancels a build still running, so the last push always gets
-#   one.
-# - beta: a `vX.Y.Z-rc.N` tag builds a beta app and opens a draft prerelease
-#   for the tag. Publishing the draft (by hand) puts its image and its
-#   `latest.json` on the fixed `beta` prerelease:
-#   https://github.com/openflowfm/visuals/releases/download/beta/visual-flow-beta_aarch64.dmg
-# - stable: a `vX.Y.Z` tag builds a stable app and opens a draft release.
-#   Publishing it makes it the latest release, which stable apps read, and
-#   puts its `latest.json` on the `beta` prerelease too, so beta testers roll
-#   onto the final.
+#   and, with the updater's key, its update and the `latest.json` there that
+#   latest apps read. A newer push cancels a build still running, so the last
+#   push always gets one.
+# - release: a `vX.Y.Z` tag builds the app and opens a draft release.
+#   Publishing it (by hand) makes it GitHub's latest release, whose
+#   `latest.json` release apps read. A `vX.Y.Z-rc.N` tag builds the same and
+#   opens a draft prerelease, for testers to download; no channel reads it.
 # - Running it by hand (Actions → release → Run workflow, on any branch) builds
 #   the same signed image and keeps it as a build artifact, with no release —
 #   for trying a build on another Mac before anything is tagged.
 #
 # Tag builds are never cancelled. Every build's CFBundleVersion is the run
 # number, so About and crash reports say which build it was; the run page
-# names the commit.
+# names the commit. The run number is compiled in too (`VISUALS_BUILD`): it is
+# what a latest build's version ends with, so one sequence orders every build.
 #
 # It needs these repository secrets, the same names the other openflowfm apps
 # use:
@@ -34,9 +33,8 @@
 # Updates (`app/src-tauri/src/updater.rs`): with these two set as well, every
 # build also makes the signed update bundle (`*.app.tar.gz`, its `.sig`) and
 # `latest.json`, the file the app reads to learn of a newer version. A tag's
-# release carries them (live once the draft is published, which also copies
-# its `latest.json` to `beta`); the `latest` prerelease carries the latest
-# channel's.
+# release carries them (live once the draft is published); the `latest`
+# prerelease carries the latest channel's.
 #   TAURI_SIGNING_PRIVATE_KEY           the updater's private key, from
 #                                       `cargo tauri signer generate`
 #   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  its password
@@ -55,9 +53,6 @@ on:
     paths-ignore: ['docs/**', '**/*.md', 'teaser/**']
     tags: ['v*']
   workflow_dispatch:
-  # Publishing a tag's draft (by hand) feeds the `beta` prerelease.
-  release:
-    types: [published]
 
 permissions:
   contents: write
@@ -79,7 +74,6 @@ jobs:
   # Its own job rather than a step, so it fails in fifteen seconds instead of
   # twenty minutes into a build.
   guard:
-    if: github.event_name != 'release'
     runs-on: ubuntu-24.04
     outputs:
       kind: ${{ steps.plan.outputs.kind }}
@@ -116,10 +110,10 @@ jobs:
                 exit 1 ;;
             esac
           fi
+          # The channel the app follows until one is chosen in its Settings.
           case "$kind" in
             latest) channel=latest ;;
-            rc) channel=beta ;;
-            *) channel=stable ;;
+            *) channel=release ;;
           esac
           version=$(node -p "require('./app/src-tauri/tauri.conf.json').version")
           # A latest build's update bundle carries its build number, so the
@@ -275,8 +269,8 @@ jobs:
       #
       # With the updater's key it also makes the update bundle (the notarised
       # app, tarred and signed with that key). VISUALS_CHANNEL and VISUALS_BUILD
-      # are compiled in: which `latest.json` the app reads, and which build it
-      # is.
+      # are compiled in: the channel the app follows until one is chosen in
+      # Settings, and which build it is.
       - name: Build the app
         env:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
@@ -401,8 +395,9 @@ jobs:
 
   # A tag's release: a draft, always, a prerelease for a release candidate.
   # Release notes get one last human read, and publishing it is what lets it
-  # out: a final becomes the latest release (the stable channel and every
-  # install instruction), and the `beta` job below feeds either to beta.
+  # out: a final becomes the latest release (the release channel and every
+  # install instruction); a candidate stays a prerelease, which no channel
+  # reads.
   publish:
     needs: [guard, app]
     if: needs.guard.outputs.kind == 'rc' || needs.guard.outputs.kind == 'final'
@@ -526,89 +521,3 @@ jobs:
                 fi ;;
             esac
           done
-
-  # The beta channel: one prerelease, `beta`, fed when a tag's draft is
-  # published by hand. A release candidate brings its image (renamed, so the
-  # link never changes) and its `latest.json`; a final brings only its
-  # `latest.json`, so testers roll onto it while the beta image stays a beta
-  # app. Its `latest.json` names the bundle on the tag's own release, which
-  # downloads only once that release is published, hence feeding on publish
-  # rather than on the build. The feed never goes back: a tag older than the
-  # one it holds (a patch to an older release, published after the next
-  # one's candidate) leaves it be.
-  #
-  # Each run feeds the highest published candidate or final, not the tag that
-  # started it. GitHub keeps only one waiting run per concurrency group, so
-  # when several drafts are published in quick succession a run in the middle
-  # can be dropped; the run that does go reads every release published by
-  # then, so nothing is lost.
-  beta:
-    if: github.event_name == 'release'
-    runs-on: ubuntu-24.04
-    concurrency:
-      group: release-beta-publish
-      cancel-in-progress: false
-    steps:
-      - name: Feed the beta
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
-        run: |
-          set -eux
-          release='^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$'
-          if [[ ! "$EVENT_TAG" =~ $release ]]; then
-            echo "::notice::$EVENT_TAG is neither a release nor a release candidate: the beta is left as it is."
-            exit 0
-          fi
-          # A version as numbers that sort: X Y Z, then the candidate, a final
-          # coming after every candidate of its version.
-          key() {
-            local core=${1%%-*} rc=999999
-            if [[ "$1" == *-rc.* ]]; then rc=${1##*-rc.}; fi
-            printf '%s %s\n' "${core//./ }" "$rc"
-          }
-          # The highest published candidate or final (drafts don't count), the
-          # one that started this run among them.
-          published=$(gh api "repos/$GH_REPO/releases" --paginate --jq '.[] | select(.draft | not) | .tag_name')
-          TAG=$(printf '%s\n' "$published" | while IFS= read -r tag; do
-            if [[ "$tag" =~ $release ]]; then printf '%s %s\n' "$(key "${tag#v}")" "$tag"; fi
-          done | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1 | cut -d ' ' -f 5)
-          if [ -z "$TAG" ]; then
-            echo "::error::No published release or candidate found, though $EVENT_TAG was just published."
-            exit 1
-          fi
-          if [ "$TAG" != "$EVENT_TAG" ]; then
-            echo "::notice::$EVENT_TAG started this run; $TAG is the highest published, so the beta is fed that."
-          fi
-          version="${TAG#v}"
-          sha=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)
-          RELEASE_URL=$(gh release view "$TAG" --json url --jq .url)
-          if ! gh release view beta > /dev/null 2>&1; then
-            if ! gh api "repos/$GH_REPO/git/refs/tags/beta" > /dev/null 2>&1; then
-              gh api "repos/$GH_REPO/git/refs" -f ref=refs/tags/beta -f sha="$sha"
-            fi
-            gh release create beta --verify-tag --prerelease --latest=false \
-              --title "Beta" --notes "Release candidates of visual[flow], and each release."
-          fi
-          # The version the beta holds, from its title ("Beta 1.0.0-rc.2").
-          live=$(gh release view beta --json name --jq .name | sed -n 's/^Beta \([0-9][0-9.]*\(-rc\.[0-9][0-9]*\)\{0,1\}\)$/\1/p')
-          if [ -n "$live" ]; then
-            if [ "$live" = "$version" ] || [ "$(printf '%s\n%s\n' "$(key "$live")" "$(key "$version")" | sort -k1,1n -k2,2n -k3,3n -k4,4n | tail -n 1)" != "$(key "$version")" ]; then
-              echo "::notice::The beta already holds $live, not older than $version: leaving it."
-              exit 0
-            fi
-          fi
-          mkdir new
-          if [[ "$TAG" == *-rc.* ]]; then
-            gh release download "$TAG" --pattern "visual-flow_${version}_aarch64.dmg" --output new/visual-flow-beta_aarch64.dmg
-            gh release upload beta new/visual-flow-beta_aarch64.dmg --clobber
-            gh api -X PATCH "repos/$GH_REPO/git/refs/tags/beta" -f sha="$sha" -F force=true
-          fi
-          if gh release download "$TAG" --pattern latest.json --output new/latest.json; then
-            gh release upload beta new/latest.json --clobber
-          else
-            echo "::notice::$TAG has no latest.json (built without the updater's key): beta apps won't hear of it."
-          fi
-          gh release edit beta --prerelease --latest=false --title "Beta $version" \
-            --notes "Release candidates of visual[flow], and each release. Now: $TAG, $RELEASE_URL."

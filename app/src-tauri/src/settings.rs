@@ -63,6 +63,7 @@ const SPECS: &[Spec] = &[
     Spec { name: "timing.json", version: 1, what: "change timing outside playlists", wrapped: false, migrate: nothing },
     Spec { name: "failed.json", version: 1, what: "list of presets that failed", wrapped: false, migrate: nothing },
     Spec { name: "access.json", version: 1, what: "reduced motion setting", wrapped: false, migrate: nothing },
+    Spec { name: "updates.json", version: 1, what: "update channel setting", wrapped: false, migrate: nothing },
 ];
 
 fn spec(name: &str) -> &'static Spec {

@@ -107,6 +107,8 @@ macro_rules! commands {
             settings::settings_problems,
             updater::update_check,
             updater::update_install,
+            updater::update_channel,
+            updater::update_channel_set,
             testsound::test_sound,
             $(editor::$lab,)*
         ]
