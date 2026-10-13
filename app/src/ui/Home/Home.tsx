@@ -58,6 +58,7 @@ import { INSPECTOR_KEY, modesFor, offersQuickAdd, paneName, SIDEBAR_KEY, type Qu
 import { Header, NoticeBanner, openSheet, Preview, type View } from '../Views/Views';
 import { problemKey, useSettingsProblems } from '../model/survive';
 import { say, Say } from '../model/words';
+import { CLAIM_MS } from '../model/claim';
 import './Home.css';
 
 // A port of visual[flow]'s `app/src/Home.tsx` and the screen-level rules of `home.css`: the same
@@ -85,8 +86,6 @@ const SOURCE: Selection = { kind: 'source' };
 /** The keys a selection picks. */
 const keysOf = (s: Selection): readonly string[] => (s.kind === 'presets' ? s.keys : NONE);
 const NONE: readonly string[] = [];
-/** How long after a tile is played live events naming another preset are taken as the deck catching up, not news. */
-const CLAIM_MS = 2000;
 
 /** Whether a key went to something that moves with the arrows itself (the grid, the sidebar, the inspector's field, a switch): ← → R leave it alone. */
 const ownsArrows = (target: EventTarget | null): boolean => {

@@ -7,6 +7,7 @@ import { ColourPicker, Field } from '../Field/Field';
 import { Icon } from '../Icon/Icon';
 import * as api from '../model/api';
 import type { LibraryRow } from '../model/api';
+import { CLAIM_MS } from '../model/claim';
 import { AXES, type AxisId } from '../model/field';
 import { characterOf, fieldSays } from '../model/inspector-model';
 import type { LiveState } from '../model/live-model';
@@ -21,9 +22,6 @@ export const LIVE_MAP_ID = 'stage-map';
 
 /** What the panel is called, to a screen reader. */
 export const LIVE_MAP_LABEL = 'Library map';
-
-/** How long a dot picked stays lit before the app has said it plays: Home's map's claim (Home.tsx `CLAIM_MS`). */
-const CLAIM_MS = 2000;
 
 /** What the map shows: the presets of what the deck plays, or the whole library. */
 type Scope = 'set' | 'library';
