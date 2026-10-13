@@ -1,7 +1,8 @@
 /**
  * **Job.** The library map's choice of axes and colour (`MapAxes`), kept: read once from the
  * page's storage, held in one store every map shares (the Home's and live mode's), and written
- * back on a change, so a pick in one shows in the other and survives a restart.
+ * back on a change, so a pick in one shows in the other and survives a restart. A change another
+ * window keeps (the page's `storage` event) is read again, and every map follows it.
  */
 import { useSyncExternalStore } from 'react';
 import { AXES, COLOURINGS, DEFAULT_AXES, type AxisId, type ColourBy, type MapAxes } from './field';
@@ -62,9 +63,21 @@ export function setMapAxes(next: MapAxes): void {
   for (const l of [...listeners]) l();
 }
 
+// Another window kept a choice (or cleared storage): read it again, and every map follows it.
+function onStorage(e: StorageEvent): void {
+  if (e.key !== null && e.key !== MAP_AXES_KEY) return;
+  current = null;
+  for (const l of [...listeners]) l();
+}
+
+/** Listen while anything does: the first listener starts following other windows, the last one stops. */
 function subscribe(l: () => void): () => void {
+  if (listeners.size === 0 && typeof window !== 'undefined') window.addEventListener('storage', onStorage);
   listeners.add(l);
-  return () => listeners.delete(l);
+  return () => {
+    listeners.delete(l);
+    if (listeners.size === 0 && typeof window !== 'undefined') window.removeEventListener('storage', onStorage);
+  };
 }
 
 /** The map's choice and the way to change it, shared by every map on the page. */
