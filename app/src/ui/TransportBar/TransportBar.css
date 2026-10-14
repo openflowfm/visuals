@@ -185,8 +185,8 @@
   color: var(--text-1);
 }
 .vs-transport .vs-transport-key:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* The auto-change ring leads, where play/pause was: 36px, the glyph a step larger. Moving on by

@@ -17,33 +17,6 @@
   --vs-home-pad: var(--space-4);
 }
 
-/* The sidebar's and the inspector's toggles, and Help: a quiet glyph, brighter while its pane
-   shows; the inspector's mirrors the sidebar's. Type, no key. */
-.vs-home-tool {
-  display: inline-grid;
-  place-items: center;
-  flex: none;
-  width: var(--control-h);
-  height: var(--control-h);
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--radius-control);
-  color: var(--text-4);
-  background: none;
-  cursor: pointer;
-}
-.vs-home-tool:hover,
-.vs-home-tool[aria-pressed='true'] {
-  color: var(--text-1);
-}
-.vs-home-tool:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
-}
-.vs-home-tool-inspector .vs-icon {
-  transform: scaleX(-1);
-}
 /* The header's icon buttons: the same gap as the view switch's links (Segmented's track). */
 .vs-home-tools {
   display: flex;
@@ -185,8 +158,8 @@
   background: color-mix(in oklab, var(--text-1) 10%, transparent);
 }
 .vs-home-quickadd-done:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* The inspector's card for the library or the starred presets while nothing is picked. */
@@ -291,7 +264,7 @@
   cursor: pointer;
 }
 .vs-home-link:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -320,7 +293,7 @@
   position: relative;
 }
 .vs-home-tile:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
   border-radius: var(--radius-control);
 }

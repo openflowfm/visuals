@@ -40,7 +40,7 @@ import {
   type StripTile,
   type TilePick,
 } from '../model/home';
-import { HomeLayout, homeDocks, INSPECTOR_ID, PaneTile, SIDEBAR_ID, useLayoutPrinciples } from '../HomeLayout/HomeLayout';
+import { HomeLayout, homeDocks, INSPECTOR_ID, PaneTile, PanelToggle, SIDEBAR_ID, useLayoutPrinciples } from '../HomeLayout/HomeLayout';
 import { useFrameRoom } from '@satoramoto/zen';
 import { HelpOverlay, HOME_HELP } from '../HelpOverlay/HelpOverlay';
 import { modalOpen } from '../model/liveKeys';
@@ -752,17 +752,14 @@ export function Home({
   const stepWords = playing ? ' in the playlist' : '';
   // Shows or hides the sidebar: on the title's line in the sidebar's band while it shows, else at the header's lead.
   const sidebarToggle = (
-    <button
-      type="button"
-      className="vs-home-tool vs-home-tool-sidebar"
-      aria-label={say('source list')}
-      aria-controls={SIDEBAR_ID}
-      aria-pressed={modes.sidebar !== 'hidden'}
+    <PanelToggle
+      panel="sidebar"
+      name={say('source list')}
+      controls={SIDEBAR_ID}
+      open={modes.sidebar !== 'hidden'}
       title={`${modes.sidebar === 'hidden' ? 'Show' : 'Hide'} the ${say('source list')} (⌃⌘S)`}
-      onClick={toggleSidebar}
-    >
-      <Icon name="sidebar" />
-    </button>
+      onPress={toggleSidebar}
+    />
   );
 
   return (
@@ -811,17 +808,14 @@ export function Home({
             {/* The icon buttons, spaced as the view switch's links are. */}
             <div className="vs-home-tools">
               <CameraAction />
-              <button
-                type="button"
-                className="vs-home-tool vs-home-tool-inspector"
-                aria-label={say('inspector')}
-                aria-controls={INSPECTOR_ID}
-                aria-pressed={modes.inspector !== null}
+              <PanelToggle
+                panel="inspector"
+                name={say('inspector')}
+                controls={INSPECTOR_ID}
+                open={modes.inspector !== null}
                 title={`${modes.inspector === null ? 'Show' : 'Hide'} the ${say('inspector')} (⌘I)`}
-                onClick={toggleInspector}
-              >
-                <Icon name="sidebar" />
-              </button>
+                onPress={toggleInspector}
+              />
             </div>
           </Header>
         }

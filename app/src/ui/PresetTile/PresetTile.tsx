@@ -55,7 +55,7 @@ export interface PresetTileProps extends HTMLAttributes<HTMLElement> {
  * The strip's states (`data-picked`, `data-next`, `data-missing`, `data-dragged`, `data-over`) are
  * keyed on the tile's own data attributes rather than Home's `.home-tile` class, so the strip only
  * passes them. Only three lines: the selection ring (`--text-1`), the focus ring
- * (`--vs-focus-ring`) and the playing mark (`--vs-playing`); the drop bar is in `--accent` (the
+ * (zen's `--focus-ring`) and the playing mark (`--vs-playing`); the drop bar is in `--accent` (the
  * primary is selection and the active mark) where the original used amber, which is caution only.
  * The words on the picture (name, author, the empty picture's words, the star) are caption
  * `Text`s at the original's sizes and leadings, set in their knobs.

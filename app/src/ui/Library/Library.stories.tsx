@@ -85,7 +85,7 @@ export const Full900: Story = {
 export const Searched: Story = {
   args: { search: 'wormhole' },
   play: async ({ canvas }) => {
-    await expect(await canvas.findByRole('button', { name: 'Clear the search' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: 'Clear search' })).toBeVisible();
   },
 };
 

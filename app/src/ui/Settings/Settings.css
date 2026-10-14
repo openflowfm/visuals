@@ -76,7 +76,7 @@
    controls' ink, which stands out on every surface; views that draw their own ring keep it.
    Pointer clicks don't light it: only :focus-visible. */
 .vs-root :is(button, a[href], input, select, textarea, summary, [tabindex]:not([tabindex='-1']), [role='slider'], [role='switch'], [role='tab'], [role='option'], [role='menuitem']):focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 /* A composite widget pointing at its active item (the library grid) rings that item, not itself. */

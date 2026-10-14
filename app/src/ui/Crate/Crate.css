@@ -283,6 +283,6 @@
 
 /* The focus ring goes inside: the crate scrolls, and would clip one drawn outside. */
 :is(.vs-crate-row, .vs-crate-toggle, .vs-crate-next, .vs-crate-more, .vs-crate-play):focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }

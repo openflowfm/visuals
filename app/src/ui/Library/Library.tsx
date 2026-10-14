@@ -593,50 +593,25 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
     root.current?.querySelector<HTMLElement>('[role="listbox"]')?.focus();
   };
 
-  const searchInputBox = (
-    <input
-      ref={searchInput}
-      className="vs-library-search"
-      type="search"
-      aria-label="search presets"
-      placeholder={home ? `${Say('search box')} ${count(paneTotal)} preset${paneTotal === 1 ? '' : 's'}` : `${say('search box')} ${count(rows.length || entries.length)} presets`}
-      title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
-      value={search}
-      onChange={(ev) => {
-        filterChanged();
-        onSearch(ev.target.value);
-      }}
-      onKeyDown={onSearchKey}
-      disabled={empty}
-    />
-  );
-  // On the home the search is type on the pane: a ⌕, the text, and a ✕ to clear it. In the inspector view's toolbar the ⌕
-  // is a button: in the header's narrow form the field folds to it (Library.css), and it opens the field again.
-  // The field is a caption-size Text: the input inherits its type (the app's button and input reset is `font: inherit`).
-  const searchBox = home ? (
-    <Text as="div" size="caption" leading="normal" className="vs-library-search-field" data-text={search ? '' : undefined}>
-      {bare ? (
-        <button type="button" className="vs-library-search-glyph" aria-label="search" title="Search (⌘F)" tabIndex={-1} onClick={() => searchInput.current?.focus()}>
-          <Text size="body" leading="normal" aria-hidden="true">
-            ⌕
-          </Text>
-        </button>
-      ) : (
-        <Text size="body" leading="normal" className="vs-library-search-glyph" aria-hidden="true">
-          ⌕
-        </Text>
-      )}
-      {searchInputBox}
-      {search && (
-        <button type="button" className="vs-library-search-clear" aria-label={say('clear search')} title={Say('clear search')} onClick={clearSearch}>
-          <Text leading="normal" className="vs-library-search-x" aria-hidden="true">
-            ✕
-          </Text>
-        </button>
-      )}
-    </Text>
-  ) : (
-    searchInputBox
+  // zen's SearchField: its ⌕, the text, and its ✕ (and Esc) to clear it. The wrapper only sizes it in its row (Library.css);
+  // in the header's narrow form it folds the field to its ⌕ until focused or holding text (clicking the ⌕ focuses it).
+  const searchBox = (
+    <div className="vs-library-query" data-text={search ? '' : undefined}>
+      <SearchField
+        ref={searchInput}
+        label="search presets"
+        placeholder={home ? `${Say('search box')} ${count(paneTotal)} preset${paneTotal === 1 ? '' : 's'}` : `${say('search box')} ${count(rows.length || entries.length)} presets`}
+        title="Every word must match the preset's style, author, name or tags. ↓ moves into the grid."
+        value={search}
+        onInput={(next) => {
+          filterChanged();
+          onSearch(next);
+          if (next === '') setSaveNote(null);
+        }}
+        onKeyDown={onSearchKey}
+        disabled={empty}
+      />
+    </div>
   );
   // On the home the chips wait behind "Filter"; the editor's column always shows them.
   const chipsShown = !empty && filters && !bare;

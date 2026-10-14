@@ -64,7 +64,7 @@
   background: var(--vs-isb-hover);
 }
 .vs-isb-help:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .vs-isb-settings {
@@ -184,7 +184,7 @@
 }
 /* The focus ring goes inside: the panel scrolls, and would clip one drawn outside. */
 .vs-isb :is(.vs-isb-row, .vs-isb-toggle, .vs-isb-settings):focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -259,7 +259,7 @@
   background: var(--vs-isb-tool-hover);
 }
 .vs-isb-tool:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -339,7 +339,7 @@
   background: var(--surface-3);
   color: var(--text-1);
   font: inherit;
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 
@@ -387,7 +387,7 @@
   background: var(--surface-3);
 }
 .vs-isb-menu [role='menuitem']:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .vs-isb-menu [role='menuitem'][data-danger] {

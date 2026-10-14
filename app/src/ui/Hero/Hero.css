@@ -155,8 +155,8 @@
   opacity: 0.6;
 }
 .vs-hero .vs-hero-act:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 /* Play and pause lead, a step larger. */
 .vs-hero .vs-hero-play .vs-hero-act-word {

@@ -13,11 +13,10 @@ import { Header } from '../Views/Views';
 import { DATA, LISTS, PLAYLISTS, RECENT, ROWS, row, WARM_UP } from '../fixtures/fixtures';
 import { tileName } from '../PresetTile/PresetTile';
 import index from '../fixtures/starter/index.json';
-import { HomeLayout, InspectorPanel, INSPECTOR_LABEL, TOGGLE_CLASS } from '../HomeLayout/HomeLayout';
+import { HomeLayout, InspectorPanel, INSPECTOR_LABEL, PanelToggle } from '../HomeLayout/HomeLayout';
 import { InsetSidebar } from '../InsetSidebar/InsetSidebar';
 import { Hero } from '../Hero/Hero';
 import { StoryGrid } from '../fixtures/StoryGrid';
-import { Icon } from '../Icon/Icon';
 import { NOW, SIDEBAR } from '../fixtures/layout';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import { Inspector, type InspectorProps } from './Inspector';
@@ -176,16 +175,7 @@ function InWindow({ start, library }: { start: Start; library: readonly LibraryR
         header={
           <Header view="home" onChange={() => {}}>
             <span style={{ flex: 1 }} />
-            <button
-              type="button"
-              className={TOGGLE_CLASS}
-              aria-label="show the preset's details"
-              aria-pressed={open}
-              title={open ? 'Hide the details' : 'Show the details'}
-              onClick={() => setOpen((o) => !o)}
-            >
-              <Icon name="sidebar" />
-            </button>
+            <PanelToggle panel="inspector" name="show the preset's details" open={open} title={open ? 'Hide the details' : 'Show the details'} onPress={() => setOpen((o) => !o)} />
             <ActionButton tone="quiet" onPress={() => {}} label="settings" title="Settings: sound, presets, the output, quality and more">
               ⚙
             </ActionButton>

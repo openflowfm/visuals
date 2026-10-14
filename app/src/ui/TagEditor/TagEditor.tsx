@@ -21,7 +21,7 @@ export interface TagEditorProps {
  *
  * **Changed.** Classes are `vs-tag-editor`, `vs-tag-chip`, `vs-tag-chip-count`, `vs-tag-chip-x`,
  * `vs-tag-chip-add`, `vs-tag-chip-input` (the original's without `vs-`). The focus ring, which
- * the original took from access.css, is drawn here in `--vs-focus-ring`. The box is the filled
+ * the original took from access.css, is drawn here in zen's `--focus-ring`. The box is the filled
  * field on `--radius-input`.
  *
  * **Kept.** Tags as type ("#tag", no pill), ✕ on hover or focus, a tag on only some fainter with

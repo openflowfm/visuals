@@ -23,7 +23,13 @@
   background: var(--selected);
 }
 
-.vs-library-search,
+/* The search is zen's SearchField; its wrapper only places it. In the editor's column, inset
+   from the column's edges. */
+.vs-library-query {
+  min-width: 0;
+  margin: var(--space-2) var(--space-2) var(--space-1);
+}
+/* The name input takes the caption size from the picked line around it. */
 .vs-library-name-input {
   padding: var(--space-1) calc(var(--space-1) * 1.5);
   font: inherit;
@@ -33,17 +39,8 @@
   border-radius: var(--radius-input);
   min-width: 0;
 }
-/* The editor's search inherits the page's lead size from the column; the name input takes the
-   caption size from the picked line around it. */
-.vs-library-search {
-  margin: var(--space-2) var(--space-2) var(--space-1);
-}
-.vs-library-search::placeholder {
-  color: var(--vs-library-caption);
-}
-.vs-library-search:focus-visible,
 .vs-library-name-input:focus-visible {
-  border-color: var(--vs-focus-ring);
+  border-color: var(--focus-ring);
 }
 
 .vs-library-summary,
@@ -101,7 +98,7 @@
 }
 .vs-library-chip:focus-visible,
 .vs-library-link:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
 .vs-library-chip-count {
@@ -226,59 +223,12 @@
   margin-top: var(--space-1);
 }
 
-/* The search: a ⌕ and the text on the pane, no box; the field rings when focused. */
-.vs-library-home .vs-library-search-field {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  /* 260px wide (eight of the 32px step and 4), at least 120px (four control heights), 32px tall. */
+/* The search (zen's SearchField) in the head's row: 260px wide (eight of the 32px step and 4), at
+   least 120px (four control heights). */
+.vs-library-home .vs-library-query {
   flex: 0 1 calc(var(--space-6) * 8 + var(--space-1));
   min-width: calc(var(--control-h) * 4);
-  height: var(--space-6);
-}
-/* ⌕ is a body-size Text (inside the toolbar's button, the button's span). */
-.vs-library-home .vs-library-search-glyph {
-  flex: none;
-  color: var(--text-4);
-}
-.vs-library-home .vs-library-search {
-  flex: 1;
-  min-width: 0;
-  /* 26px: a step under the control height. */
-  height: calc(var(--control-h) - var(--space-1));
   margin: 0;
-  padding: 0 var(--space-1);
-  color: var(--text-1);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-input);
-  font-family: var(--font-sans);
-  -webkit-appearance: none;
-  appearance: none;
-}
-.vs-library-home .vs-library-search::-webkit-search-cancel-button {
-  -webkit-appearance: none;
-  appearance: none;
-}
-/* ✕ is a Text at the small size; the button lays it out as a grid item, so the button's own
-   (inherited) type adds no line. */
-.vs-library-home .vs-library-search-clear {
-  flex: none;
-  display: grid;
-  place-items: center;
-  padding: 2px var(--space-1);
-  font: inherit;
-  color: var(--text-4);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-control);
-  cursor: pointer;
-}
-.vs-library-home .vs-library-search-clear:hover {
-  color: var(--text-1);
-}
-.vs-library-home .vs-library-search-x {
-  --text-size: var(--vs-library-small);
 }
 
 /* "Filter": type, underlined while the panel is open; a round count only when values are picked. */
@@ -550,18 +500,8 @@
 }
 
 /* Keep focus visible on everything focusable here: no fill or edge to fall back on. */
-.vs-library-home
-  :is(
-    .vs-library-search,
-    .vs-library-search-clear,
-    button.vs-library-search-glyph,
-    .vs-library-filter,
-    .vs-library-chip,
-    .vs-library-link,
-    .vs-library-empty-clear,
-    .vs-library-name-input
-  ):focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+.vs-library-home :is(.vs-library-filter, .vs-library-chip, .vs-library-link, .vs-library-empty-clear, .vs-library-name-input):focus-visible {
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -580,19 +520,8 @@
   gap: var(--space-3);
   min-width: 0;
 }
-.vs-library-toolbar .vs-library-search-field {
+.vs-library-toolbar .vs-library-query {
   flex: 0 1 calc(var(--space-6) * 7 - var(--space-1));
-}
-.vs-library-toolbar button.vs-library-search-glyph {
-  display: grid;
-  place-items: center;
-  padding: 0;
-  font: inherit;
-  color: var(--text-4);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-control);
-  cursor: text;
 }
 .vs-library-toolbar .vs-library-filter-badge {
   /* library.css 15px, rounded to the 16px step. */
@@ -629,27 +558,20 @@
 }
 
 /* In the narrow header (Header's `narrow` form, which the assembled screen picks where the full
-   row doesn't fit; the original did this under a 700 px window) the search folds to its ⌕, a
-   button that opens it; it stays open while focused or holding text (⌘F focuses it). */
+   row doesn't fit; the original did this under a 700 px window) the search folds to its ⌕ (the
+   wrapper about one control wide, clipping the field to its magnifier; clicking it focuses the
+   field); it stays open while focused or holding text (⌘F focuses it). */
 /* .vs-library-home.vs-library-toolbar: above the 899 px rule below, which lets the search grow. */
-.vs-header[data-form='narrow'] .vs-library-home.vs-library-toolbar .vs-library-search-field {
+.vs-header[data-form='narrow'] .vs-library-home.vs-library-toolbar .vs-library-query:not(:focus-within):not([data-text]) {
   flex: none;
+  width: calc(var(--control-h) + var(--space-1));
   min-width: 0;
-  gap: 0;
+  overflow: hidden;
 }
-.vs-header[data-form='narrow'] .vs-library-toolbar .vs-library-search-field:not(:focus-within):not([data-text]) .vs-library-search {
-  flex: 0 0 0;
-  width: 0;
-  padding: 0;
-}
-.vs-header[data-form='narrow'] .vs-library-toolbar .vs-library-search-field:not(:focus-within):not([data-text]) button.vs-library-search-glyph {
-  cursor: pointer;
-}
-.vs-header[data-form='narrow'] .vs-library-home.vs-library-toolbar .vs-library-search-field:is(:focus-within, [data-text]) {
+.vs-header[data-form='narrow'] .vs-library-home.vs-library-toolbar .vs-library-query:is(:focus-within, [data-text]) {
   /* 180px to start (six control heights), at least 120px (four). */
   flex: 1 1 calc(var(--control-h) * 6);
   min-width: calc(var(--control-h) * 4);
-  gap: var(--space-2);
 }
 
 /* A narrow window: the menu takes the title's place, and the search takes the room left. */
@@ -657,7 +579,7 @@
   .vs-library-home .vs-library-title-head {
     display: none;
   }
-  .vs-library-home .vs-library-search-field {
+  .vs-library-home .vs-library-query {
     flex: 1 1 auto;
   }
 }

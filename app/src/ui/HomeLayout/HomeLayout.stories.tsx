@@ -5,13 +5,12 @@ import { withLibraryTheme } from '@satoramoto/zen/storybook';
 import { VISUALS_GLOBALS, visualsBeforeEach, withVisualsFrame } from '../fixtures/story';
 import type { Pane } from '../model/home';
 import { Header } from '../Views/Views';
-import { HomeLayout, homeDocks, INSPECTOR_ID, SIDEBAR_ID, TOGGLE_CLASS, TOGGLE_SIDE, useLayoutPrinciples } from './HomeLayout';
+import { HomeLayout, homeDocks, INSPECTOR_ID, PanelToggle, SIDEBAR_ID, useLayoutPrinciples } from './HomeLayout';
 import { InsetSidebar } from '../InsetSidebar/InsetSidebar';
 import { Hero } from '../Hero/Hero';
 import { tileName } from '../PresetTile/PresetTile';
 import { StoryGrid } from '../fixtures/StoryGrid';
 import { TransportBar } from '../TransportBar/TransportBar';
-import { Icon } from '../Icon/Icon';
 import { modesFor, type LayoutPrefs } from '../model/home-model';
 import { mark } from '../model/access';
 import { NOW, SIDEBAR, STARRED } from '../fixtures/layout';
@@ -59,31 +58,25 @@ function Composed({ width, prefs: start }: Args) {
             view="home"
             onChange={() => {}}
             lead={
-              <button
-                type="button"
-                className={`${TOGGLE_CLASS} ${TOGGLE_SIDE}`}
-                aria-label="sidebar"
-                aria-controls={SIDEBAR_ID}
-                aria-expanded={sideShown}
+              <PanelToggle
+                panel="sidebar"
+                name="sidebar"
+                controls={SIDEBAR_ID}
+                open={sideShown}
                 title={sideShown ? 'Hide the sidebar' : 'Show the sidebar'}
-                onClick={() => setPrefs((p) => ({ ...p, sidebar: !sideShown }))}
-              >
-                <Icon name="sidebar" />
-              </button>
+                onPress={() => setPrefs((p) => ({ ...p, sidebar: !sideShown }))}
+              />
             }
           >
             <span className="vs-fill" />
-            <button
-              type="button"
-              className={TOGGLE_CLASS}
-              aria-label="show the preset's details"
-              aria-controls={INSPECTOR_ID}
-              aria-pressed={inspOpen}
+            <PanelToggle
+              panel="inspector"
+              name="show the preset's details"
+              controls={INSPECTOR_ID}
+              open={inspOpen}
               title={inspOpen ? 'Hide the details' : 'Show the details'}
-              onClick={() => setPrefs((p) => ({ ...p, inspector: !inspOpen }))}
-            >
-              <Icon name="sidebar" />
-            </button>
+              onPress={() => setPrefs((p) => ({ ...p, inspector: !inspOpen }))}
+            />
           </Header>
         }
         hero={
