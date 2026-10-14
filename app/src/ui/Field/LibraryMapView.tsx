@@ -20,23 +20,40 @@ export interface LibraryMapViewProps {
   onPick(row: LibraryRow): void;
 }
 
+/** How long a resize settles before the plot's shape (and so every dot) is recomputed, in ms. */
+const RESIZE_SETTLE_MS = 150;
+
 /**
  * The shape of the plot inside `room`, in px (a box unit is a CSS px), following it as it
- * resizes; the default 4:3 box until measured, and always without a ResizeObserver.
+ * resizes: the first measure at once, later ones once the size has held for `RESIZE_SETTLE_MS`
+ * (a drag recomputes the whole library's dots once, not on every pixel); the default 4:3 box
+ * until measured, and always without a ResizeObserver.
  */
 function usePlotShape(room: RefObject<HTMLDivElement | null>): Box {
   const [shape, setShape] = useState<Box>(BOX);
   useEffect(() => {
     const plot = room.current?.querySelector<HTMLElement>('.vs-field-plot');
     if (!plot || typeof ResizeObserver === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let measured = false;
+    const apply = (width: number, height: number) => {
+      const next = boxOf(width, height);
+      setShape((was) => (was.w === next.w && was.h === next.h ? was : next));
+    };
     const ro = new ResizeObserver(([entry]) => {
       const { width, height } = entry.contentRect;
       if (!(width > 0 && height > 0)) return;
-      const next = boxOf(width, height);
-      setShape((was) => (was.w === next.w && was.h === next.h ? was : next));
+      clearTimeout(timer);
+      if (!measured) {
+        measured = true;
+        apply(width, height);
+      } else timer = setTimeout(() => apply(width, height), RESIZE_SETTLE_MS);
     });
     ro.observe(plot);
-    return () => ro.disconnect();
+    return () => {
+      clearTimeout(timer);
+      ro.disconnect();
+    };
   }, [room]);
   return shape;
 }
@@ -52,8 +69,8 @@ function usePlotShape(room: RefObject<HTMLDivElement | null>): Box {
  *
  * **Changed.** New. The inspector's `LibraryMap` always draws the whole library; this draws the
  * source as narrowed, so a search or a filter thins the dots. The plot was a 4:3 box centred in
- * the room; now it is the room's own shape (measured with a ResizeObserver; 4:3 until then, or
- * where there is none).
+ * the room; now it is the room's own shape (measured with a ResizeObserver, settled before the dots are recomputed; 4:3 until then,
+ * or where there is none).
  *
  * **Kept.** The Field, its keys, its tip and its words (`fieldSays`).
  *
