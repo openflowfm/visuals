@@ -1,9 +1,8 @@
 /* The library's head row on Home (LibraryHead.tsx): the source's name and count at the left, the
    Grid | Map switch (the theme's tabs material) and, in Map view, the colour picker at the right.
    No fill, no rule: it sits on the column's padding, as the grid does. On Home it is as tall as
-   Home's `--vs-libhead-h` (Home.css), which the grid reaches up behind, and it is drawn over the
-   grid, so the tiles scroll up under it; elsewhere, as tall as its content. Contract variables
-   and visuals.css tokens only. */
+   Home's `--vs-libhead-h` (Home.css), and the grid starts under it; elsewhere, as tall as its
+   content. Contract variables and visuals.css tokens only. */
 
 .vs-libhead {
   --vs-library-head-pad: var(--space-2);
@@ -11,8 +10,7 @@
   z-index: 1;
   flex: none;
   display: flex;
-  /* One row, always: the grid reaches up behind exactly `--vs-libhead-h`, so the head must never
-     wrap taller. The title gives way (ellipsis); the count, the switch and the picker (about 210px
+  /* One row, always: the head is exactly `--vs-libhead-h` tall, so it must never wrap taller. The title gives way (ellipsis); the count, the switch and the picker (about 210px
      with the pad) fit the main column at the window's 560px minimum, docked panes or not. */
   flex-wrap: nowrap;
   align-items: center;
