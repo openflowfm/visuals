@@ -1,10 +1,13 @@
 //! The live output: the show, full screen on a display of its own (a projector,
 //! a second screen). A borderless native window with no webview; its content is
 //! a Metal layer the bench's render thread presents the same finished picture
-//! to, scaled to fit the display with the preset's aspect kept, black around it
-//! — or, on a display rotated to portrait, drawn at its aspect to fill it
-//! ([`place`]). Esc held on it for 3 s leaves live mode, as Esc held in the
-//! main window does (the `output-escape` event, told on Esc down and up).
+//! to, scaled to fit the display with the render resolution's aspect kept, black
+//! around it ([`place`]). Esc held on it for 3 s leaves live mode, as Esc held in
+//! the main window does (the `output-escape` event, told on Esc down and up).
+//!
+//! How it is drawn — the resolution, a render scale on it and a frame-rate cap
+//! ([`Render`]) — is set in the Output panel and remembered
+//! (`~/.openflow/visuals/render.json`).
 //!
 //! Live mode in the page opens it and leaving live mode closes it. While it is
 //! open it paces the render thread (it waits for its display's refresh) and the
@@ -19,7 +22,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::OnceLock;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// One display, as the page lists them.
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -61,13 +64,146 @@ pub fn fit(area: (f64, f64), aspect: (f64, f64)) -> (f64, f64, f64, f64) {
 }
 
 /// The picture's place on a display `frame` points big at `scale` pixels a
-/// point: its rect in points (x, y, width, height) and its size in pixels. On a
-/// landscape display the picture keeps [`crate::bench::DRAW`]'s aspect, black
-/// around it; on a portrait one (a display rotated 90°) presets draw at the
-/// display's own aspect ([`crate::bench::draw_size`]), so the picture fills it.
-pub fn place(frame: (f64, f64), scale: f64) -> ((f64, f64, f64, f64), (u32, u32)) {
-    let rect = if frame.1 > frame.0 { (0.0, 0.0, frame.0, frame.1) } else { fit(frame, (crate::bench::DRAW.0 as f64, crate::bench::DRAW.1 as f64)) };
+/// point, for a picture of `aspect` ([`Render::base`]): its rect in points (x,
+/// y, width, height), as large as fits with black around it, and its size in
+/// pixels. The display's own aspect fills it.
+pub fn place(frame: (f64, f64), scale: f64, aspect: (u32, u32)) -> ((f64, f64, f64, f64), (u32, u32)) {
+    let rect = fit(frame, (aspect.0.max(1) as f64, aspect.1.max(1) as f64));
     (rect, ((rect.2 * scale).round() as u32, (rect.3 * scale).round() as u32))
+}
+
+/// The size the output renders at, before the render scale: the display's own
+/// pixels, or a size of its own. JSON: `"display"` or `[width, height]`.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(try_from = "ResolutionJson", into = "ResolutionJson")]
+pub enum Resolution {
+    #[default]
+    Display,
+    Size(u32, u32),
+}
+
+/// [`Resolution`] as the page writes it.
+#[derive(Serialize, Deserialize)]
+#[serde(untagged)]
+enum ResolutionJson {
+    Word(String),
+    Size([u32; 2]),
+}
+
+impl TryFrom<ResolutionJson> for Resolution {
+    type Error = String;
+    fn try_from(json: ResolutionJson) -> Result<Self, String> {
+        match json {
+            ResolutionJson::Word(w) if w == "display" => Ok(Resolution::Display),
+            ResolutionJson::Word(w) => Err(format!("unknown resolution {w:?}: \"display\" or [width, height]")),
+            ResolutionJson::Size([w, h]) => Ok(Resolution::Size(w, h)),
+        }
+    }
+}
+
+impl From<Resolution> for ResolutionJson {
+    fn from(r: Resolution) -> Self {
+        match r {
+            Resolution::Display => ResolutionJson::Word("display".into()),
+            Resolution::Size(w, h) => ResolutionJson::Size([w, h]),
+        }
+    }
+}
+
+/// The largest side the output renders at: wgpu's default texture limit.
+pub const MAX_SIDE: u32 = 8192;
+/// The render scale's range.
+const SCALES: (f64, f64) = (0.25, 4.0);
+/// The frame-rate cap's range, in frames a second. At least 10, so the render
+/// thread, which waits out the cap between frames, still hears commands promptly.
+const RATES: (f64, f64) = (10.0, 1000.0);
+
+/// How the live output is drawn: at `resolution` times `scale`, at most `fps`
+/// frames a second (`None`: every refresh of its display).
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(default)]
+pub struct Render {
+    pub resolution: Resolution,
+    pub scale: f64,
+    pub fps: Option<f64>,
+}
+
+impl Default for Render {
+    fn default() -> Self {
+        Render { resolution: Resolution::Display, scale: 1.0, fps: None }
+    }
+}
+
+impl Render {
+    /// These settings brought into range: a size of at least 1×1 and at most
+    /// [`MAX_SIDE`], a scale in [`SCALES`] (1 when not a number), a cap in
+    /// [`RATES`] (none when not a positive number).
+    pub fn kept(self) -> Render {
+        let resolution = match self.resolution {
+            Resolution::Size(w, h) => Resolution::Size(w.clamp(1, MAX_SIDE), h.clamp(1, MAX_SIDE)),
+            r => r,
+        };
+        let scale = if self.scale.is_finite() && self.scale > 0.0 { self.scale.clamp(SCALES.0, SCALES.1) } else { 1.0 };
+        let fps = self.fps.filter(|f| f.is_finite() && *f > 0.0).map(|f| f.clamp(RATES.0, RATES.1));
+        Render { resolution, scale, fps }
+    }
+
+    /// The resolution on a display `display` pixels big: its own size, or the
+    /// chosen one turned to the display's way round (1080p on a display rotated
+    /// to portrait is 1080×1920), so a rotated display is filled.
+    pub fn base(&self, display: (u32, u32)) -> (u32, u32) {
+        let (dw, dh) = (display.0.max(1), display.1.max(1));
+        match self.resolution {
+            Resolution::Display => (dw, dh),
+            Resolution::Size(w, h) if (dh > dw) != (h > w) => (h.max(1), w.max(1)),
+            Resolution::Size(w, h) => (w.max(1), h.max(1)),
+        }
+    }
+
+    /// The size presets draw at on a display `display` pixels big: [`base`](Self::base)
+    /// times the scale, shrunk (keeping its aspect) to fit [`MAX_SIDE`].
+    pub fn drawn(&self, display: (u32, u32)) -> (u32, u32) {
+        let (w, h) = self.base(display);
+        let scale = self.scale.clamp(SCALES.0, SCALES.1).min(MAX_SIDE as f64 / w.max(h) as f64);
+        (((w as f64 * scale).round() as u32).clamp(1, MAX_SIDE), ((h as f64 * scale).round() as u32).clamp(1, MAX_SIDE))
+    }
+
+    /// The least time between two of the output's frames; none when uncapped.
+    pub fn frame_time(&self) -> Option<std::time::Duration> {
+        self.fps.map(|f| std::time::Duration::from_secs_f64(1.0 / f.clamp(RATES.0, RATES.1)))
+    }
+}
+
+/// Where the render settings are kept, in [`crate::settings::dir`].
+const RENDER: &str = "render.json";
+
+fn render_state() -> &'static std::sync::Mutex<Render> {
+    static STATE: OnceLock<std::sync::Mutex<Render>> = OnceLock::new();
+    STATE.get_or_init(|| std::sync::Mutex::new(crate::settings::load::<Render>(RENDER).unwrap_or_default().kept()))
+}
+
+/// The render settings in effect.
+pub fn render() -> Render {
+    *render_state().lock().unwrap()
+}
+
+/// The output's render settings.
+#[tauri::command]
+pub fn output_render() -> Render {
+    render()
+}
+
+/// Sets how the output is drawn, keeps it for next launch, and redraws the open
+/// output at it. Answers with the settings kept (brought into range).
+#[tauri::command]
+pub fn output_set_render(render: Render, handle: AppHandle) -> Result<Render, String> {
+    let render = render.kept();
+    *render_state().lock().unwrap() = render;
+    crate::settings::save_json(RENDER, &render);
+    handle.state::<crate::App>().send(crate::bench::Cmd::Cap(render.frame_time()));
+    #[cfg(target_os = "macos")]
+    native::on_main(&handle, native::rerender)?;
+    Ok(render)
 }
 
 /// Which display the output goes to: display `index` when one is forced
@@ -346,11 +482,14 @@ pub mod native {
         HANDLE.get()?.state::<crate::App>().commands().ok()
     }
 
-    /// The picture's place in a window `frame` big on a display of `scale`: its
-    /// rect in points, and its size in pixels.
-    fn picture(frame: NSRect, scale: f64) -> (NSRect, (u32, u32)) {
-        let ((x, y, w, h), size) = place((frame.size.width, frame.size.height), scale);
-        (NSRect::new(NSPoint::new(x, y), NSSize::new(w, h)), size)
+    /// The picture's place in a window `frame` big on `display` of `scale`, at
+    /// the render settings in effect: its rect in points, its size in pixels,
+    /// and the size presets draw at.
+    fn picture(frame: NSRect, scale: f64, display: &Display) -> (NSRect, (u32, u32), (u32, u32)) {
+        let render = super::render();
+        let pixels = (display.width, display.height);
+        let ((x, y, w, h), size) = place((frame.size.width, frame.size.height), scale, render.base(pixels));
+        (NSRect::new(NSPoint::new(x, y), NSSize::new(w, h)), size, render.drawn(pixels))
     }
 
     pub fn status(_: MainThreadMarker) -> Status {
@@ -386,7 +525,7 @@ pub mod native {
         window.setFrame_display(frame, false);
         let content = NSView::initWithFrame(mtm.alloc(), NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
         window.setContentView(Some(&content));
-        let (rect, size) = picture(frame, scale);
+        let (rect, size, drawn) = picture(frame, scale, &display);
         let view = bench::view::metal_view(mtm, rect, scale);
         content.addSubview(&view);
         let surface = bench::view::surface_on(&view, instance);
@@ -398,8 +537,8 @@ pub mod native {
             window.orderFrontRegardless();
         }
         let (done, _) = std::sync::mpsc::channel();
-        commands.send(bench::Cmd::Output(Some((surface, size)), done)).map_err(|e| e.to_string())?;
-        eprintln!("output: open on {} ({}x{}), picture {}x{}", display.name, display.width, display.height, size.0, size.1);
+        commands.send(bench::Cmd::Output(Some((surface, size, drawn)), done)).map_err(|e| e.to_string())?;
+        eprintln!("output: open on {} ({}x{}), picture {}x{}, drawn at {}x{}", display.name, display.width, display.height, size.0, size.1, drawn.0, drawn.1);
         OUTPUT.with(|o| *o.borrow_mut() = Some(Open { window, picture: view, display, frame, scale, size }));
         let now = status(mtm);
         tell(&now);
@@ -442,15 +581,30 @@ pub mod native {
         if new_frame == frame && new_scale == scale {
             return;
         }
-        let (rect, size) = picture(new_frame, new_scale);
+        refit(mtm, display, new_frame, new_scale);
+    }
+
+    /// The render settings changed: place the open output's picture again and
+    /// draw it at them.
+    pub fn rerender(mtm: MainThreadMarker) {
+        let Some((display, frame, scale)) = OUTPUT.with(|o| o.borrow().as_ref().map(|o| (o.display.clone(), o.frame, o.scale))) else { return };
+        refit(mtm, display, frame, scale);
+    }
+
+    /// Fit the open output to `display`, `frame` big at `scale`, at the render
+    /// settings in effect, and say so.
+    fn refit(mtm: MainThreadMarker, display: Display, new_frame: NSRect, new_scale: f64) {
+        let (rect, size, drawn) = picture(new_frame, new_scale, &display);
         OUTPUT.with(|o| {
             let mut o = o.borrow_mut();
             let Some(open) = o.as_mut() else { return };
-            if crate::dev::headless() {
-                open.window.setContentSize(new_frame.size);
-                crate::dev::park(mtm, &open.window);
-            } else {
-                open.window.setFrame_display(new_frame, true);
+            if open.frame != new_frame {
+                if crate::dev::headless() {
+                    open.window.setContentSize(new_frame.size);
+                    crate::dev::park(mtm, &open.window);
+                } else {
+                    open.window.setFrame_display(new_frame, true);
+                }
             }
             open.picture.setFrame(rect);
             if let Some(layer) = open.picture.layer() {
@@ -459,7 +613,7 @@ pub mod native {
             (open.display, open.frame, open.scale, open.size) = (display, new_frame, new_scale, size);
         });
         if let Some(commands) = commands() {
-            let _ = commands.send(bench::Cmd::OutputResize(size.0, size.1));
+            let _ = commands.send(bench::Cmd::OutputResize(size, drawn));
         }
         tell(&status(mtm));
     }
@@ -654,18 +808,17 @@ mod tests {
     }
 
     #[test]
-    fn places_the_picture_landscape_as_ever_and_fills_a_rotated_display() {
-        // Landscape, as before: the 4K display (2× backing) gets it all…
-        assert_eq!(place((1920.0, 1080.0), 2.0), ((0.0, 0.0, 1920.0, 1080.0), (3840, 2160)));
+    fn places_the_picture_at_the_resolutions_aspect_and_fills_a_rotated_display() {
+        let p1080 = Render { resolution: Resolution::Size(1920, 1080), ..Render::default() };
+        // A 16:9 resolution: the 4K display (2× backing) gets it all…
+        assert_eq!(place((1920.0, 1080.0), 2.0, p1080.base((3840, 2160))), ((0.0, 0.0, 1920.0, 1080.0), (3840, 2160)));
         // …an ultrawide 16:9 with bars at the sides.
-        assert_eq!(place((3440.0, 1440.0), 1.0), ((440.0, 0.0, 2560.0, 1440.0), (2560, 1440)));
+        assert_eq!(place((3440.0, 1440.0), 1.0, p1080.base((3440, 1440))), ((440.0, 0.0, 2560.0, 1440.0), (2560, 1440)));
         // The same ultrawide rotated 90°: the whole display, not a 1440×810 strip.
-        assert_eq!(place((1440.0, 3440.0), 1.0), ((0.0, 0.0, 1440.0, 3440.0), (1440, 3440)));
-        // At 2× backing, its pixels are twice its points.
-        assert_eq!(place((1080.0, 1920.0), 2.0), ((0.0, 0.0, 1080.0, 1920.0), (2160, 3840)));
-        // What presets draw at for it has the display's aspect, so it isn't stretched.
-        let (w, h) = crate::bench::draw_size((1440, 3440));
-        assert!((w as f64 / h as f64 - 1440.0 / 3440.0).abs() < 0.001);
+        assert_eq!(place((1440.0, 3440.0), 1.0, Render::default().base((1440, 3440))), ((0.0, 0.0, 1440.0, 3440.0), (1440, 3440)));
+        // 1080p on a rotated 1080p display is turned with it: at 2× backing, its pixels are twice its points.
+        assert_eq!(p1080.base((1080, 1920)), (1080, 1920));
+        assert_eq!(place((1080.0, 1920.0), 2.0, p1080.base((2160, 3840))), ((0.0, 0.0, 1080.0, 1920.0), (2160, 3840)));
     }
 
     #[test]

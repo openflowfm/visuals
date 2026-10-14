@@ -45,6 +45,8 @@ export interface World {
   fx: fx.Fx;
   link: link.Frame;
   output: output.Status;
+  /** `output_render`: how the live output is drawn. */
+  render: output.Render;
   displays: output.Display[];
   pack: pack.PackStatus;
   quality: api.Quality;
@@ -83,6 +85,7 @@ export const world = (over: Partial<World> = {}): World => ({
   fx: F.FX,
   link: F.LINK,
   output: F.OUTPUT_OFF,
+  render: { resolution: 'display', scale: 1, fps: null },
   displays: F.DISPLAYS,
   pack: F.PACK_STATUS,
   quality: F.QUALITY,
@@ -457,11 +460,11 @@ export function handler(w: World) {
         w.output = F.OUTPUT_OFF;
         void emit('output', w.output);
         return w.output;
-      // The output's render settings (`ui/model/output.ts`) aren't in the Rust app yet: they fail
-      // there as here, and the page keeps the user's choice without saying so.
       case 'output_render':
+        return w.render;
       case 'output_set_render':
-        throw new Error(`command ${cmd} not found`);
+        w.render = args.render as output.Render;
+        return w.render;
       case 'displays':
         return w.displays;
       case 'live_start':

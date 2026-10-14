@@ -17,25 +17,10 @@ use std::time::{Duration, Instant};
 
 pub mod hover;
 
-/// The size presets draw at, whatever the size of the hole they are shown in,
-/// and on a landscape output: a 4K display shows it scaled up, an ultrawide
-/// with bars at the sides. It caps the GPU's work per refresh.
+/// The size presets draw at while the output is closed, whatever the size of
+/// the hole they are shown in. With the output open, its render settings decide
+/// it (`output::Render::drawn`).
 pub const DRAW: (u32, u32) = (1920, 1080);
-
-/// The size presets draw at while the output is open on a display `output`
-/// pixels big. Landscape (or square): [`DRAW`]. Portrait — a display rotated
-/// 90° — the display's own aspect, so the picture fills it, at about
-/// [`DRAW`]'s pixel count (never more than the display's), so it costs the GPU
-/// no more than landscape does: 1080×1920 on a rotated 1080p display,
-/// 932×2226 on a rotated 3440×1440 one.
-pub fn draw_size(output: (u32, u32)) -> (u32, u32) {
-    let (w, h) = (output.0.max(1), output.1.max(1));
-    if w >= h {
-        return DRAW;
-    }
-    let scale = ((DRAW.0 as f64 * DRAW.1 as f64) / (w as f64 * h as f64)).sqrt().min(1.0);
-    (((w as f64 * scale).round() as u32).max(1), ((h as f64 * scale).round() as u32).max(1))
-}
 
 pub enum Cmd {
     PersonBegin(Sender<String>),
@@ -70,12 +55,15 @@ pub enum Cmd {
     /// The surface's size in physical pixels; 0×0 when the bench is hidden.
     Resize(u32, u32),
     SampleRate(f32),
-    /// Present to the output too (a surface and its size in pixels), or stop
-    /// (`None`). Replies once the old output surface is let go, so its window
-    /// can close.
-    Output(Option<(wgpu::Surface<'static>, (u32, u32))>, Sender<()>),
-    /// The output surface's new size in pixels.
-    OutputResize(u32, u32),
+    /// Present to the output too (a surface, its size in pixels, and the size
+    /// presets draw at for it), or stop (`None`). Replies once the old output
+    /// surface is let go, so its window can close.
+    Output(Option<(wgpu::Surface<'static>, (u32, u32), (u32, u32))>, Sender<()>),
+    /// The output surface's new size in pixels, and the new size presets draw at.
+    OutputResize((u32, u32), (u32, u32)),
+    /// While the output is open, draw at most once in this time (its frame-rate
+    /// cap); `None`: every refresh of its display.
+    Cap(Option<Duration>),
     /// The picture as the bench (false) or the output (true) is shown it, read
     /// back from the GPU at that surface's size; `None` when it isn't shown.
     /// Headless captures use it, since the window server never composes a
@@ -375,6 +363,8 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
         due: now,
         refresh: Duration::ZERO,
         pacer: engine::runtime::Pacer::default(),
+        cap: crate::output::render().frame_time(),
+        capped: None,
         window: (now, 0, 0.0),
         loaded: false,
         pictures_read: 0,
@@ -428,6 +418,10 @@ struct Loop {
     /// The time round the loop, smoothed: how often the display refreshes.
     refresh: Duration,
     pacer: engine::runtime::Pacer,
+    /// The output's frame-rate cap: the least time between frames while it is open.
+    cap: Option<Duration>,
+    /// When the next capped frame is due; `None` until the first.
+    capped: Option<Instant>,
     /// The stats window: its start, the refreshes in it and their CPU seconds.
     window: (Instant, u32, f64),
     loaded: bool,
@@ -667,8 +661,8 @@ impl Loop {
             Cmd::Output(next, done) => {
                 // The old output's surface goes first: its window closes after the reply.
                 self.output = None;
-                let next_size = next.as_ref().map(|(_, size)| *size);
-                if let Some((s, size)) = next {
+                let drawn = next.as_ref().map(|(_, _, drawn)| *drawn);
+                if let Some((s, size, _)) = next {
                     let mut c = configuration(&self.adapter, &s, size);
                     #[cfg(target_os = "macos")]
                     if crate::dev::headless() {
@@ -678,8 +672,9 @@ impl Loop {
                     s.configure(self.renderer.device(), &c);
                     self.output = Some(Output { surface: s, config: c });
                 }
-                let draw = next_size.map_or(DRAW, draw_size);
+                let draw = drawn.unwrap_or(DRAW);
                 self.renderer.resize(draw.0, draw.1);
+                self.capped = None;
                 self.config.present_mode = bench_present_mode(self.output.is_some());
                 if self.bench_shown {
                     self.surface.configure(self.renderer.device(), &self.config);
@@ -688,14 +683,19 @@ impl Loop {
                 self.refresh = Duration::ZERO;
                 let _ = done.send(());
             }
-            Cmd::OutputResize(w, h) => {
+            Cmd::OutputResize((w, h), draw) => {
                 if let Some(output) = self.output.as_mut() {
-                    output.config.width = w.max(1);
-                    output.config.height = h.max(1);
-                    output.surface.configure(self.renderer.device(), &output.config);
-                    let draw = draw_size((w, h));
+                    if (output.config.width, output.config.height) != (w.max(1), h.max(1)) {
+                        output.config.width = w.max(1);
+                        output.config.height = h.max(1);
+                        output.surface.configure(self.renderer.device(), &output.config);
+                    }
                     self.renderer.resize(draw.0, draw.1);
                 }
+            }
+            Cmd::Cap(cap) => {
+                self.cap = cap;
+                self.capped = None;
             }
             Cmd::Snapshot(output, reply) => {
                 let size = match (output, &self.output) {
@@ -742,6 +742,27 @@ impl Loop {
         self.renderer.clear();
     }
 
+    /// With the output open and its frame rate capped, wait until the next
+    /// frame is due. Due times run on from each other rather than from when a
+    /// frame was drawn, so a refresh rounding each frame later still averages
+    /// the cap (30 on a 60 Hz display: every other refresh); a stall longer
+    /// than a frame starts them again from now.
+    fn hold_to_cap(&mut self) {
+        let Some(period) = self.cap.filter(|_| self.output.is_some()) else {
+            self.capped = None;
+            return;
+        };
+        let now = Instant::now();
+        let due = match self.capped {
+            Some(due) if due + period > now => due,
+            _ => now,
+        };
+        if due > now {
+            std::thread::sleep(due - now);
+        }
+        self.capped = Some(due + period);
+    }
+
     fn frame(&mut self) {
         #[cfg(feature = "dev-bridge")]
         if self.camera.is_some_and(|last| last.elapsed() > Duration::from_secs(2)) {
@@ -754,6 +775,7 @@ impl Loop {
         if unpaced {
             std::thread::sleep(UNPACED.saturating_sub(self.last.elapsed()));
         }
+        self.hold_to_cap();
         let now = Instant::now();
         let (speed, gain, echo) = {
             let fx = self.fx.lock().unwrap();
@@ -1142,24 +1164,6 @@ pub mod view {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn draws_landscape_as_ever_and_portrait_at_the_displays_aspect() {
-        // Landscape, any shape: the size presets always drew at.
-        for display in [(1920, 1080), (3840, 2160), (3440, 1440), (2560, 1600), (1080, 1080)] {
-            assert_eq!(draw_size(display), DRAW, "{display:?}");
-        }
-        // A rotated 1080p display: DRAW turned on its side.
-        assert_eq!(draw_size((1080, 1920)), (1080, 1920));
-        // A rotated 3440×1440 ultrawide: its aspect, at DRAW's pixel count.
-        let (w, h) = draw_size((1440, 3440));
-        assert_eq!((w, h), (932, 2226));
-        assert!((w as f64 / h as f64 - 1440.0 / 3440.0).abs() < 0.001);
-        assert!(w * h <= DRAW.0 * DRAW.1 + 2000);
-        // A small portrait display: its own size, never more.
-        assert_eq!(draw_size((600, 800)), (600, 800));
-        assert_eq!(draw_size((0, 0)), DRAW);
-    }
 
     /// The steps the pictures are read at, for refreshes moving the preset `per` steps each.
     fn reads(per: u64, refreshes: u64) -> Vec<u64> {

@@ -74,11 +74,10 @@ export interface Render {
 export const RENDER_DEFAULT: Render = { resolution: 'display', scale: 1, fps: null };
 
 /**
- * The render settings, and setting them (remembered for next time).
- *
- * Not in the native app yet: `output_render` and `output_set_render` still need
- * adding to openflowfm/visuals. Until then these calls fail, and the page keeps
- * the user's choice without saying so.
+ * The render settings, and setting them (remembered for next time,
+ * `~/.openflow/visuals/render.json`). They drive the live output while it is
+ * open; the app answers with the settings it keeps (a scale or rate out of
+ * range brought into it).
  */
 export const render = () => invoke<Render>('output_render');
 export const setRender = (r: Render) => invoke<Render>('output_set_render', { render: r });

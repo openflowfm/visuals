@@ -47,7 +47,7 @@ export function renderLine(r: output.Render, display: output.Display | null): st
 
 /**
  * How the output is drawn: resolution, render scale and frame-rate cap. Read once and set
- * through `output.setRender`; a failed call (not in the native app yet) keeps the choice quietly.
+ * through `output.setRender`, showing what the app kept; a failed call keeps the choice quietly.
  */
 function RenderSettings({ display }: { display: output.Display | null }) {
   const [r, setR] = useState<output.Render>(output.RENDER_DEFAULT);
