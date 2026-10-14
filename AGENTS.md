@@ -44,7 +44,8 @@ a screen or a part of this app is `app/src/ui/`. To change both at once:
    `/index.json` on `ZEN_STORYBOOK_PORT` (then it reuses it and never stops it; it exits 1
    first when either port is taken by something else). This repo's Storybook composes
    zen's in under "zen" (`ZEN_STORYBOOK_URL`, which they set), on `STORYBOOK_PORT` (6006, or
-   a free port). Each prints what runs and the Storybook URL.
+   a free port; on 127.0.0.1 only). Each prints what runs and the Storybook URL. When a
+   Storybook's leader process ends by itself, what is left of its process group is stopped.
 3. With `ZEN_SOURCE` set, `vite.app.config.ts` (and so `vite.dev.config.ts`) and
    `.storybook/main.ts` follow zen's `zen-source` recipe: the `zen-source` export condition
    first (zen's entries resolve to its TS/TSX source, hot-reloaded), React deduped, the
