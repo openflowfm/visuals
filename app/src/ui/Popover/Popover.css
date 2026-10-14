@@ -42,17 +42,19 @@
 
 /* The panel: sized to its contents, not the button (a short button made "move on by itself
    every" wrap a word a line); Popover.tsx flips it to hang from the right when it would run past
-   the window. */
-.vs-popover-box:not([data-across]) {
+   the window. The box is zen Popover's (a body Text), the panel inside it. */
+.lib-popover:has(> .vs-popover-panel:not(.vs-popover-panel--across)) {
   width: max-content;
   /* popover.css min(420px, 100vw - 24px). */
   max-width: min(calc(var(--control-h) * 14), calc(100vw - var(--space-5)));
 }
-.vs-popover-box {
+.lib-popover:has(> .vs-popover-panel) {
   /* 6px under the button, as popover.css hung it. */
   margin-top: calc(var(--space-1) * 1.5);
+  /* The box's body Text: the sans at --vs-text-body, in the body weight. */
+  --text-size: var(--vs-text-body);
 }
-.vs-popover-box[data-above] {
+.lib-popover[data-above]:has(> .vs-popover-panel) {
   margin-top: calc(var(--space-1) * -1.5);
 }
 .vs-popover-panel {
@@ -61,8 +63,6 @@
   max-height: 60vh;
   padding: calc(var(--space-1) * 1.5); /* popover.css 6px */
   color: var(--text-2);
-  /* A body Text: the sans at --vs-text-body, in the body weight. */
-  --text-size: var(--vs-text-body);
 }
 
 /* A menu's items: whole-width rows, type until hovered. */

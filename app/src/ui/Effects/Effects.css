@@ -1,10 +1,10 @@
 /* The effects (Effects.tsx): a hit (More effects' Punch, a pad) and the effects' settings rows
-   in ⚙ Settings. Rows are type, not boxes: a setting's name first, its control in the controls'
-   column at the row's end, on space alone (near borderless). Contract variables and visuals.css
-   tokens only, plus the local ones declared in Effects.tsx (EffectSettings' Tuning knobs):
+   in ⚙ Settings. Each row is zen's SettingsRow (its name, then its control); this only sets the
+   controls' column once on the stack (SettingsRow's --yh-settings-control-w knob) so the controls
+   line up. Contract variables and visuals.css tokens only, plus the local ones declared in
+   Effects.tsx (EffectSettings' Tuning knobs):
 
-   --vs-effects-control  the controls' column: every row's control ends at the panel's right and
-                         starts here (settings.css's --set-control, 236px) */
+   --vs-effects-control  the controls' column's width (settings.css's --set-control, 236px) */
 
 /* A hit: a pad, held while pressed, so it takes no text selection and no touch scrolling. */
 .vs-effects-hit {
@@ -23,36 +23,18 @@
 /* The settings' rows. */
 .vs-effects-rows {
   --vs-effects-control: calc(var(--space-6) * 7 + var(--space-3)); /* 236px (spaces: the sheet's --control-h is 44px) */
+  --yh-settings-control-w: var(--vs-effects-control);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
-.vs-effects-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--vs-effects-control));
-  align-items: center;
-  column-gap: var(--space-4);
-  row-gap: var(--space-1);
-  min-width: 0;
-}
-.vs-effects-row-name {
-  min-width: 0;
-  color: var(--text-1);
-}
-.vs-effects-row-control {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-1);
-  min-width: 0;
-}
-.vs-effects-row-control > .lib-segmented,
-.vs-effects-row-control > .lib-slider {
+.vs-effects-rows .yh-settings-row__control > .lib-segmented,
+.vs-effects-rows .yh-settings-row__control > .lib-slider {
   flex: 1;
   min-width: 0;
 }
 /* A step down or up: a quiet glyph, a finger's width. */
-.vs-effects-row-control > .vs-effects-step {
+.vs-effects-rows .yh-settings-row__control > .vs-effects-step {
   flex: none;
   min-width: var(--control-h);
 }

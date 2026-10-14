@@ -1,11 +1,14 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
+import { Icon as ZenIcon } from '@satoramoto/zen';
 
 /**
  * **Job.** visual[flow]'s icons: one `Icon` with a name from a fixed set.
  *
- * **Changed.** Nothing but the class (`vs-icon`, the library's prefix, was
- * `lay-icon`): a port of the old `app/src/layout/icons.tsx` (retired in #257),
- * the same exports and glyphs.
+ * **Changed.** Drawn in zen's `Icon` primitive (its square slot, `currentColor` stroke, round
+ * caps and joins, the label or `aria-hidden`); only the glyph paths are this app's. The slot is
+ * a `span.vs-icon` carrying `data-icon`, the `svg` inside it; `size` sets `--lib-icon-size` in px
+ * and `strokeFor(size)` `--lib-icon-stroke`. A port of the old `app/src/layout/icons.tsx`
+ * (retired in #257), the same exports and glyphs.
  *
  * **Kept.** Everything below, from the original:
  *
@@ -296,24 +299,10 @@ export function strokeFor(size: number): number {
 
 /** One icon. */
 export function Icon({ name, size = 16, label, className }: IconProps) {
+  const style = { '--lib-icon-size': `${size}px`, '--lib-icon-stroke': strokeFor(size) } as CSSProperties;
   return (
-    <svg
-      className={className ? `vs-icon ${className}` : 'vs-icon'}
-      data-icon={name}
-      width={size}
-      height={size}
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeFor(size)}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      role={label ? 'img' : undefined}
-      aria-label={label}
-      aria-hidden={label ? undefined : true}
-      focusable="false"
-    >
+    <ZenIcon className={className ? `vs-icon ${className}` : 'vs-icon'} data-icon={name} viewBox="0 0 16 16" label={label} style={style}>
       {GLYPHS[name]}
-    </svg>
+    </ZenIcon>
   );
 }

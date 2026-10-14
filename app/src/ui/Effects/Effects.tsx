@@ -3,7 +3,7 @@ import { ActionButton, ActionButtonFace as ButtonFace } from '@satoramoto/zen';
 import { Segmented } from '@satoramoto/zen';
 import { Slider } from '@satoramoto/zen';
 import type { Param } from '@satoramoto/zen';
-import { Text } from '@satoramoto/zen';
+import { SettingsRow, Text } from '@satoramoto/zen';
 import { formatMultiplier, multiplierToPosition, POSITION_MAX, POSITION_MIN, positionToMultiplier, range } from '../model/controls';
 import * as fx from '../model/fx';
 import { useNotice, useTauriEvent } from '../model/hooks';
@@ -146,22 +146,10 @@ export const taperSlide = (param: Param, multiplier: number, onChange: (m: numbe
 /** The hue (0–1, a turn of the colour wheel) as degrees. */
 export const hueText = (hue: number) => `${Math.round(hue * 360)}°`;
 
-/** A setting's row, as every row in ⚙ Settings is drawn: its name first, then its control. */
-function Row({ name, children }: { name: string; children: ReactNode }) {
-  return (
-    <div className="vs-effects-row">
-      <Text weight="strong" className="vs-effects-row-name">
-        {name}
-      </Text>
-      <span className="vs-effects-row-control">{children}</span>
-    </div>
-  );
-}
-
 /** A slider with a step down and a step up either side of it, for the fine adjustments a drag can't make on a touch screen. */
 function Fine({ name, slider, down, up }: { name: string; slider: ReactNode; down(): void; up(): void }) {
   return (
-    <Row name={name}>
+    <SettingsRow label={name}>
       <ActionButton tone="quiet" className="vs-effects-step" onPress={down} label={`${name} down a step`} title="A step down">
         −
       </ActionButton>
@@ -169,7 +157,7 @@ function Fine({ name, slider, down, up }: { name: string; slider: ReactNode; dow
       <ActionButton tone="quiet" className="vs-effects-step" onPress={up} label={`${name} up a step`} title="A step up">
         +
       </ActionButton>
-    </Row>
+    </SettingsRow>
   );
 }
 
@@ -178,8 +166,8 @@ function Fine({ name, slider, down, up }: { name: string; slider: ReactNode; dow
  * and to what colour), how long the fade to black takes, and brightness and sensitivity in fine
  * steps. The hits themselves stay in live mode.
  *
- * **Changed.** Rows are type, not boxes (principles: controls are type): the name, then the
- * control, on space alone. The switches between words are the core `Segmented`, which the visuals
+ * **Changed.** Each row is zen's `SettingsRow` (the name, then the control, on space alone; a
+ * labelled group). The switches between words are the core `Segmented`, which the visuals
  * tabs material draws as words with the chosen one underlined in the accent (the original's
  * settings.css did that by hand). Steps are quiet `ActionButton`s.
  *
@@ -194,7 +182,7 @@ export function EffectSettings({ state, set }: Pick<FxControl, 'set'> & { state:
   const sensitivity = (v: number) => set({ kind: 'sensitivity', value: v }, { sensitivity: v });
   return (
     <div className="vs-effects-rows">
-      <Row name={Say('strobe rate')}>
+      <SettingsRow label={Say('strobe rate')}>
         <Segmented
           label={say('strobe rate')}
           items={RATE_NAMES}
@@ -203,8 +191,8 @@ export function EffectSettings({ state, set }: Pick<FxControl, 'set'> & { state:
           onChange={(i) => set({ kind: 'strobe_rate', rate: RATES[i] }, { strobe_rate: RATES[i] })}
           title="How many times the strobe flashes each beat"
         />
-      </Row>
-      <Row name={Say('strobe style')}>
+      </SettingsRow>
+      <SettingsRow label={Say('strobe style')}>
         <Segmented
           label={say('strobe style')}
           items={['white', 'black']}
@@ -215,8 +203,8 @@ export function EffectSettings({ state, set }: Pick<FxControl, 'set'> & { state:
           }}
           title="Flash to white, or to black"
         />
-      </Row>
-      <Row name={Say('blackout fade')}>
+      </SettingsRow>
+      <SettingsRow label={Say('blackout fade')}>
         {slide(
           FADE,
           state.blackout_fade,
@@ -224,7 +212,7 @@ export function EffectSettings({ state, set }: Pick<FxControl, 'set'> & { state:
           `${state.blackout_fade.toFixed(1)} s`,
           'How long blackout takes to fade in and out; 0 is at once',
         )}
-      </Row>
+      </SettingsRow>
       <Fine
         name="Brightness"
         slider={slide(BRIGHTNESS, state.brightness, brightness, state.brightness.toFixed(2), 'Brightness; 1 is as drawn')}

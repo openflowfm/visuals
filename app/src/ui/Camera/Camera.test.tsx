@@ -30,7 +30,7 @@ test('host controller persists across panels, separate opacity controls and sour
   expect(controller.snapshot().status).toBe('active');
   mounted.rerender(page(false));
   expect(stop).not.toHaveBeenCalled();
-  expect(screen.getByRole('button', { name: 'Camera on: open controls' }).querySelector('svg[data-icon="camera"]')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Camera on: open controls' }).querySelector('.vs-icon[data-icon="camera"] svg')).toBeTruthy();
   mounted.unmount();
   expect(stop).toHaveBeenCalledOnce();
 });

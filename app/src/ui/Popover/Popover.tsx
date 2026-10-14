@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { usePopover, type Dismissal } from '@satoramoto/zen';
-import { Layer } from '@satoramoto/zen';
-import type { LayerName } from '@satoramoto/zen';
-import { Text, type TextProps } from '@satoramoto/zen';
+import { Popover as ZenPopover, type Dismissal } from '@satoramoto/zen';
+import { Text } from '@satoramoto/zen';
 import './Popover.css';
-
-/** The panel's element: a body Text (its type, for what's inside), the Layer's `role` its ARIA role. */
-function PanelText({ role, ...props }: Omit<TextProps, 'role' | 'ariaRole'> & { role?: TextProps['ariaRole'] }) {
-  return <Text {...props} ariaRole={role} />;
-}
 
 /** Three dots for a "more" button: the "···" glyph reads as a dash in Instrument Sans. */
 export function MoreDots() {
@@ -44,11 +37,6 @@ export interface PopoverProps {
    * the original did that with `position: static` on the wrapper, which a top-layer panel can't.
    */
   across?: RefObject<HTMLElement | null>;
-  /**
-   * Added: the panel's layer, default `float`. `raised` draws it in the side panels' material
-   * (Home's folded mixer).
-   */
-  layer?: LayerName;
   children: ReactNode | ((close: () => void) => ReactNode);
 }
 
@@ -62,8 +50,8 @@ export interface PopoverProps {
  * the panel's: `dialog` for controls, `menu` for a list of actions (each item then a
  * `menuitem`). `align` hangs the panel from the button's left or right edge.
  *
- * **Changed.** The panel is the core `Popover`'s (`usePopover` and its top-layer box, holding a
- * `Layer level="float"`), so it escapes every clipping ancestor and the theme's float layer draws
+ * **Changed.** The panel is zen's `Popover` (its top-layer box, holding a `Layer level="float"`,
+ * its placement and dismissal); this adds only the trigger, the right-edge hang and `across`, so it escapes every clipping ancestor and the theme's float layer draws
  * the glass, its edge and its lift (the original's --surface-float, --glass and --lift). Placement
  * is the core's: under the button, over it when only that has room, clamped in the window; the
  * original only flipped left to right. A wheel outside the panel also closes it (the core's
@@ -75,7 +63,7 @@ export interface PopoverProps {
  * left-hung panel would run past the window, the focus handling, and the look: type with no box,
  * underlined in the accent when open or pressed; menu items as whole-width rows.
  */
-export function Popover({ label, title, name, className, role = 'dialog', align = 'left', pressed, across, layer = 'float', children }: PopoverProps) {
+export function Popover({ label, title, name, className, role = 'dialog', align = 'left', pressed, across, children }: PopoverProps) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -102,7 +90,7 @@ export function Popover({ label, title, name, className, role = 'dialog', align 
         {label}
       </Text>
       {open && (
-        <Panel id={id} role={role} name={name} align={align} anchor={button} across={across} layer={layer} onClose={() => setOpen(false)} onEscape={close}>
+        <Panel id={id} role={role} name={name} align={align} anchor={button} across={across} onClose={() => setOpen(false)} onEscape={close}>
           {typeof children === 'function' ? children(close) : children}
         </Panel>
       )}
@@ -118,12 +106,10 @@ function Panel({
   align,
   anchor,
   across,
-  layer,
   onClose,
   onEscape,
   children,
 }: {
-  layer: LayerName;
   id: string;
   role: 'dialog' | 'menu';
   name: string;
@@ -134,12 +120,11 @@ function Panel({
   onEscape(): void;
   children: ReactNode;
 }) {
-  const [side, setSide] = useState(align);
   const onDismiss = useCallback((how: Dismissal) => (how === 'escape' ? onEscape() : onClose()), [onClose, onEscape]);
-  const box = usePopover({ anchor, onDismiss });
   // After the core's placement (its effects run first, and so do its listeners): hang from the right edge, or across `across`.
+  // The core's positioned box is the panel's parent.
   const hang = useCallback(() => {
-    const el = box.current;
+    const el = document.getElementById(id)?.parentElement;
     const from = anchor.current;
     if (!el || !from) return;
     const at = from.getBoundingClientRect();
@@ -152,9 +137,8 @@ function Panel({
     const size = el.getBoundingClientRect();
     // Keep the panel inside the window: hung from the left, it flips to the right when it would run past the window's right edge.
     const right = align === 'right' || at.left + size.width > window.innerWidth - EDGE;
-    setSide(right ? 'right' : 'left');
     if (right) el.style.left = `${Math.max(MARGIN, at.right - size.width)}px`;
-  }, [align, anchor, across, box]);
+  }, [align, anchor, across, id]);
   useLayoutEffect(hang, [hang]);
   useEffect(() => {
     window.addEventListener('resize', hang);
@@ -165,10 +149,8 @@ function Panel({
     };
   }, [hang]);
   return (
-    <div ref={box} className="lib-popover vs-popover-box" popover="manual" data-part="popover" data-across={across ? '' : undefined}>
-      <Layer level={layer} as={PanelText} className="lib-popover__panel vs-popover-panel" data-part="panel" data-align={side} role={role} aria-label={name} id={id}>
-        {children}
-      </Layer>
-    </div>
+    <ZenPopover anchor={anchor} onDismiss={onDismiss} role={role} label={name} id={id} className={across ? 'vs-popover-panel vs-popover-panel--across' : 'vs-popover-panel'}>
+      {children}
+    </ZenPopover>
   );
 }
