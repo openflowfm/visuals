@@ -22,9 +22,10 @@ const displayName = (d: output.Display) => `${d.index + 1}. ${d.name} (${d.width
  */
 export function fitLine(status: output.Status): string {
   const shown = status.display;
-  if (!shown) return 'The whole picture, with black bars where the display is a different shape; a display turned on its side is filled.';
   const size = status.size;
-  if (!size || (size[0] === shown.width && size[1] === shown.height)) return shown.height > shown.width ? `Fills ${shown.name}, drawn tall to match it.` : `Fills ${shown.name}.`;
+  // Without both the display and the picture's size, whether it fills can't be known: the general line.
+  if (!shown || !size) return 'The whole picture, with black bars where the display is a different shape; a display turned on its side is filled.';
+  if (size[0] === shown.width && size[1] === shown.height) return shown.height > shown.width ? `Fills ${shown.name}, drawn tall to match it.` : `Fills ${shown.name}.`;
   const bars = size[0] < shown.width ? 'at the sides' : 'above and below';
   return `The whole picture, ${size[0]}×${size[1]} on ${shown.name}, with black bars ${bars}.`;
 }
