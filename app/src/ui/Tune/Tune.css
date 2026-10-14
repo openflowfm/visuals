@@ -2,9 +2,9 @@
    two tune sliders. The group's label is the heading ("for this preset", "for these presets"),
    "as made" a quiet word as its aside, as the panel's back is. Each slider: its name and reading
    on a line (the reading a button that turns into a field), zen's Slider row under it (a thin
-   groove lit from 1× to the value, the knob zen's handle) with a tick at each detent, the 1× one
-   the tallest, and the detents' fractions under the rail. Contract variables and visuals.css
-   tokens only. */
+   groove lit from 1× to the value, the knob zen's handle, zen's ticks at the detents, the 1× one
+   the tallest), and the detents' fractions under the rail. Contract variables and visuals.css
+   tokens only; zen's Slider is reached only through its props and its `data-part`s. */
 
 /* The original's 22px above the card: the plate's inset. */
 .vs-tune {
@@ -95,31 +95,6 @@
   width: 100%;
   min-width: 0;
 }
-/* The detents: a tick at each, through the groove; the 1× one taller and brighter. */
-.vs-tune-rail .lib-slider__track::after {
-  position: absolute;
-  inset: 30% var(--vs-tune-inset);
-  background:
-    linear-gradient(var(--text-1), var(--text-1)) 50% 50% / 2px 100% no-repeat,
-    linear-gradient(var(--text-3), var(--text-3)) 0% 50% / 1px 60% no-repeat,
-    linear-gradient(var(--text-3), var(--text-3)) 25% 50% / 1px 60% no-repeat,
-    linear-gradient(var(--text-3), var(--text-3)) 75% 50% / 1px 60% no-repeat,
-    linear-gradient(var(--text-3), var(--text-3)) 100% 50% / 1px 60% no-repeat;
-  pointer-events: none;
-  content: '';
-}
-/* Mixed (several presets that differ): no knob, no fill. */
-.vs-tune-slider[data-mixed] .lib-slider__thumb,
-.vs-tune-slider[data-mixed] .lib-slider__fill {
-  display: none;
-}
-.vs-tune-rail .lib-slider__thumb {
-  transition: transform 120ms ease;
-}
-.vs-tune-rail .lib-slider__track[data-dragging] .lib-slider__thumb {
-  transform: scale(1.12);
-}
-
 /* The detents' fractions under the rail: small, quiet, in tabular figures. */
 .vs-tune-slider-labels {
   position: relative;
@@ -148,8 +123,7 @@
 }
 
 .vs-tune-reset:focus-visible,
-.vs-tune-slider-readout:focus-visible,
-.vs-tune-rail .lib-slider__track:focus-visible {
+.vs-tune-slider-readout:focus-visible {
   outline: 2px solid var(--vs-focus-ring);
   outline-offset: 2px;
 }
@@ -163,8 +137,9 @@
 }
 
 /* Reduced transparency (the system's, or the layout's data-transparency): an opaque knob, no
-   backdrop, on the top layer's solid fill. */
-[data-transparency='reduced'] .vs-tune-rail .lib-slider__thumb {
+   backdrop, on the top layer's solid fill. zen's materials have no opaque knob yet, so the thumb
+   is reached by its documented part. */
+[data-transparency='reduced'] .vs-tune-rail [data-part='thumb'] {
   --lib-surface-fill: var(--layer-top-solid);
   --lib-surface-texture: none;
   background: var(--layer-top-solid);
@@ -172,17 +147,11 @@
   backdrop-filter: none;
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .vs-tune-rail .lib-slider__thumb {
+  .vs-tune-rail [data-part='thumb'] {
     --lib-surface-fill: var(--layer-top-solid);
     --lib-surface-texture: none;
     background: var(--layer-top-solid);
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .vs-tune-rail .lib-slider__thumb {
-    transition: none;
   }
 }

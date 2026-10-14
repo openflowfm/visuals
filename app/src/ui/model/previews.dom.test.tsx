@@ -201,12 +201,12 @@ describe("usePreview (the stages' pictures)", () => {
     const both = (shown: number[]) => createElement('div', null, ...shown.map((which) => createElement(Stage, { key: which, which })));
     const view = render(both([1, 2]));
     await act(() => vi.advanceTimersByTimeAsync(0));
-    // The poll starts with the first canvas's effect; the next poll takes in the second.
-    expect(b.calls[0]).toEqual(['set_previews', { which: [1], width: 192, height: 108 }]);
+    // Canvases mounted together share the first poll: both in its one `set_previews`.
+    expect(b.calls[0]).toEqual(['set_previews', { which: [1, 2], width: 192, height: 108 }]);
     await act(() => vi.advanceTimersByTimeAsync(200));
     expect(b.of('previews').length).toBeGreaterThan(1);
     // The same pictures aren't asked for again each poll.
-    expect(b.of('set_previews').slice(1)).toEqual([['set_previews', { which: [1, 2], width: 192, height: 108 }]]);
+    expect(b.of('set_previews')).toEqual([['set_previews', { which: [1, 2], width: 192, height: 108 }]]);
 
     view.rerender(both([2]));
     await act(() => vi.advanceTimersByTimeAsync(100));

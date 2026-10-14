@@ -5,7 +5,10 @@ import { VisualsApp } from './ui';
 import { install, type World } from './stories/backend.ts';
 import { PLAYING_DECK, STILL, WARM_UP } from './stories/fixtures.ts';
 import { resetLiveMapScope } from './ui/LiveMap/scope';
+import { resetWelcomeEnded } from './ui/Onboarding/Onboarding';
 import { SEEDED_KEY } from './ui/model/home';
+import { forgetResumedQuery } from './ui/model/library';
+import { resetDismissedProblems } from './ui/model/survive';
 import { resetTrail } from './ui/model/trail';
 import { installTauriBridge } from './zenBridge.ts';
 import './main.css';
@@ -54,11 +57,15 @@ const meta = {
   args: { mode: 'dark', chrome: false },
   decorators: [withDesk],
   // A fresh app behind each story, the page's storage as a first run left it, and the map's
-  // trail and scope (the page's session's, module state) started over.
+  // trail and scope, the welcome's end, the problems put away and the resumed filter (the
+  // page's session's, module state) started over.
   beforeEach: ({ parameters }) => {
     const p = parameters as StoryParameters;
     resetTrail();
     resetLiveMapScope();
+    resetWelcomeEnded();
+    resetDismissedProblems();
+    forgetResumedQuery(true);
     try {
       for (const key of Object.keys(localStorage)) if (key.startsWith('visuals.')) localStorage.removeItem(key);
       localStorage.setItem(SEEDED_KEY, '1');

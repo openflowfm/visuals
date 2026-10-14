@@ -857,13 +857,18 @@ impl Loop {
         if now.duration_since(self.logged).as_secs() >= 5 {
             self.logged = now;
             let (l, r) = engine::live::peaks(&self.ring);
+            // The round time is the display's refresh only while nothing holds the
+            // loop back; under the output's cap it isn't, so say the cap instead.
+            let pace = match self.cap.filter(|_| self.output.is_some()) {
+                Some(period) => format!("capped at {:.0} fps", 1.0 / period.as_secs_f64().max(1e-6)),
+                None => format!("display {:.0} Hz", 1.0 / self.refresh.as_secs_f64().max(1e-6)),
+            };
             eprintln!(
-                "bench: {:.0} fps, {:.2} ms cpu, preset at {speed:.2}×, surface {}, output {}, display {:.0} Hz{}, input peaks {l:.3} {r:.3}",
+                "bench: {:.0} fps, {:.2} ms cpu, preset at {speed:.2}×, surface {}, output {}, {pace}{}, input peaks {l:.3} {r:.3}",
                 s.fps,
                 s.cpu_ms,
                 if self.bench_shown { format!("{}x{}", self.config.width, self.config.height) } else { "hidden".into() },
                 self.output.as_ref().map_or("closed".into(), |w| format!("{}x{}", w.config.width, w.config.height)),
-                1.0 / self.refresh.as_secs_f64().max(1e-6),
                 if unpaced { ", not on screen" } else { "" }
             );
         }

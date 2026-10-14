@@ -233,7 +233,11 @@ export function usePreview(which: number | undefined) {
     const canvas = ref.current;
     if (!canvas || which === undefined) return;
     canvases.set(canvas, which);
-    if (!running) loop();
+    // Started after this render's other effects, so canvases mounted together all join its first poll.
+    if (!running) {
+      running = true;
+      queueMicrotask(() => void loop());
+    }
     return () => {
       canvases.delete(canvas);
     };

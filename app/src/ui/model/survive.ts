@@ -51,6 +51,11 @@ export function shownProblems(problems: readonly SettingsProblem[], dismissed: R
 /** The problems put away this session; kept outside the home so they stay put away when it opens again. */
 const dismissedProblems = new Set<string>();
 
+/** Bring back every problem put away this session, as at a launch (stories, tests). */
+export function resetDismissedProblems(): void {
+  dismissedProblems.clear();
+}
+
 /** The settings problems to show on the home, and `dismiss` to put one away for this session. */
 export function useSettingsProblems(): { problems: SettingsProblem[]; dismiss(p: SettingsProblem): void } {
   const [all, setAll] = useState<SettingsProblem[]>([]);
