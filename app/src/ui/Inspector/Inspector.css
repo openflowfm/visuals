@@ -317,8 +317,8 @@
 .vs-inspector-keys .vs-inspector-key > .vs-popover-button:focus-visible,
 .vs-inspector-back:focus-visible,
 .vs-inspector-close:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* My tags (TagEditor), the last of the facts. */

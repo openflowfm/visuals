@@ -22,13 +22,21 @@ function Kept({ start = 1 as number | null, onChange = vi.fn() }: { start?: numb
 
 const slider = () => screen.getByRole('slider', { name: 'speed' });
 const says = () => slider().getAttribute('aria-valuetext');
+/** Opens the readout's field and puts the keys in it. zen selects the field's text, which focuses
+ *  it in browsers (the Tune story's "A typed value" play checks that in Chromium) but not in
+ *  happy-dom, so the field is focused here by hand. */
+async function typeInto(user: ReturnType<typeof userEvent.setup>, readout: string, keys: string) {
+  await user.click(screen.getByRole('button', { name: readout }));
+  screen.getByRole('textbox').focus();
+  await user.keyboard(`{Control>}a{/Control}${keys}`);
+}
 
 describe('the tune slider', () => {
   it('reads its value as a fraction on a detent, and labels the detents', () => {
     render(<Kept start={0.5} />);
     expect(says()).toBe('½×');
     expect(screen.getByRole('button', { name: 'speed ½×, type a value' })).toBeTruthy();
-    expect(document.querySelector('.vs-tune-slider-labels')!.textContent).toBe('¼½124');
+    expect(document.querySelector('[data-part="labels"]')!.textContent).toBe('¼½124');
   });
 
   it('steps between detents with the arrows, and nudges a twelfth with Shift', async () => {
@@ -71,14 +79,11 @@ describe('the tune slider', () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<Kept onChange={onChange} />);
-    await user.click(screen.getByRole('button', { name: 'speed 1×, type a value' }));
-    await user.keyboard('1/2{Enter}');
+    await typeInto(user, 'speed 1×, type a value', '1/2{Enter}');
     expect(says()).toBe('½×');
-    await user.click(screen.getByRole('button', { name: 'speed ½×, type a value' }));
-    await user.keyboard('{Control>}a{/Control}fast{Enter}');
+    await typeInto(user, 'speed ½×, type a value', 'fast{Enter}');
     expect(says()).toBe('½×');
-    await user.click(screen.getByRole('button', { name: 'speed ½×, type a value' }));
-    await user.keyboard('{Control>}a{/Control}3{Escape}');
+    await typeInto(user, 'speed ½×, type a value', '3{Escape}');
     expect(says()).toBe('½×');
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(onChange.mock.calls.map((c) => c[0])).toEqual([0.5]);

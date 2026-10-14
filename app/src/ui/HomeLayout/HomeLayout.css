@@ -357,31 +357,7 @@
   min-height: 0;
 }
 
-/* The header's buttons that open and close a panel (TOGGLE_CLASS): the sidebar's glyph turned to
-   face right for the inspector, the panel's side; brighter while open. A glyph, no box. */
-.vs-lay-toggle {
-  display: inline-grid;
-  place-items: center;
-  width: var(--control-h);
-  height: var(--control-h);
-  padding: 0;
-  border: 0;
-  border-radius: var(--vs-lay-key-radius);
-  background: none;
-  color: var(--text-2);
-  cursor: pointer;
-}
-.vs-lay-toggle .vs-icon {
+/* PanelToggle's inspector glyph: the sidebar's turned to face right, the panel's side. */
+.vs-lay-mirror {
   transform: scaleX(-1);
-}
-.vs-lay-toggle.vs-lay-toggle--side .vs-icon {
-  transform: none;
-}
-.vs-lay-toggle:hover,
-.vs-lay-toggle[aria-pressed='true'] {
-  color: var(--text-1);
-}
-.vs-lay-toggle:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
 }

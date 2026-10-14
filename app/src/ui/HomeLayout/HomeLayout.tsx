@@ -6,6 +6,8 @@ import { Ambient, type AmbientSource } from '@satoramoto/zen';
 import { Surface } from '@satoramoto/zen';
 import { useThemeScope } from '@satoramoto/zen';
 import { packs } from '@satoramoto/zen';
+import { Button } from '@satoramoto/zen';
+import { Icon } from '../Icon/Icon';
 import { say } from '../model/words';
 import type { Docks, InspectorMode, SidebarMode } from '../model/home-model';
 import { HEADER_FORMS, Mark } from '../Views/Views';
@@ -265,12 +267,25 @@ export const SIDEBAR_ID = 'lay-sidebar';
 export const INSPECTOR_ID = 'lay-inspector';
 
 /**
- * The class a header's panel toggle wears (the sidebar's and the inspector's buttons, the
- * original's `insp-toggle`): a glyph with no box, brighter while its panel is open. Add
- * `TOGGLE_SIDE` for the sidebar's, whose glyph faces left.
+ * A header's panel toggle (the sidebar's and the inspector's buttons, the original's
+ * `insp-toggle`): zen's quiet icon key, drawn as the pack's chosen tab while its panel is open.
+ * The sidebar's glyph faces left; the inspector's is the same glyph mirrored, to face its panel.
  */
-export const TOGGLE_CLASS = 'vs-lay-toggle';
-export const TOGGLE_SIDE = 'vs-lay-toggle--side';
+export function PanelToggle({ panel, name, title, open, controls, onPress }: { panel: 'sidebar' | 'inspector'; name: string; title: string; open: boolean; controls?: string; onPress(): void }) {
+  return (
+    <Button
+      size="icon"
+      variant="quiet"
+      icon={<Icon name="sidebar" className={panel === 'inspector' ? 'vs-lay-mirror' : undefined} />}
+      name={name}
+      title={title}
+      pressed={open}
+      chosen={open}
+      controls={controls}
+      onPress={onPress}
+    />
+  );
+}
 
 /** The inspector's inset panel: HomeLayout's right slot, and the inspector's frame on its own in a story. */
 export function InspectorPanel({ label = INSPECTOR_LABEL, id, children, panelRef }: { label?: string; id?: string; children: ReactNode; panelRef?: RefObject<HTMLElement | null> }) {

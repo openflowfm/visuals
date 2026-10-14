@@ -103,8 +103,8 @@
   background: var(--vs-stagehead-on);
 }
 .vs-stagehead .lib-action-button-face.vs-stagehead-tool:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 
 /* The lights: a dot and a few words, in the Popover button's own type; the figures are Texts at
@@ -224,8 +224,8 @@
   color: var(--text-1);
 }
 .vs-stagehead-offer .lib-action-button-face.vs-stagehead-offer-go:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 .vs-stagehead-offer-note {
   margin: 0;

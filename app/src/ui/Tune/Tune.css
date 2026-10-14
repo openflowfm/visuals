@@ -1,10 +1,9 @@
 /* "For this preset" (Tune.tsx, TuneSlider.tsx): its own speed and how much it reacts, a Group of
    two tune sliders. The group's label is the heading ("for this preset", "for these presets"),
-   "as made" a quiet word as its aside, as the panel's back is. Each slider: its name and reading
-   on a line (the reading a button that turns into a field), zen's Slider row under it (a thin
-   groove lit from 1× to the value, the knob zen's handle, zen's ticks at the detents, the 1× one
-   the tallest), and the detents' fractions under the rail. Contract variables and visuals.css
-   tokens only; zen's Slider is reached only through its props and its `data-part`s. */
+   "as made" a quiet word as its aside, as the panel's back is. Each slider is zen's Slider row
+   whole: its name and typed reading on a line, a thin groove lit from 1× to the value, zen's ticks
+   at the detents (the 1× one the tallest) and their fractions under the rail. Contract variables
+   and visuals.css tokens only; zen's Slider is reached only through its props and its `data-part`s. */
 
 /* The original's 22px above the card: the plate's inset. */
 .vs-tune {
@@ -35,103 +34,18 @@
   color: var(--text-1);
 }
 
-/* One slider. The knob's centre runs half its width (zen's row thumb: three quarters of the
-   control height) in from each end, so the ticks and labels are laid out the same way. */
+/* One slider: zen's Slider row, the full width. */
 .vs-tune-slider {
-  --vs-tune-inset: calc(var(--control-h) * 0.375);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.vs-tune-slider-line {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-  min-height: calc(var(--space-1) * 5);
-}
-.vs-tune-slider-caption {
-  min-width: 0;
-  color: var(--text-2);
-}
-.vs-tune-slider-readout,
-.vs-tune-slider-entry {
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-.vs-tune-slider-readout {
-  min-width: calc(var(--space-1) * 10.5);
-  padding: 1px var(--space-1);
-  border: 0;
-  border-radius: var(--radius-control);
-  background: none;
-  color: var(--text-1);
-  text-align: right;
-  cursor: text;
-}
-.vs-tune-slider-readout:hover:not(:disabled) {
-  background: var(--mat-well-fill);
-}
-.vs-tune-slider[data-mixed] .vs-tune-slider-readout {
-  color: var(--vs-caption-raised);
-  font-style: italic;
-}
-.vs-tune-slider-entry {
-  width: calc(var(--space-1) * 14);
-  padding: 1px var(--space-1);
-  border: 0;
-  border-radius: var(--radius-control);
-  outline: 1px solid var(--vs-focus-ring);
-  background: var(--mat-well-fill);
-  color: var(--text-1);
-  font: inherit;
-  font-size: var(--size-caption);
-  text-align: right;
-}
-
-/* The rail: zen's Slider row, the full width. */
-.vs-tune-rail {
   width: 100%;
   min-width: 0;
 }
-/* The detents' fractions under the rail: small, quiet, in tabular figures. */
-.vs-tune-slider-labels {
-  position: relative;
-  height: calc(var(--space-1) * 3);
-  margin: 0 var(--vs-tune-inset);
-}
-.vs-tune-slider-label {
-  position: absolute;
-  top: 0;
-  left: calc(var(--vs-tune-at) * 100%);
+/* "Mixed" reads quieter, in italics. */
+.vs-tune-slider[data-mixed] [data-part='readout'] {
   color: var(--vs-caption-raised);
-  font-size: calc(var(--size-caption) * 0.8);
-  font-variant-numeric: tabular-nums;
-  line-height: calc(var(--space-1) * 3);
-  opacity: 0.7;
-  transform: translateX(-50%);
-  pointer-events: none;
+  font-style: italic;
 }
 
-/* Nothing to tune: dimmed, nothing to grab. */
-.vs-tune-slider[data-disabled] {
-  opacity: 0.45;
-}
-.vs-tune-slider[data-disabled] .vs-tune-slider-readout {
-  cursor: default;
-}
-
-.vs-tune-reset:focus-visible,
-.vs-tune-slider-readout:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+.vs-tune-reset:focus-visible {
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
-}
-
-/* More contrast: the ticks and labels at full ink. */
-@media (prefers-contrast: more) {
-  .vs-tune-slider-label {
-    color: var(--text-1);
-    opacity: 1;
-  }
 }

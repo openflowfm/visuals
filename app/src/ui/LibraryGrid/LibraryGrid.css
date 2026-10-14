@@ -26,7 +26,7 @@
 }
 /* With no tile highlighted the grid rings itself, inside: it scrolls, and would clip a ring drawn outside. */
 .vs-lib-grid:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 /* Pointing at its active tile, it rings that tile instead, not itself. */
@@ -44,7 +44,7 @@
 /* The home's tiles, while the grid has focus: the keyboard's tile shows the focus ring (over a
    selection's) and its +. */
 .vs-lib-grid:focus-visible .vs-tile[data-active] .vs-tile-pic {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 .vs-lib-grid:focus-visible .vs-tile[data-active] .vs-tile-add {
@@ -162,7 +162,7 @@
 }
 /* The highlighted tile's ring replaces a selection's, so it has one ring, not two. */
 .vs-lib-grid:focus-visible .vs-lib-tile[data-active] .vs-lib-thumb {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: -2px;
 }
 .vs-lib-add {

@@ -43,8 +43,8 @@
   color: var(--text-1);
 }
 .vs-stagedock .lib-action-button-face.vs-stagedock-effects:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
-  outline-offset: 0;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
 }
 .vs-stagedock-effects-key {
   --text-size: var(--size-caption);

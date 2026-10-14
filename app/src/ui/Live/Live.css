@@ -11,6 +11,6 @@
 
 /* Focus on the sliders and the switch's choices here, in the ring every view uses (access.css). */
 .vs-live :is([role='slider'], [role='radio']):focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

@@ -25,8 +25,8 @@
    Below are only what the contract has no name for.
 
    **Tuning knobs**
-     --vs-playing, --vs-line-active, --vs-focus-ring   one meaning each (the signal, the active
-                                                       underline, the focus ring) on a palette slot
+     --vs-playing, --vs-line-active                    one meaning each (the signal, the active
+                                                       underline) on a palette slot
      --vs-caption-raised                               the caption a step lighter on raised tints
      --vs-thumb                                        the dark backing behind a tile's picture
      --vs-sep-space                                    the widened space on " · " lines
@@ -37,8 +37,6 @@
   --vs-playing: var(--success);
   /* home.css --line-active (the primary): the active control's 2px underline. */
   --vs-line-active: var(--accent);
-  /* access.css --vf-focus-ring (the ui ink): the focus ring is the controls' ink, not the accent. */
-  --vs-focus-ring: var(--text-2);
   /* home.css --caption-raised (#b0b0b8): the caption a step lighter on raised tints and glass,
      so it stays at 4.5:1 there. #b0b0b8 sits about a sixth of the way from --caption to --fg. */
   --vs-caption-raised: color-mix(in oklab, var(--text-3), var(--text-1) 17%);

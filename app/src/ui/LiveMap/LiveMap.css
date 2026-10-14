@@ -76,6 +76,6 @@
 }
 
 .vs-live-map .lib-action-button-face:focus-visible {
-  outline: 2px solid var(--vs-focus-ring);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
