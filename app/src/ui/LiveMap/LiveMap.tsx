@@ -7,7 +7,7 @@ import { ColourPicker, Field } from '../Field/Field';
 import { Icon } from '../Icon/Icon';
 import * as api from '../model/api';
 import type { LibraryRow } from '../model/api';
-import { claimHolds, claimOf, type Claim } from '../model/claim';
+import { claimHolds, claimOf, claimSettled, type Claim } from '../model/claim';
 import { AXES, type AxisId } from '../model/field';
 import { characterOf, fieldSays } from '../model/inspector-model';
 import type { LiveState } from '../model/live-model';
@@ -67,7 +67,8 @@ function useRows(): LibraryRow[] | null {
  * playlist's or filter's matches after the library's data changes). A pick is claimed (`claimHolds`
  * in `model/claim.ts`): lit at once, and held until the picked preset plays (`live.current`, which
  * follows the deck when the app's word has no path) or `CLAIM_MS` pass; the deck moving to another
- * preset meanwhile (a Link beat) doesn't end it. A failed open drops it. The preset already
+ * preset meanwhile (a Link beat) doesn't end it, until the open resolves: from then on the deck
+ * moving off the preset that played when picked ends it (`claimSettled`). A failed open drops it. The preset already
  * playing does nothing when picked.
  *
  * **Kept.** The Field and its words (`fieldSays`), as Home's `LibraryMap` has them; the Effects
@@ -133,9 +134,11 @@ export function LiveMap({ live, trail, onClose, focusOnOpen = false }: { live: L
   const pick = (row: LibraryRow) => {
     if (row.key === playing) return;
     const mineClaim = claimOf(row.path);
+    const from = live.current;
     setClaim(mineClaim);
     api.open(row.path).then(
-      () => {},
+      // Opened: the deck moving off what played when picked is news from here (`claimSettled`).
+      () => setClaim((was) => (was === mineClaim ? claimSettled(was, from) : was)),
       (e) => {
         setClaim((was) => (was === mineClaim ? null : was));
         live.setError(openFailed(row.path, String(e)));
