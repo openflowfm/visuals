@@ -95,19 +95,18 @@ ancestry() {
 }
 
 # Exit 1, saying why, when the app or vite has ended, or whoever started this
-# script has gone away; the EXIT trap stops the rest.
+# script has gone away; the EXIT trap stops the rest, including what is left of
+# the ended one's group.
 started=$(ancestry)
 check() {
 	if ! kill -0 "$app" 2>/dev/null; then
 		wait "$app"
 		echo "app/dev.sh: the app ended (cargo run exited with $?: a failed build, or the app quit; see above), stopping" >&2
-		app=
 		exit 1
 	fi
 	if ! kill -0 "$vite" 2>/dev/null; then
 		wait "$vite"
 		echo "app/dev.sh: vite ended (exit $?; see above), stopping" >&2
-		vite=
 		exit 1
 	fi
 	check_storybooks

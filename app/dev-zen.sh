@@ -25,7 +25,10 @@
 # `PREVIEW_LABEL=Zen PREVIEW_PORT=$ZEN_PREVIEW_PORT STORYBOOK_PORT=$ZEN_STORYBOOK_PORT npm --prefix "$ZEN_SOURCE" run dev`,
 # and this repo's Storybook, composing zen's in under "zen" (`ZEN_STORYBOOK_URL`),
 # each in a process group of its own. `stop_storybooks` stops only those groups.
-# `check_storybooks` reports either one ending by itself; the rest keeps running.
+# `check_storybooks` reports either one's leader ending by itself and stops what
+# is left of its group (a group's id stays its own while any member lives); the
+# rest keeps running. This repo's Storybook listens on
+# 127.0.0.1 only.
 
 zen_free_port() { NO_COLOR=1 FORCE_COLOR=0 node -e "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{process.stdout.write(String(s.address().port));s.close()})"; }
 zen_port_taken() { (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null; }
@@ -114,8 +117,8 @@ start_storybooks() {
 		PREVIEW_LABEL=Zen PREVIEW_PORT=$ZEN_PREVIEW_PORT STORYBOOK_PORT=$ZEN_STORYBOOK_PORT npm --prefix "$ZEN_SOURCE" run dev </dev/null &
 		zen_launcher=$!
 	fi
-	echo "$ZEN_ME: storybook dev --ci --no-open -p $STORYBOOK_PORT"
-	PORT="$STORYBOOK_PORT" node_modules/.bin/storybook dev --ci --no-open -p "$STORYBOOK_PORT" </dev/null &
+	echo "$ZEN_ME: storybook dev --ci --no-open --host 127.0.0.1 -p $STORYBOOK_PORT"
+	PORT="$STORYBOOK_PORT" node_modules/.bin/storybook dev --ci --no-open --host 127.0.0.1 -p "$STORYBOOK_PORT" </dev/null &
 	storybook=$!
 }
 
@@ -137,11 +140,13 @@ stop_storybooks() {
 
 check_storybooks() {
 	if [ -n "$storybook" ] && ! kill -0 "$storybook" 2>/dev/null; then
+		stop_group "$storybook"
 		wait "$storybook"
 		echo "$ZEN_ME: Storybook ended (exit $?; see above); the rest keeps running" >&2
 		storybook=
 	fi
 	if [ -n "$zen_launcher" ] && ! kill -0 "$zen_launcher" 2>/dev/null; then
+		stop_group "$zen_launcher"
 		wait "$zen_launcher"
 		echo "$ZEN_ME: zen's launcher ended (exit $?; see above); the rest keeps running, without zen's stories" >&2
 		zen_launcher=

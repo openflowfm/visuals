@@ -1,6 +1,6 @@
 # The inspector
 
-Home's inspector (`app/src/layout/inspector/`) redesigned from three case studies of
+Home's inspector (`app/src/ui/Inspector/`) redesigned from three case studies of
 inspector panels, adapted to visual[flow]'s direction: an instrument, sleek and warm,
 few lines, the presets the hero, controls that feel like pro audio gear.
 
@@ -19,7 +19,7 @@ sliders, and hovering a library tile animates the tile, never the inspector.
 | ![Reduced transparency](inspector-reduced.png) | |
 | Reduce transparency: an opaque panel, an opaque knob | |
 
-The pictures are the `Layout/Inspector` stories (`app/src/layout/Inspector.stories.tsx`),
+The pictures are the `Layout/Inspector` stories (`app/src/ui/Inspector/Inspector.stories.tsx`),
 captured headless at 2×.
 
 ## The case studies
