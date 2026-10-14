@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AMBIENT_VARS, packs, toCssVars } from '@satoramoto/zen';
+import { AMBIENT_VARS, packs, SCOPE_VARS, SLOT_VARS, toCssVars } from '@satoramoto/zen';
 
 // zen's styling rule (its src/library/library.test.tsx), held over this app's UI: everything
 // under app/src/ui reads only the variables zen's contract produces (`toCssVars()`) or ones
@@ -15,20 +15,15 @@ const SOURCES = readdirSync(dir, { recursive: true, encoding: 'utf8' })
   .filter((f) => /\.(tsx?|css)$/.test(f) && !/\.(stories|test)\.tsx?$/.test(f))
   .sort();
 
-// zen's scope stylesheet builds these per element; zen's public entry doesn't export them
-// (SCOPE_VARS in its contract.ts), so they're spelled out here.
-const SCOPE_VARS = ['--mat-lit-glow', '--ambient-light', '--ambient-held'];
-const CONTRACT = new Set<string>([...packs.flatMap((p) => ['light', 'dark'].flatMap((m) => Object.keys(toCssVars(p.facets, m as 'light' | 'dark')))), ...SCOPE_VARS, ...AMBIENT_VARS]);
-
-/**
- * Variables zen's layout sets on an assembled screen's slots (layout/assembly), which the UI reads
- * but zen's entry doesn't export by name. Only ever shrinks.
- */
-const READ_ALLOWED: Record<string, string> = {
-  '--lib-under': "a slot's room under the region pinned above it (`under`), in px",
-  '--lib-over': "a slot's room over the region pinned below it (`over`), in px",
-  '--lib-panel-inset': "the assembled screen's inset for a panel laid over a column",
-};
+// What zen produces: the contract's variables in every pack and mode, the ones its scope
+// stylesheet builds per element (`SCOPE_VARS`), the ambient ones, and the ones its layout sets on
+// an assembled screen's slots (`SLOT_VARS`).
+const CONTRACT = new Set<string>([
+  ...packs.flatMap((p) => ['light', 'dark'].flatMap((m) => Object.keys(toCssVars(p.facets, m as 'light' | 'dark')))),
+  ...SCOPE_VARS,
+  ...AMBIENT_VARS,
+  ...Object.values(SLOT_VARS),
+]);
 
 /**
  * Colour literals with no contract variable to map to, per file, as the number of matches.
@@ -50,16 +45,12 @@ describe("zen's contract", () => {
     // An inline style declares a variable as a key: { '--x': … }.
     for (const file of SOURCES) for (const m of read(file).matchAll(/['"](--[a-z0-9-]+)['"]\s*[:\]]/g)) declared.add(m[1]);
     const unknown: string[] = [];
-    const allowedRead = new Set<string>();
     for (const file of SOURCES)
       for (const m of read(file).matchAll(/var\((--[a-z0-9-]+)/g)) {
         if (CONTRACT.has(m[1]) || declared.has(m[1])) continue;
-        if (m[1] in READ_ALLOWED) allowedRead.add(m[1]);
-        else unknown.push(`${file} reads ${m[1]}`);
+        unknown.push(`${file} reads ${m[1]}`);
       }
     expect(unknown).toEqual([]);
-    // An allowlisted variable nothing reads any more comes off the list.
-    expect([...allowedRead].sort()).toEqual(Object.keys(READ_ALLOWED).sort());
   });
 
   it('the UI contains no literal colours (beyond the allowlist), radii or light-dark()', () => {

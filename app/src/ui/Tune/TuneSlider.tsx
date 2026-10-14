@@ -1,6 +1,6 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type MouseEvent } from 'react';
-import { Slider, Text, type Param } from '@satoramoto/zen';
-import { detentSays, TUNE_DETENTS, TUNE_POSITION_MAX, TUNE_POSITION_MIN, TUNE_STEPS, tuneDragged, tuneNudged, tunePosition, tuneSays, tuneStepped, tuneTyped } from '../model/inspector-model';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { Slider, Text, type Param, type ParamKeyStep } from '@satoramoto/zen';
+import { detentSays, TUNE_CATCH, TUNE_DETENTS, TUNE_POSITION_MAX, TUNE_POSITION_MIN, TUNE_STEPS, tuneAt, tuneNudged, tunePosition, tuneSays, tuneStepped, tuneTyped } from '../model/inspector-model';
 
 /** What the readout says when several presets differ. */
 export const MIXED = 'Mixed';
@@ -23,6 +23,27 @@ export interface TuneSliderProps {
 /** The rail's parameter: the multiplier's log2, −2 (¼×) to 2 (4×), on twelfths of a doubling; its default (double-click) 1×. */
 const PARAM: Param = { kind: 'float', min: TUNE_POSITION_MIN, max: TUNE_POSITION_MAX, defaultValue: 0, steps: TUNE_STEPS };
 
+/** The detents on the rail, as positions (−2 to 2); zen draws the one at the default (1×) tallest. */
+const DETENTS = TUNE_DETENTS.map(tunePosition);
+
+/** The keys zen's Slider asks first: the arrows step to the next detent (Shift nudges a twelfth), Delete and Backspace go back to 1×. Home/End are zen's own, the ends. */
+const keyStep: ParamKeyStep = ({ key, shiftKey }, at) => {
+  const from = tuneAt(at);
+  switch (key) {
+    case 'ArrowRight':
+    case 'ArrowUp':
+      return tunePosition(shiftKey ? tuneNudged(from, 1) : tuneStepped(from, 1));
+    case 'ArrowLeft':
+    case 'ArrowDown':
+      return tunePosition(shiftKey ? tuneNudged(from, -1) : tuneStepped(from, -1));
+    case 'Delete':
+    case 'Backspace':
+      return PARAM.defaultValue;
+    default:
+      return undefined;
+  }
+};
+
 const SPAN = TUNE_POSITION_MAX - TUNE_POSITION_MIN;
 /** A multiplier's place along the rail, 0 (¼×) to 1 (4×). */
 const along = (multiplier: number) => (tunePosition(multiplier) - TUNE_POSITION_MIN) / SPAN;
@@ -38,8 +59,9 @@ const along = (multiplier: number) => (tunePosition(multiplier) - TUNE_POSITION_
  * **Built on.** zen's `Slider` in its `row` layout for the rail (its gesture: a drag grabs the
  * value where it is, ⌘ for fine; its double-click back to the default, 1×), its own caption and
  * reading turned off: the caption and the readout above it are zen `Text`s, so the readout can be
- * a button that turns into a field. The detents' keys are taken here, in the capture phase, before
- * zen's arrows step by a twelfth. Tune.css draws the ticks and labels.
+ * a button that turns into a field. zen draws the detents' ticks, catches a drag on them (`snap`),
+ * asks `keyStep` for the arrows and Delete/Backspace, and draws Mixed (`mixed`: no knob or fill, its
+ * first move always reported). Tune.css lays the detents' fractions under the rail.
  */
 export function TuneSlider({ name, value, onChange, disabled = false, title }: TuneSliderProps) {
   const caption = useId();
@@ -59,46 +81,6 @@ export function TuneSlider({ name, value, onChange, disabled = false, title }: T
   const set = (v: number) => {
     if (disabled || v === value) return;
     onChange(v);
-  };
-
-  // The detents' keys, before zen's Slider takes the arrows (a twelfth each) and Home/End.
-  const onKeyDownCapture = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (disabled || (e.target as HTMLElement).getAttribute('role') !== 'slider') return;
-    const from = value ?? 1;
-    let v: number;
-    switch (e.key) {
-      case 'ArrowRight':
-      case 'ArrowUp':
-        v = e.shiftKey ? tuneNudged(from, 1) : tuneStepped(from, 1);
-        break;
-      case 'ArrowLeft':
-      case 'ArrowDown':
-        v = e.shiftKey ? tuneNudged(from, -1) : tuneStepped(from, -1);
-        break;
-      case 'Home':
-        v = TUNE_DETENTS[0];
-        break;
-      case 'End':
-        v = TUNE_DETENTS[TUNE_DETENTS.length - 1];
-        break;
-      case 'Delete':
-      case 'Backspace':
-        v = 1;
-        break;
-      default:
-        return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    set(v);
-  };
-
-  // zen's double-click goes back to its default, which is the value it is handed while Mixed, so it may not call back: put them all to 1× here, before it, and once.
-  const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
-    if (!mixed || disabled || !(e.target as HTMLElement).closest('.vs-tune-rail')) return;
-    e.preventDefault();
-    e.stopPropagation();
-    set(1);
   };
 
   // Whether the typing is still open: the blur that follows Enter or Escape (as the field goes) mustn't commit again.
@@ -128,7 +110,7 @@ export function TuneSlider({ name, value, onChange, disabled = false, title }: T
   };
 
   return (
-    <div className="vs-tune-slider" data-disabled={disabled || undefined} data-mixed={(mixed && !disabled) || undefined} onKeyDownCapture={onKeyDownCapture} onDoubleClickCapture={onDoubleClick}>
+    <div className="vs-tune-slider" data-disabled={disabled || undefined} data-mixed={(mixed && !disabled) || undefined}>
       <div className="vs-tune-slider-line">
         <Text role="caption" className="vs-tune-slider-caption" id={caption} truncate>
           {name}
@@ -169,11 +151,15 @@ export function TuneSlider({ name, value, onChange, disabled = false, title }: T
       <Slider
         param={PARAM}
         value={mixed || disabled ? 0 : tunePosition(value)}
-        onChange={(at) => set(tuneDragged(at))}
+        onChange={(at) => set(tuneAt(at))}
         display={says}
         orientation="horizontal"
         layout="row"
-        fill={!mixed && !disabled}
+        mixed={mixed && !disabled}
+        detents={DETENTS}
+        snap={TUNE_CATCH}
+        keyStep={keyStep}
+        fill={!disabled}
         origin="center"
         length="auto"
         name=""
