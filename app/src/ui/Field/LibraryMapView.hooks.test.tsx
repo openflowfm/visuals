@@ -203,11 +203,11 @@ describe('usePlotShape', () => {
   it('spec 6: unmounted, it stops observing and updates nothing', () => {
     const { room, unmount } = mount(A);
     resize(room, B);
-    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The resize's wait is pending…
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
     unmount();
     expect(FakeResizeObserver.all.every((ro) => ro.disconnected || !ro.targets.includes(plotOf(room)))).toBe(true);
-    tick(1000);
-    expect(errors).not.toHaveBeenCalled();
-    errors.mockRestore();
+    // …and unmounting cancels it, so nothing can update afterwards.
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

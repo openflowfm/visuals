@@ -148,7 +148,7 @@ describe('useTransport', () => {
     expect(result.current.t.moves).toBe(true);
     const off = { ...F.LISTS.deck, auto: false, bars: 0 };
     await emit('live', now(off, off.current));
-    expect(result.current.t.moves).toBe(movesByItself(off));
+    expect(result.current.t.moves).toBe(false);
   });
 
   it('spec 8: no audio input on the dock', async () => {
