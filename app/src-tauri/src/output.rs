@@ -112,6 +112,9 @@ impl From<Resolution> for ResolutionJson {
 
 /// The largest side the output renders at: wgpu's default texture limit.
 pub const MAX_SIDE: u32 = 8192;
+/// The most pixels the output renders at: 4K's (3840×2160). More risks the
+/// render thread's allocations failing.
+pub const MAX_PIXELS: u64 = 3840 * 2160;
 /// The render scale's range.
 const SCALES: (f64, f64) = (0.25, 4.0);
 /// The frame-rate cap's range, in frames a second. At least 10, so the render
@@ -161,10 +164,13 @@ impl Render {
     }
 
     /// The size presets draw at on a display `display` pixels big: [`base`](Self::base)
-    /// times the scale, shrunk (keeping its aspect) to fit [`MAX_SIDE`].
+    /// times the scale, shrunk evenly (keeping its aspect) to at most
+    /// [`MAX_PIXELS`] and [`MAX_SIDE`] a side, so a big display at a high scale
+    /// never asks the GPU for more than it can be trusted to allocate.
     pub fn drawn(&self, display: (u32, u32)) -> (u32, u32) {
         let (w, h) = self.base(display);
-        let scale = self.scale.clamp(SCALES.0, SCALES.1).min(MAX_SIDE as f64 / w.max(h) as f64);
+        let (wf, hf) = (w as f64, h as f64);
+        let scale = self.scale.clamp(SCALES.0, SCALES.1).min(MAX_SIDE as f64 / wf.max(hf)).min((MAX_PIXELS as f64 / (wf * hf)).sqrt());
         (((w as f64 * scale).round() as u32).clamp(1, MAX_SIDE), ((h as f64 * scale).round() as u32).clamp(1, MAX_SIDE))
     }
 

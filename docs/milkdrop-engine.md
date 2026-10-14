@@ -181,25 +181,34 @@ the hold the same way.
 The output (`output.rs`) is a borderless native `NSWindow` with no webview, the size of
 the chosen display (`NSScreen`), at the status window level so neither the menu bar nor
 the Dock covers it. Its content is black with a layer-hosting view on a `CAMetalLayer`
-placed at the preset's 16:9 fitted into the display (`output::place`), so the bars are the
-window's own black, and its surface is that rectangle in the display's pixels. On a
-portrait display (one rotated 90°) the view fills it, and while the output is open the
-presets draw at the display's aspect (`bench::draw_size`: about `bench::DRAW`'s pixel
-count, 932×2226 on a rotated 3440×1440 ultrawide; `Renderer::resize` carries the picture
-over), so the picture fills the screen; the bench shows it pillarboxed
-(`Renderer::present` fits the picture to each surface). The bench's
+placed at the render resolution's aspect fitted into the display (`output::place`), so the
+bars are the window's own black, and its surface is that rectangle in the display's pixels.
+How the output is drawn is set in the Output panel (`output::Render`, kept in
+`~/.openflow/visuals/render.json`): the resolution (`"display"`, the display's own pixels,
+the default, so the picture fills it; or a size, turned to a portrait display's way round
+so a rotated display is filled too), a render scale on it (0.25–4) and a frame-rate cap
+(10–1000 fps, or none: every refresh). While the output is open the presets draw at
+resolution × scale (`Render::drawn`: at most 3840×2160's pixel count and 8192 a side,
+shrunk evenly; `Renderer::resize` carries the picture over); closed, at `bench::DRAW`'s
+1920×1080. A change applies to the open output at once (`output::native::rerender`), and
+the `output` event lets auto quality pick again for the new size. The bench shows the
+picture fitted (`Renderer::present` fits the picture to each surface). The bench's
 render thread presents every frame to both surfaces (`bench::Cmd::Output`): while the
 output is open it presents with vsync and paces the loop, and the bench is reconfigured to
 present without waiting (`AutoNoVsync`), so the picture is drawn at every refresh of the
-output's display (see "The preset clock"). A bench hole of zero size hides the bench and it
+output's display (see "The preset clock"), or, with a cap, waits out the cap between
+frames (`bench::Cmd::Cap`; due times run on from each other, so 30 on a 60 Hz display is
+every other refresh). A bench hole of zero size hides the bench and it
 isn't presented at all. The display is chosen in live mode and remembered in
 `~/.openflow/visuals/output.json` (by id, then by name); with nothing chosen it is the first
 display without the menu bar, else the main one. A display reconfiguration
 (`CGDisplayRegisterReconfigurationCallback`) refits the output, or closes it cleanly when
 its display has gone; the page shows "not showing" with a button to show it again.
 
-Commands: `displays`, `output_open {id | null}`, `output_close`, `output_status`, and the
-`output` event; `live_start` reads `VISUALS_LIVE`. Development: `VISUALS_LIVE=1` starts in
+Commands: `displays`, `output_open {id | null}`, `output_close`, `output_status`,
+`output_render`, `output_set_render {render: {resolution: "display" | [w, h], scale, fps:
+number | null}}` (answers with the settings kept, brought into range), and the `output`
+event; `live_start` reads `VISUALS_LIVE`. Development: `VISUALS_LIVE=1` starts in
 live mode with the output open (with `VISUALS_PRESET`, on that preset), `VISUALS_DISPLAY=<n>` sends the output
 to display `n` (from 0, the system's order), and `VISUALS_CAPTURE_OUTPUT=<png>` saves the
 output window beside `VISUALS_CAPTURE`'s main window.
@@ -234,10 +243,9 @@ one, bar, beatInBar, barPhase, every, next, at). The page's panel is `app/src/Li
 Development: `VISUALS_LINK_EVERY=<bars>` starts with changes on, `VISUALS_LINK_LOG=1` prints
 the frame every second and each change's beat.
 
-Not yet: one output only (no mirroring to several displays); the presets still draw at
-about `bench::DRAW`'s 1920×1080 pixels and are scaled to the display, so a 4K projector
-gets an upscaled picture, and a landscape display that isn't 16:9 (an ultrawide) gets
-bars; on a single display the output covers the app's window, and only the keys (Esc
+Not yet: one output only (no mirroring to several displays); a display bigger than
+3840×2160's pixel count (or a scale above 1 on a 4K one) gets a picture drawn at that
+count and scaled up; on a single display the output covers the app's window, and only the keys (Esc
 held, ⌘⇧L) get back out. The mouse cursor is hidden while it is over the output (a check
 ten times a second on the main thread, as the output never becomes the key window; macOS
 only hides it while the app is the active one).
