@@ -94,6 +94,15 @@ export const Failed: Story = {
 /** No thumbnail yet: the picture's own backing, saying so. */
 export const EmptyPicture: Story = { args: { thumbnail: null, empty: 'Not drawn yet' } };
 
+/** No author and no style to stand in: only the name on the picture, no empty author line. */
+export const NoAuthor: Story = {
+  args: { by: tileBy([], '') },
+  play: async ({ canvas, canvasElement }) => {
+    await expect(canvas.getByText(tileName(sample.title, sample.path))).toBeVisible();
+    await expect(canvasElement.querySelector('.vs-tile-by')).toBeNull();
+  },
+};
+
 /** A long name and a long author line, cut with an ellipsis. */
 export const LongName: Story = { args: { thumbnail: LONG.thumbnail, name: tileName(LONG.title, LONG.path), by: tileBy(LONG.authors, LONG.style) } };
 
