@@ -94,7 +94,7 @@ zen_lock=
 # whose run is gone is stale and taken over. Returns with the lock held, or once
 # a Storybook answers; exits 1 after two minutes of neither.
 zen_take_lock() {
-	local lock owner waited=0
+	local lock owner waited=0 blocked=0
 	lock="${TMPDIR:-/tmp}/visuals-zen-storybook-$ZEN_STORYBOOK_PORT.lock"
 	while :; do
 		if ln -s "$$" "$lock" 2>/dev/null; then
@@ -103,7 +103,21 @@ zen_take_lock() {
 		fi
 		owner=$(readlink "$lock" 2>/dev/null) || continue
 		if ! kill -0 "$owner" 2>/dev/null; then
-			rm -f "$lock"
+			# A stale lock is cleared by one run at a time (`mkdir` is atomic), and only
+			# while it still names the dead run: another run racing to clear it may
+			# already have cleared it and taken the lock, which must stay.
+			if mkdir "$lock.clearing" 2>/dev/null; then
+				[ "$(readlink "$lock" 2>/dev/null)" = "$owner" ] && rm -f "$lock"
+				rmdir "$lock.clearing"
+				blocked=0
+			else
+				blocked=$((blocked + 1))
+				if [ "$blocked" -ge 100 ]; then
+					echo "$ZEN_ME: $lock.clearing has stood for ten seconds (a run killed while clearing the lock?); remove it and run again" >&2
+					exit 1
+				fi
+				sleep 0.1
+			fi
 			continue
 		fi
 		zen_is_storybook "$ZEN_STORYBOOK_PORT" && return 0
