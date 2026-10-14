@@ -275,7 +275,7 @@ describe('marksPath', () => {
 });
 
 // The field on its default axes (speed across, brightness up, coloured by hue band), from the
-// old copy's tests (`app/src/layout/inspector/field.test.ts`).
+// old copy's tests (`app/src/layout/inspector/field.test.ts`, retired in #257).
 describe('the default field', () => {
   const lk = (over: Partial<Look> = {}): Look => look({ hues: [10], ...over });
   const r = (key: string, l: Look | null) => row(key, { look: l });
