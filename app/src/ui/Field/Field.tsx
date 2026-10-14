@@ -86,7 +86,7 @@ const COLOUR_LABELS = COLOURINGS.map((c) => c.label);
  * through the whole library: the pointer finds the dot nearest it, hover names it, a click plays
  * it. From the keyboard the field is one stop, a listbox whose one rendered option is the dot
  * under its cursor: the arrows move the cursor to the nearest dot that way, Enter (or Space)
- * plays it, and the cursor starts on the preset playing. Its name shows in the same tip as
+ * plays it, and the cursor starts on the first of several picked, else the preset playing. Its name shows in the same tip as
  * hover's. With several presets picked (`marked`), each one's dot is ringed in the accent, all as
  * one path under the lit dot, and the rest step back as they do for a lit one. Mount it in
  * `LibraryMap`, the inspector region's section for it.
@@ -137,7 +137,13 @@ export function Field({ library, mine, axes = DEFAULT_AXES, onAxes, trail, shape
   const id = useId();
 
   const lit = dotOf(dots, playing);
-  const start = () => (lit >= 0 ? lit : nearest(dots, xOf(0.5, box), yOf(0.5, box), Infinity));
+  // With several picked, the cursor starts on the first pick that has a dot; else on the preset playing; else mid-field.
+  const firstPick = () => (marks && marked ? (marked.map((k) => dotOf(dots, k)).find((i) => i >= 0) ?? -1) : -1);
+  const start = () => {
+    const pick = firstPick();
+    if (pick >= 0) return pick;
+    return lit >= 0 ? lit : nearest(dots, xOf(0.5, box), yOf(0.5, box), Infinity);
+  };
 
   /** Where the pointer is, in the box's units: the svg draws the box scaled to fit and centred (its own aspect, unless a caller sizes it), so this undoes that. */
   const at = (ev: MouseEvent<SVGSVGElement>) => {

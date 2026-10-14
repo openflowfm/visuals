@@ -4,7 +4,9 @@ import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import { VisualsApp } from './ui';
 import { install, type World } from './stories/backend.ts';
 import { PLAYING_DECK, STILL, WARM_UP } from './stories/fixtures.ts';
+import { resetLiveMapScope } from './ui/LiveMap/scope';
 import { SEEDED_KEY } from './ui/model/home';
+import { resetTrail } from './ui/model/trail';
 import { installTauriBridge } from './zenBridge.ts';
 import './main.css';
 
@@ -51,9 +53,12 @@ const meta = {
   component: VisualsApp,
   args: { mode: 'dark', chrome: false },
   decorators: [withDesk],
-  // A fresh app behind each story, and the page's storage as a first run left it.
+  // A fresh app behind each story, the page's storage as a first run left it, and the map's
+  // trail and scope (the page's session's, module state) started over.
   beforeEach: ({ parameters }) => {
     const p = parameters as StoryParameters;
+    resetTrail();
+    resetLiveMapScope();
     try {
       for (const key of Object.keys(localStorage)) if (key.startsWith('visuals.')) localStorage.removeItem(key);
       localStorage.setItem(SEEDED_KEY, '1');

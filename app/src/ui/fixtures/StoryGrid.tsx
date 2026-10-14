@@ -5,7 +5,7 @@
  * Library's grid; this stands in for it so the layout's stories need none of
  * its wiring.
  *
- * A port of visual[flow]'s `app/src/layout/StoryGrid.tsx`: the same props. It
+ * A port of the old `app/src/layout/StoryGrid.tsx` (retired in #239): the same props. It
  * reads `--lay-tile` and `--lay-tile-gap`, which the home layout's stylesheet
  * declares, as the original's layout.css did.
  */

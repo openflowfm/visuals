@@ -16,15 +16,15 @@ import './OutputPanel.css';
 const displayName = (d: output.Display) => `${d.index + 1}. ${d.name} (${d.width}×${d.height})${d.main ? ' · menu bar' : ''}`;
 
 /**
- * How the output fills its display, in a line: the whole picture with black bars
- * where the shapes differ, or, on a display turned on its side, filling it.
+ * How the output fills its display, in a line: filling it (drawn tall on a display
+ * turned on its side), or the whole picture with black bars where the shapes differ.
+ * Read from the picture's size against the display's.
  */
 export function fitLine(status: output.Status): string {
   const shown = status.display;
   if (!shown) return 'The whole picture, with black bars where the display is a different shape; a display turned on its side is filled.';
-  if (shown.height > shown.width) return `Fills ${shown.name}, drawn tall to match it.`;
   const size = status.size;
-  if (!size || (size[0] === shown.width && size[1] === shown.height)) return `Fills ${shown.name}.`;
+  if (!size || (size[0] === shown.width && size[1] === shown.height)) return shown.height > shown.width ? `Fills ${shown.name}, drawn tall to match it.` : `Fills ${shown.name}.`;
   const bars = size[0] < shown.width ? 'at the sides' : 'above and below';
   return `The whole picture, ${size[0]}×${size[1]} on ${shown.name}, with black bars ${bars}.`;
 }
@@ -47,7 +47,7 @@ export function renderLine(r: output.Render, display: output.Display | null): st
 
 /**
  * How the output is drawn: resolution, render scale and frame-rate cap. Read once and set
- * through `output.setRender`; a failed call (not in the native app yet) keeps the choice quietly.
+ * through `output.setRender`, showing what the app kept; a failed call keeps the choice quietly.
  */
 function RenderSettings({ display }: { display: output.Display | null }) {
   const [r, setR] = useState<output.Render>(output.RENDER_DEFAULT);

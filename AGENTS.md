@@ -57,7 +57,8 @@ a screen or a part of this app is `app/src/ui/`. To change both at once:
    `npm install`); once the zen PR merges, pin zen's `main` sha and merge here.
 
 The library rules zen holds its own code to (only `toCssVars()` variables, no literal
-colours or radii, the tiers) still describe `app/src/ui/`, but nothing here tests them yet.
+colours or radii, the tiers) still describe `app/src/ui/`. `app/src/ui/contract.test.ts` holds
+the first two (its allowlists only shrink); nothing here tests the tiers yet.
 
 A change runs only the build and a compile check: `cargo check -p visuals-engine --all-targets`
 for `engine/`, `cargo build -p visuals-app` (and the lab build) for `app/src-tauri/`, and
@@ -78,6 +79,7 @@ CI catches it.
 | `cargo fmt --all --check` | the Rust is formatted (`rustfmt.toml`: width 200; `cargo fmt --all` fixes it) | test pass after a `.rs` change, and CI |
 | `npm run format:check` | the editor page (`app/src`) is formatted with Prettier (`.prettierrc.json`: single quotes, width 200; `npx prettier --write app/src` fixes it) | test pass after a change under `app/src`, and CI |
 | `npm run typecheck` | the editor page's TypeScript (`app/src`) and the vite and vitest configs compile | any `.ts`/`.tsx` change |
+| `npx vitest run --project unit app/src/ui/contract.test.ts` | zen's styling rule over `app/src/ui/`: it reads only the variables zen's contract produces (`toCssVars()`) or ones it declares, and has no literal colours or radii and no `light-dark()`; the few literals and zen layout variables with no contract name are allowlisted in the test, one reason each, and the lists only shrink | test pass after any CSS or inline style change under `app/src/ui/`, and CI |
 | `npx vitest run --project unit <files>` | targeted unit tests (`app/src/**/*.test.{ts,tsx}`, `app/src/ui/` among them); they run in node, and a file that mounts components in a DOM opts into one on its first line: `// @vitest-environment happy-dom` (Testing Library and user-event; `ui/model/library.dom.test.tsx` is the pattern, and `ui/model/useLive.test.tsx` for a hook on `ui/fixtures/`' backend) or `// @vitest-environment jsdom` (the tests that came from zen, in `app/src/ui/`). `app/src/ui/test-setup.ts` adds jest-dom's matchers and Testing Library's cleanup | test pass: the tests next to what changed; CI runs them all (`npm test`) |
 | `npm run test:stories` (or `npx vitest run --project stories <files>`) | every Storybook story renders in headless Chromium without throwing, and its `play` checks pass: the UI's parts (`app/src/ui/**/*.stories.tsx`, titled `open[flow]/visuals/…`, on `app/src/ui/fixtures/`) and the whole app (`app/src/App.stories.tsx`, over `zenBridge.ts`, on `app/src/stories/` answering Tauri's IPC), never the Rust app. No story is tagged `!test`; a play checks behaviour, never layout. Needs Playwright's Chromium once (`npx playwright install chromium`) | test pass after a change under `app/src/ui/`, to a story, `app/src/stories/`, `.storybook/`, `zenBridge.ts`, `main.css`, or zen's pin, and CI |
 | `npm run storybook`, `npm run build-storybook` | Storybook with hot reload on port 6006 (or `PORT`), or built into `storybook-static/`: the UI's parts and the whole app, with zen's toolbar (theme pack, mode, facets) and a Desk menu. Agents add `-- --ci --no-open --host 127.0.0.1`, run it in the background with a `trap` that stops it, and check `ps` afterwards | to look at a component's states; `build-storybook` after a change to `.storybook/` |

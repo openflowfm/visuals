@@ -4,11 +4,12 @@ import type { ReactNode } from 'react';
  * **Job.** visual[flow]'s icons: one `Icon` with a name from a fixed set.
  *
  * **Changed.** Nothing but the class (`vs-icon`, the library's prefix, was
- * `lay-icon`): a port of `app/src/layout/icons.tsx`, the same exports and glyphs.
+ * `lay-icon`): a port of the old `app/src/layout/icons.tsx` (retired in #257),
+ * the same exports and glyphs.
  *
  * **Kept.** Everything below, from the original:
  *
- * The macOS layout's icons (app/src/layout/): one `Icon` with a name from a
+ * The macOS layout's icons: one `Icon` with a name from a
  * fixed set, drawn here for this app (not SF Symbols, not from any icon set),
  * in `currentColor`, so a row's or a button's colour is the icon's too.
  *
@@ -117,7 +118,7 @@ const GLYPHS: Record<IconName, ReactNode> = {
   playlist: <path d={`${rows}M10.25 9.5 14 11.75 10.25 14Z`} />,
   // Rows, and a spark where the third ends: it fills itself.
   'smart-playlist': <path d={`${rows}M12 9.25Q12.25 11.5 14.5 11.75Q12.25 12 12 14.25Q11.75 12 9.5 11.75Q11.75 11.5 12 9.25Z`} />,
-  // The chevrons' 45° matches the macOS disclosure button's (macos/controls.tsx).
+  // The chevrons' 45° matches the macOS disclosure button's (the old app/src/macos/controls.tsx, retired in #239).
   'chevron-down': <path d="M4.5 6.25 8 9.75 11.5 6.25" />,
   'chevron-right': <path d="M6.25 4.5 9.75 8 6.25 11.5" />,
   search: (

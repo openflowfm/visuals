@@ -11,6 +11,10 @@
   z-index: 1;
   flex: none;
   display: flex;
+  /* One row, always: the grid reaches up behind exactly `--vs-libhead-h`, so the head must never
+     wrap taller. The title gives way (ellipsis); the count, the switch and the picker (about 210px
+     with the pad) fit the main column at the window's 560px minimum, docked panes or not. */
+  flex-wrap: nowrap;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;

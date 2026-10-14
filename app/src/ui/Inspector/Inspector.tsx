@@ -86,10 +86,13 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
   }, [toast]);
   useEscape(onClose, toast ? dismiss : undefined);
   // Never play goes on at once, and the toast keeps what to put back: only those that weren't already never played.
+  // Its words count those newly hidden (all picked, when every one already was).
   const onNever = (keys: string[], change: LibraryChange) => {
     onSet(keys, change);
-    if (change.hidden) setToast({ restore: (on ?? []).filter((x) => !x.hidden).map((x) => x.row.key), n: keys.length });
-    else setToast(null);
+    if (change.hidden) {
+      const restore = (on ?? []).filter((x) => !x.hidden).map((x) => x.row.key);
+      setToast({ restore, n: restore.length || keys.length });
+    } else setToast(null);
   };
 
   return (
@@ -162,7 +165,7 @@ export function Inspector({ map = true, ...props }: InspectorProps & InspectorMa
 /** How long the Never toast stays, in ms. */
 export const TOAST_FOR = 6000;
 
-/** The Never toast: how many it turned on for, and the keys to turn back off on Undo. */
+/** The Never toast: how many it newly turned on for (its words' number), and the keys to turn back off on Undo. */
 interface NeverToast {
   restore: string[];
   n: number;

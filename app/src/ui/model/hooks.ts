@@ -54,15 +54,30 @@ export function usePlaceBench(ref: React.RefObject<HTMLElement | null>) {
 /**
  * Follow one of the app's events (`pl.onLive`, `fx.onFx`, `link.onFrame`…) while
  * the component is shown. The handler is read fresh on every event, so it can
- * use the latest props and state without resubscribing.
+ * use the latest props and state without resubscribing. It unlistens on unmount
+ * (at once when the subscription has resolved, else as soon as it does), and a
+ * subscribe that throws or rejects (not in the app: a browser tab, a test)
+ * follows nothing, quietly.
  */
 export function useTauriEvent<T>(subscribe: (f: (payload: T) => void) => Promise<UnlistenFn>, handler: (payload: T) => void) {
   const latest = useRef(handler);
   latest.current = handler;
   useEffect(() => {
-    const off = subscribe((payload) => latest.current(payload));
+    let live = true;
+    let unlisten: UnlistenFn | undefined;
+    let pending: Promise<UnlistenFn>;
+    try {
+      pending = subscribe((payload) => latest.current(payload));
+    } catch {
+      return;
+    }
+    pending.then(
+      (u) => (live ? (unlisten = u) : u()),
+      () => {},
+    );
     return () => {
-      off.then((f) => f());
+      live = false;
+      unlisten?.();
     };
   }, [subscribe]);
 }

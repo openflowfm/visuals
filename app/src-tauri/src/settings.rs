@@ -56,6 +56,7 @@ const FIRST_RUN: &str = "first_run.json";
 const SPECS: &[Spec] = &[
     Spec { name: "audio.json", version: 1, what: "audio input setting", wrapped: false, migrate: audio_from },
     Spec { name: "output.json", version: 1, what: "output display setting", wrapped: false, migrate: nothing },
+    Spec { name: "render.json", version: 1, what: "output render setting", wrapped: false, migrate: nothing },
     Spec { name: "tempo.json", version: 1, what: "tempo", wrapped: false, migrate: nothing },
     Spec { name: FIRST_RUN, version: 1, what: "first-run setting", wrapped: false, migrate: nothing },
     Spec { name: "played.json", version: 1, what: "recently played list", wrapped: true, migrate: nothing },

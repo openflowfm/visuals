@@ -66,7 +66,9 @@ describe('the library map in the inspector', () => {
     expect(screen.getByRole('heading', { name: '4 selected' })).toBeTruthy();
     const pictures = document.querySelector('.vs-inspector-pictures')!;
     expect(before(pictures, mapOf())).toBe(true);
-    expect(cursor().textContent).toMatch(/playing$/);
+    // The cursor starts on the first pick, ringed, not on the preset playing.
+    expect(cursor().textContent).not.toMatch(/playing$/);
+    expect(cursor()).toHaveAttribute('aria-selected', 'true');
   });
 
   it('stays under a source, and with nothing playing says what the dots are', () => {

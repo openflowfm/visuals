@@ -3,7 +3,7 @@
  * shaped as the layout's parts take them, so the shell's story and each part's
  * own tell the same moment: Warm-up playing its third preset.
  *
- * A port of visual[flow]'s `app/src/layout/fixtures.ts`: the same exports.
+ * A port of the old `app/src/layout/fixtures.ts` (retired in #239): the same exports.
  */
 import type { LibraryRow } from '../model/api';
 import { playsFrom } from '../model/home';
