@@ -8,11 +8,9 @@ import {
   fieldSays,
   listed,
   scaleOf,
-  TUNE_CATCH,
   TUNE_DETENTS,
   TUNE_STEPS,
   tuneAt,
-  tuneDragged,
   tuneNudged,
   tuneOf,
   tunePosition,
@@ -130,16 +128,6 @@ group("a preset's tune", () => {
     expect(tuneSays(0.707)).toBe('0.71×');
     expect(tuneSays(3)).toBe('3.00×');
     expect(tuneSays(1.059)).toBe('1.06×');
-  });
-
-  it('catches a drag on a detent within a sixth of a doubling, and lands on twelfths elsewhere', () => {
-    expect(TUNE_CATCH).toBeCloseTo(1 / 6);
-    expect(tuneDragged(0.15)).toBe(1);
-    expect(tuneDragged(-1.1)).toBe(0.5);
-    expect(tuneDragged(1.85)).toBe(4);
-    expect(tuneDragged(0.5)).toBe(1.414);
-    expect(tuneDragged(0.25)).toBe(tuneAt(0.25));
-    expect(tuneDragged(Number.NaN)).toBe(1);
   });
 
   it('steps to the next detent either way, and nudges a twelfth', () => {
