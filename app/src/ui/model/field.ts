@@ -250,18 +250,15 @@ export function tunedSays(d: Dot): string {
 /**
  * The rings round several presets picked together, as one path: a small circle
  * round each one's dot, `r` box units out. Nothing unless two or more different
- * keys are given (one pick is the inspector's subject, not a set); a key with no
- * dot (no look yet) is skipped, and a key given twice is ringed once.
+ * keys given have a dot (one pick is the inspector's subject, not a set); a key
+ * with no dot (no look yet) is skipped, and a key given twice is ringed once.
  */
 export function marksPath(dots: readonly Dot[], keys: readonly string[] | undefined, r = 3.6): string {
   const want = new Set(keys);
   if (want.size < 2) return '';
-  let d = '';
-  for (const { row, x, y } of dots) {
-    if (!want.delete(row.key)) continue;
-    d += `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
-  }
-  return d;
+  const found = dots.filter(({ row }) => want.delete(row.key));
+  if (found.length < 2) return '';
+  return found.map(({ x, y }) => `M${(x - r).toFixed(1)} ${y.toFixed(1)}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`).join('');
 }
 
 /**

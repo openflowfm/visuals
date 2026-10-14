@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { ActionButton } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
-import { getCurrentWebview, type UnlistenFn } from '../model/ipc';
+import { useTauriEvent } from '../model/hooks';
+import { getCurrentWebview, type DragDropEvent, type EventCallback, type UnlistenFn } from '../model/ipc';
 import * as pack from '../model/pack';
 import './Pack.css';
 
@@ -17,35 +18,12 @@ const why = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const added = (n: number): Note => ({ text: `Added ${count(n)} preset${n === 1 ? '' : 's'}`, error: false });
 const failed = (e: unknown): Note => ({ text: why(e), error: true });
 
-/** Calls `subscribe`'s listener until unmount, unlistening even when it resolves after. */
-export function useListen(subscribe: () => Promise<UnlistenFn>) {
-  const latest = useRef(subscribe);
-  latest.current = subscribe;
-  useEffect(() => {
-    let live = true;
-    let unlisten: UnlistenFn | undefined;
-    let pending: Promise<UnlistenFn>;
-    try {
-      pending = latest.current();
-    } catch {
-      return; // not in the app (a browser tab, a test): nothing to follow
-    }
-    pending.then(
-      (u) => (live ? (unlisten = u) : u()),
-      () => {},
-    );
-    return () => {
-      live = false;
-      unlisten?.();
-    };
-  }, []);
-}
+/** Files dragged over the window, from the webview installed now. */
+const onDragDrop = (f: EventCallback<DragDropEvent>): Promise<UnlistenFn> => getCurrentWebview().onDragDropEvent(f);
 
 /** Calls `open` when the app menu's Credits item is chosen. */
 export function useCreditsMenu(open: () => void) {
-  const latest = useRef(open);
-  latest.current = open;
-  useListen(() => pack.onCredits(() => latest.current()));
+  useTauriEvent<void>(pack.onCredits, () => open());
 }
 
 /**
@@ -55,22 +33,20 @@ export function useCreditsMenu(open: () => void) {
 export function useDropToAdd(): { over: boolean; note: Note | null } {
   const [over, setOver] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
-  useListen(() =>
-    getCurrentWebview().onDragDropEvent(({ payload }) => {
-      if (payload.type === 'enter' || payload.type === 'over') {
-        setOver(true);
-      } else if (payload.type === 'leave') {
-        setOver(false);
-      } else {
-        setOver(false);
-        if (!payload.paths.length) return;
-        pack.add(payload.paths.map((path) => ({ path }))).then(
-          (n) => setNote(added(n)),
-          (e) => setNote(failed(e)),
-        );
-      }
-    }),
-  );
+  useTauriEvent(onDragDrop, ({ payload }) => {
+    if (payload.type === 'enter' || payload.type === 'over') {
+      setOver(true);
+    } else if (payload.type === 'leave') {
+      setOver(false);
+    } else {
+      setOver(false);
+      if (!payload.paths.length) return;
+      pack.add(payload.paths.map((path) => ({ path }))).then(
+        (n) => setNote(added(n)),
+        (e) => setNote(failed(e)),
+      );
+    }
+  });
   return { over, note };
 }
 
@@ -127,7 +103,7 @@ export function PackBar({ presets, dropped, credits, onCredits }: PackBarProps) 
       live = false;
     };
   }, []);
-  useListen(() => pack.onProgress(setStatus));
+  useTauriEvent(pack.onProgress, setStatus);
   useEffect(() => setNote(dropped), [dropped]);
 
   const action = status && pack.packAction(status);

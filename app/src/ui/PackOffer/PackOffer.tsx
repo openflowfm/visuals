@@ -3,7 +3,8 @@ import { ActionButton } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
 import * as pack from '../model/pack';
 import { say } from '../model/words';
-import { PackProgress, useListen } from '../Pack/Pack';
+import { useTauriEvent } from '../model/hooks';
+import { PackProgress } from '../Pack/Pack';
 import './PackOffer.css';
 
 const count = (n: number) => n.toLocaleString('en-US');
@@ -24,7 +25,7 @@ export function offers(s: pack.PackStatus): boolean {
  *
  * **Changed.** One quiet line of type on the main column's inset (`--mat-plate-inset`); the
  * button is the core `ActionButton`; the progress is Pack's `PackProgress` (a tone step, no box)
- * rather than a second copy of its markup; Pack's own `useListen` instead of a copy of it.
+ * rather than a second copy of its markup; the app's `useTauriEvent` for the progress.
  *
  * **Kept.** When it offers, every line and label, the `role="status"` and the download flow.
  */
@@ -41,7 +42,7 @@ export function PackOffer(): JSX.Element | null {
       live = false;
     };
   }, []);
-  useListen(() => pack.onProgress(setStatus));
+  useTauriEvent(pack.onProgress, setStatus);
 
   const action = status && offers(status) ? pack.packAction(status) : null;
   if (!status || !action) return null;

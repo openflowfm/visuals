@@ -2,42 +2,12 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setBridge, type DragDropEvent, type EventCallback, type InvokeArgs, type UnlistenFn } from '../model/ipc';
-import { useDropToAdd, useListen } from './Pack';
+import { useDropToAdd } from './Pack';
 
 let restore: (() => void) | undefined;
 afterEach(() => {
   restore?.();
   restore = undefined;
-});
-
-describe('useListen', () => {
-  it('unlistens when the subscription resolves after unmount', async () => {
-    let resolve!: (u: UnlistenFn) => void;
-    const unlisten = vi.fn();
-    const { unmount } = renderHook(() => useListen(() => new Promise<UnlistenFn>((r) => (resolve = r))));
-    unmount();
-    expect(unlisten).not.toHaveBeenCalled();
-    await act(async () => resolve(unlisten));
-    expect(unlisten).toHaveBeenCalledTimes(1);
-  });
-
-  it('unlistens on unmount once the subscription has resolved', async () => {
-    const unlisten = vi.fn();
-    const { unmount } = renderHook(() => useListen(() => Promise.resolve(unlisten)));
-    await act(async () => {});
-    expect(unlisten).not.toHaveBeenCalled();
-    unmount();
-    expect(unlisten).toHaveBeenCalledTimes(1);
-  });
-
-  it('swallows a subscribe that throws at once, and unmounts cleanly', () => {
-    const { unmount } = renderHook(() =>
-      useListen(() => {
-        throw new Error('not in the app');
-      }),
-    );
-    expect(() => unmount()).not.toThrow();
-  });
 });
 
 /** A webview whose drag-and-drop events the test sends, and a `pack_add` answered by `answer`. */
