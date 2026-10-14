@@ -892,6 +892,10 @@ mod tests {
 /// 12. `Resolution` JSON: `"display"` or `[w, h]`, round trip; anything else is rejected.
 /// 13. `Render` JSON: `{ resolution, scale, fps }` round trip, `fps: null` for no cap; missing fields default.
 /// 14. `Render::frame_time`: `None` without a cap, one frame's time (1/fps) with one.
+///
+/// Not covered: `bench::Loop::hold_to_cap`'s due times (no drift; a stall restarts them). It reads
+/// the clock and sleeps inline on a private method, so it needs a pure `next_due` extracted first
+/// (a follow-up for a developer).
 #[cfg(test)]
 mod render_tests {
     use super::*;
