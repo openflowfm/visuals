@@ -205,13 +205,6 @@ export function tuneSays(multiplier: number): string {
   return f ? `${f}×` : `${multiplier.toFixed(2)}×`;
 }
 
-/** Where a drag at `position` lands: on a detent when within `TUNE_CATCH` of one, otherwise on its twelfth (`tuneAt`). */
-export function tuneDragged(position: number): number {
-  if (!Number.isFinite(position)) return 1;
-  for (const d of TUNE_DETENTS) if (Math.abs(position - Math.log2(d)) <= TUNE_CATCH) return d;
-  return tuneAt(position);
-}
-
 /** The next detent above (`way` 1) or below (`way` −1) a multiplier; an end stays where it is. */
 export function tuneStepped(multiplier: number, way: 1 | -1): number {
   const eps = 1e-9;

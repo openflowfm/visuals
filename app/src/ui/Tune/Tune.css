@@ -135,23 +135,3 @@
     opacity: 1;
   }
 }
-
-/* Reduced transparency (the system's, or the layout's data-transparency): an opaque knob, no
-   backdrop, on the top layer's solid fill. zen's materials have no opaque knob yet, so the thumb
-   is reached by its documented part. */
-[data-transparency='reduced'] .vs-tune-rail [data-part='thumb'] {
-  --lib-surface-fill: var(--layer-top-solid);
-  --lib-surface-texture: none;
-  background: var(--layer-top-solid);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .vs-tune-rail [data-part='thumb'] {
-    --lib-surface-fill: var(--layer-top-solid);
-    --lib-surface-texture: none;
-    background: var(--layer-top-solid);
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
