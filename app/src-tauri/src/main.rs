@@ -93,6 +93,8 @@ macro_rules! commands {
             output::output_open,
             output::output_close,
             output::output_status,
+            output::output_render,
+            output::output_set_render,
             link::link_state,
             link::link_enable,
             link::link_set_one,
