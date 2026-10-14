@@ -113,16 +113,10 @@
 .vs-link-settings .vs-link-quiet {
   color: var(--text-3);
 }
-.vs-link-settings .vs-link-one {
-  flex-wrap: wrap;
-  align-items: center;
+/* The bar start's keys: zen's SettingsRow, its name then the keys. settings.css's 52px keys. */
+.vs-link-settings .yh-settings-row__control {
   gap: var(--space-2);
 }
-.vs-link-settings .vs-link-one-name {
-  flex: 1 0 100%;
-  color: var(--text-3);
-}
-/* settings.css's 52px keys. */
-.vs-link-settings .vs-link-one .lib-action-button-face {
+.vs-link-settings .yh-settings-row .lib-action-button-face {
   min-width: calc(var(--space-5) * 2 + var(--space-1));
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent, ReactNode } from 'react';
-import { Text, type TextProps } from '@satoramoto/zen';
+import { SearchField, Text, type TextProps } from '@satoramoto/zen';
 import { createPortal } from 'react-dom';
 import { FILTERS_KEY, remember, remembered } from '../model/home';
 import { PackOffer } from '../PackOffer/PackOffer';
@@ -170,6 +170,8 @@ const REFOLLOW = 300;
 
 /** A group with more values than this gets a box to find one. */
 const FIND_FROM = 12;
+/** The find box's width on the home, in px: library.css's 220. */
+const FIND_WIDTH = 220;
 /** The most values an open group lists at once (authors run to thousands); the find box reaches the rest. */
 const VALUES_CAP = 150;
 
@@ -975,7 +977,8 @@ export function Values({ group, values, selected, find, onFind, onPick, home }: 
     // A caption-size Text: the find box inherits its type (the app's input reset is `font: inherit`).
     <Text as="div" size="caption" leading="normal" className="vs-library-values" ariaRole="group" aria-label={`${groupSays(group)} values`}>
       {values.length > FIND_FROM && (
-        <input className="vs-library-values-find" type="search" aria-label={findSays(group)} placeholder={findSays(group)} value={find} onChange={(ev) => onFind(ev.target.value)} />
+        // zen's SearchField: on the home as wide as library.css's 220px find box, in the editor's column the column's width.
+        <SearchField label={findSays(group)} placeholder={findSays(group)} value={find} onInput={onFind} width={home ? FIND_WIDTH : undefined} />
       )}
       {all.length === 0 && <Note>{group === 'tags' && !values.length ? 'No tags yet. Select a preset to tag it.' : 'none'}</Note>}
       {levels ? (

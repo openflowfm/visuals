@@ -143,8 +143,8 @@ let commands: Promise<unknown> = Promise.resolve();
  * the Select out (default).
  * **Tuning knobs**
  * - `--vs-audio-note-width`: maximum notice width beside the picker.
- * - `--vs-audio-fold-width`: the folded mixer's width (Home), so its Selects aren't squeezed; folded, the
- *   popover takes the side panels' `raised` layer and each lane's channels are one Select of stereo pairs.
+ * - `--vs-audio-fold-width`: the folded mixer's width (Home), so its Selects aren't squeezed; folded, each
+ *   lane's channels are one Select of stereo pairs (the popover is zen's float layer, as every popover is).
  */
 export function SourcePicker({
   onError,
@@ -351,7 +351,6 @@ export function SourcePicker({
                 ? `Audio mixer: ${status.main.enabled ? `listening to ${status.main.choice?.name ?? 'the main source'}` : 'main source off'}${status.mic.enabled ? ' and the microphone' : ''}`
                 : 'Audio mixer: main and microphone inputs'
             }
-            layer={folded ? 'raised' : undefined}
             title={folded ? sourceTitle(status.main.enabled ? (status.main.choice?.name ?? null) : null) : status.mic.enabled ? 'Mixer (main and microphone)' : 'Mixer'}
             // The faders glyph, and "+ mic" while the microphone is mixed in.
             label={

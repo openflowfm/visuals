@@ -101,13 +101,12 @@ export const AllIcons: Story = {
   name: 'All icons',
   play: async ({ canvasElement }) => {
     for (const name of ICON_NAMES) {
-      const drawn = canvasElement.querySelectorAll<SVGSVGElement>(`svg[data-icon="${name}"]`);
+      const drawn = canvasElement.querySelectorAll<HTMLElement>(`.vs-icon[data-icon="${name}"]`);
       await expect(drawn.length).toBe(SIZES.length * SURFACES.length * COLOURS.length);
       for (const size of SIZES) {
-        const one = [...drawn].find((s) => s.getAttribute('width') === String(size));
+        const one = [...drawn].find((s) => s.style.getPropertyValue('--lib-icon-size') === `${size}px`);
         await expect(one, `${name} at ${size}`).toBeDefined();
-        await expect(one!.getAttribute('height')).toBe(String(size));
-        await expect(one!.childElementCount).toBeGreaterThan(0);
+        await expect(one!.querySelector('svg')!.childElementCount).toBeGreaterThan(0);
         // Without a label it is hidden from screen readers.
         await expect(one).toHaveAttribute('aria-hidden', 'true');
       }
@@ -122,7 +121,7 @@ export const InContext: Story = {
   play: async ({ canvas }) => {
     for (const name of ['previous', 'play', 'pause', 'next', 'stop']) {
       const img = canvas.getByRole('img', { name });
-      await expect(img.tagName.toLowerCase()).toBe('svg');
+      await expect(img.querySelector('svg')).toBeTruthy();
       await expect(img).not.toHaveAttribute('aria-hidden');
     }
     // The rows' icons are named by their text, so screen readers skip them.

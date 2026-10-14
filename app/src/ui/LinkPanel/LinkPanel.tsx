@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActionButton } from '@satoramoto/zen';
+import { ActionButton, SettingsRow } from '@satoramoto/zen';
 import { Select } from '@satoramoto/zen';
 import { Switch, Toggle } from '@satoramoto/zen';
 import { useNotice, useTauriEvent } from '../model/hooks';
@@ -105,8 +105,7 @@ export function LinkSettings() {
       <p className="vs-link-status" data-on={frame.enabled && frame.peers > 0 ? '' : undefined}>
         <Tempo bpm={frame.tempo} /> bpm · {link.statusText(frame)}
       </p>
-      <div className="vs-link-one" role="group" aria-label={Say('the one')}>
-        <span className="vs-link-one-name">{Say('the one')}</span>
+      <SettingsRow label={Say('the one')}>
         <ActionButton onPress={() => run(link.nudge(-1), `move the ${start}`)} label={`Move the ${start} a beat earlier`} title={`The ${start} a beat earlier`}>
           −
         </ActionButton>
@@ -119,7 +118,7 @@ export function LinkSettings() {
         <ActionButton onPress={() => run(link.resetOne(), `reset the ${start}`)} label={`Reset the ${start}`} title="Back to Link's own bar lines">
           reset
         </ActionButton>
-      </div>
+      </SettingsRow>
       {trouble}
     </Text>
   );

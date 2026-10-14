@@ -24,7 +24,6 @@
 }
 
 .vs-library-search,
-.vs-library-values-find,
 .vs-library-name-input {
   padding: var(--space-1) calc(var(--space-1) * 1.5);
   font: inherit;
@@ -34,17 +33,15 @@
   border-radius: var(--radius-input);
   min-width: 0;
 }
-/* The editor's search inherits the page's lead size from the column; the find box and the name
-   input take the caption size from the values box and the picked line around them. */
+/* The editor's search inherits the page's lead size from the column; the name input takes the
+   caption size from the picked line around it. */
 .vs-library-search {
   margin: var(--space-2) var(--space-2) var(--space-1);
 }
-.vs-library-search::placeholder,
-.vs-library-values-find::placeholder {
+.vs-library-search::placeholder {
   color: var(--vs-library-caption);
 }
 .vs-library-search:focus-visible,
-.vs-library-values-find:focus-visible,
 .vs-library-name-input:focus-visible {
   border-color: var(--vs-focus-ring);
 }
@@ -436,17 +433,10 @@
 .vs-library-home .vs-library-value[data-sub] .vs-library-value-name::before {
   content: none;
 }
-.vs-library-home .vs-library-values-find {
+/* The find box is zen's SearchField (Library.tsx sets its width); it stays at its own width. */
+.vs-library-home .vs-library-values > .yh-search-field {
   align-self: flex-start;
-  /* 220px: seven of the 32px step less 4. library.css 3px 0, rounded to the hairline. */
-  width: calc(var(--space-6) * 7 - var(--space-1));
   max-width: 100%;
-  padding: 2px 0;
-  color: var(--text-1);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-input);
-  font-family: var(--font-sans);
 }
 .vs-library-home .vs-library-values .vs-library-note {
   padding: 0;
@@ -568,7 +558,6 @@
     .vs-library-filter,
     .vs-library-chip,
     .vs-library-link,
-    .vs-library-values-find,
     .vs-library-empty-clear,
     .vs-library-name-input
   ):focus-visible {
