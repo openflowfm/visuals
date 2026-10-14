@@ -873,3 +873,203 @@ mod tests {
         assert_eq!(preset_from(Some("/x.milk".into()), library).as_deref(), Some("/x.milk"));
     }
 }
+
+/// Render settings (visuals#266), tested from their public signatures and the PR's decisions.
+///
+/// Spec:
+/// 1. `Render::kept` clamps `scale` into 0.25–4 (the edges kept, values inside unchanged).
+/// 2. `Render::kept` turns a NaN, infinite, zero or negative `scale` into a finite one in 0.25–4.
+/// 3. `Render::kept` clamps `fps` into 10–1000 and leaves `None` (every refresh) alone.
+/// 4. `Render::kept` turns a NaN, infinite, zero or negative `fps` into `None` or one in 10–1000.
+/// 5. `Render::kept` keeps a fixed resolution's sides within 1–`MAX_SIDE` (8192), the limit itself kept.
+/// 6. `Render::kept` is idempotent.
+/// 7. `Render::base`: `Display` is the display's own pixels; a fixed resolution is used as is on a
+///    landscape (or square) display and turned on a portrait one.
+/// 8. `Render::base`: a portrait fixed resolution on a landscape display is turned to match it.
+/// 9. `Render::drawn` is the base times the scale while under the caps, 3840×2160's pixel count itself included.
+/// 10. `Render::drawn` over `MAX_PIXELS` draws at (about) that count, keeping the base's aspect.
+/// 11. `Render::drawn` never draws a side over `MAX_SIDE`, keeping the aspect, and never a zero side.
+/// 12. `Resolution` JSON: `"display"` or `[w, h]`, round trip; anything else is rejected.
+/// 13. `Render` JSON: `{ resolution, scale, fps }` round trip, `fps: null` for no cap; missing fields default.
+/// 14. `Render::frame_time`: `None` without a cap, one frame's time (1/fps) with one.
+///
+/// Not covered: `bench::Loop::hold_to_cap`'s due times (no drift; a stall restarts them). It reads
+/// the clock and sleeps inline on a private method, so it needs a pure `next_due` extracted first
+/// (a follow-up for a developer).
+#[cfg(test)]
+mod render_tests {
+    use super::*;
+    use std::time::Duration;
+
+    fn r(resolution: Resolution, scale: f64, fps: Option<f64>) -> Render {
+        Render { resolution, scale, fps }
+    }
+
+    /// Whether `drawn` keeps `base`'s aspect to within a pixel's rounding.
+    fn same_aspect(drawn: (u32, u32), base: (u32, u32)) -> bool {
+        let lhs = drawn.0 as f64 * base.1 as f64;
+        let rhs = drawn.1 as f64 * base.0 as f64;
+        (lhs - rhs).abs() <= base.0.max(base.1) as f64
+    }
+
+    #[test]
+    fn spec1_kept_clamps_scale_into_its_range() {
+        let k = |s| r(Resolution::Display, s, None).kept().scale;
+        assert_eq!(k(0.1), 0.25);
+        assert_eq!(k(0.25), 0.25);
+        assert_eq!(k(1.5), 1.5);
+        assert_eq!(k(4.0), 4.0);
+        assert_eq!(k(5.0), 4.0);
+    }
+
+    #[test]
+    fn spec2_kept_makes_a_bad_scale_finite_and_in_range() {
+        for s in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -0.0, -1.0] {
+            let got = r(Resolution::Display, s, None).kept().scale;
+            assert!(got.is_finite() && (0.25..=4.0).contains(&got), "scale {s} kept as {got}");
+        }
+    }
+
+    #[test]
+    fn spec3_kept_clamps_fps_into_its_range_and_leaves_none() {
+        let k = |f| r(Resolution::Display, 1.0, f).kept().fps;
+        assert_eq!(k(None), None);
+        assert_eq!(k(Some(5.0)), Some(10.0));
+        assert_eq!(k(Some(10.0)), Some(10.0));
+        assert_eq!(k(Some(60.0)), Some(60.0));
+        assert_eq!(k(Some(1000.0)), Some(1000.0));
+        assert_eq!(k(Some(2000.0)), Some(1000.0));
+    }
+
+    #[test]
+    fn spec4_kept_makes_a_bad_fps_none_or_in_range() {
+        for f in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 0.0, -30.0] {
+            let got = r(Resolution::Display, 1.0, Some(f)).kept().fps;
+            assert!(got.is_none_or(|g| g.is_finite() && (10.0..=1000.0).contains(&g)), "fps {f} kept as {got:?}");
+        }
+    }
+
+    #[test]
+    fn spec5_kept_keeps_sides_between_one_and_max_side() {
+        let k = |w, h| r(Resolution::Size(w, h), 1.0, None).kept().resolution;
+        assert_eq!(k(MAX_SIDE, MAX_SIDE), Resolution::Size(MAX_SIDE, MAX_SIDE));
+        assert_eq!(k(1920, 1080), Resolution::Size(1920, 1080));
+        for (w, h) in [(MAX_SIDE + 1, 1080), (1920, 100_000), (u32::MAX, u32::MAX), (0, 1080), (1920, 0), (0, 0)] {
+            match k(w, h) {
+                Resolution::Display => {}
+                Resolution::Size(kw, kh) => assert!((1..=MAX_SIDE).contains(&kw) && (1..=MAX_SIDE).contains(&kh), "{w}×{h} kept as {kw}×{kh}"),
+            }
+        }
+        assert_eq!(k(1, 1), Resolution::Size(1, 1));
+    }
+
+    #[test]
+    fn spec6_kept_is_idempotent() {
+        for x in [Render::default(), r(Resolution::Size(9000, 0), f64::NAN, Some(0.0)), r(Resolution::Size(1280, 720), 7.0, Some(5000.0)), r(Resolution::Size(1080, 1920), 0.1, Some(-1.0))] {
+            let once = x.kept();
+            let twice = once.kept();
+            // NaN never survives `kept` (spec 2, 4), so plain equality holds.
+            assert_eq!(once, twice, "from {x:?}");
+        }
+    }
+
+    #[test]
+    fn spec7_base_is_the_display_or_the_resolution_turned_with_it() {
+        let display = Render::default();
+        assert_eq!(display.base((2560, 1440)), (2560, 1440));
+        assert_eq!(display.base((1440, 2560)), (1440, 2560));
+        let p720 = r(Resolution::Size(1280, 720), 1.0, None);
+        assert_eq!(p720.base((3840, 2160)), (1280, 720));
+        assert_eq!(p720.base((2000, 2000)), (1280, 720));
+        assert_eq!(p720.base((2160, 3840)), (720, 1280));
+    }
+
+    #[test]
+    fn spec8_base_turns_a_portrait_resolution_on_a_landscape_display() {
+        let tall = r(Resolution::Size(720, 1280), 1.0, None);
+        assert_eq!(tall.base((1920, 1080)), (1280, 720));
+        assert_eq!(tall.base((1080, 1920)), (720, 1280));
+    }
+
+    #[test]
+    fn spec9_drawn_is_base_times_scale_under_the_caps() {
+        assert_eq!(r(Resolution::Size(1920, 1080), 1.0, None).drawn((1920, 1080)), (1920, 1080));
+        assert_eq!(r(Resolution::Size(1920, 1080), 0.5, None).drawn((1920, 1080)), (960, 540));
+        assert_eq!(r(Resolution::Size(1920, 1080), 2.0, None).drawn((1920, 1080)), (3840, 2160));
+        assert_eq!(r(Resolution::Display, 1.5, None).drawn((2560, 1440)), (3840, 2160));
+        assert_eq!(r(Resolution::Display, 1.0, None).drawn((3840, 2160)), (3840, 2160));
+        assert_eq!(r(Resolution::Display, 0.5, None).drawn((1080, 1920)), (540, 960));
+    }
+
+    #[test]
+    fn spec10_drawn_caps_the_pixel_count_keeping_the_aspect() {
+        for (render, display) in [
+            (r(Resolution::Display, 2.0, None), (3840, 2160)),
+            (r(Resolution::Display, 1.0, None), (5120, 2880)),
+            (r(Resolution::Display, 1.0, None), (6016, 3384)),
+            (r(Resolution::Display, 2.0, None), (2160, 3840)),
+            (r(Resolution::Display, 4.0, None), (3440, 1440)),
+            (r(Resolution::Size(3840, 2160), 4.0, None), (1920, 1080)),
+        ] {
+            let base = render.base(display);
+            let (w, h) = render.drawn(display);
+            let pixels = w as u64 * h as u64;
+            assert!(pixels <= MAX_PIXELS, "{render:?} on {display:?}: {w}×{h} is {pixels} pixels");
+            assert!(pixels as f64 >= MAX_PIXELS as f64 * 0.99, "{render:?} on {display:?}: {w}×{h} falls well short of the cap");
+            assert!(same_aspect((w, h), base), "{render:?} on {display:?}: {w}×{h} against base {base:?}");
+        }
+        // 4K at 2×: exactly 4K.
+        assert_eq!(r(Resolution::Display, 2.0, None).drawn((3840, 2160)), (3840, 2160));
+    }
+
+    #[test]
+    fn spec11_drawn_keeps_sides_within_max_side_and_never_zero() {
+        let wide = r(Resolution::Size(8192, 100), 4.0, None);
+        let (w, h) = wide.drawn((1920, 1080));
+        assert!(w <= MAX_SIDE && h <= MAX_SIDE, "{w}×{h}");
+        assert!(same_aspect((w, h), wide.base((1920, 1080))), "{w}×{h}");
+        let tall = r(Resolution::Display, 4.0, None);
+        let (w, h) = tall.drawn((400, 8000));
+        assert!(w <= MAX_SIDE && h <= MAX_SIDE, "{w}×{h}");
+        let tiny = r(Resolution::Size(1, 1), 0.25, None);
+        let (w, h) = tiny.drawn((1920, 1080));
+        assert!(w >= 1 && h >= 1, "{w}×{h}");
+    }
+
+    #[test]
+    fn spec12_resolution_json_round_trips_and_rejects_the_rest() {
+        assert_eq!(serde_json::to_string(&Resolution::Display).unwrap(), "\"display\"");
+        assert_eq!(serde_json::to_string(&Resolution::Size(1280, 720)).unwrap(), "[1280,720]");
+        assert_eq!(serde_json::from_str::<Resolution>("\"display\"").unwrap(), Resolution::Display);
+        assert_eq!(serde_json::from_str::<Resolution>("[1280, 720]").unwrap(), Resolution::Size(1280, 720));
+        for x in [Resolution::Display, Resolution::Size(1, 1), Resolution::Size(MAX_SIDE, 4320)] {
+            assert_eq!(serde_json::from_str::<Resolution>(&serde_json::to_string(&x).unwrap()).unwrap(), x);
+        }
+        for bad in ["\"Display\"", "\"4k\"", "\"\"", "[1280]", "[1280, 720, 1]", "[-1, 720]", "null", "{}", "1080"] {
+            assert!(serde_json::from_str::<Resolution>(bad).is_err(), "{bad} was accepted");
+        }
+    }
+
+    #[test]
+    fn spec13_render_json_round_trips_with_defaults() {
+        let capped = r(Resolution::Size(1920, 1080), 1.5, Some(30.0));
+        let json = serde_json::to_value(capped).unwrap();
+        assert_eq!(json, serde_json::json!({ "resolution": [1920, 1080], "scale": 1.5, "fps": 30.0 }));
+        assert_eq!(serde_json::from_value::<Render>(json).unwrap(), capped);
+        let free = Render::default();
+        assert_eq!(serde_json::to_value(free).unwrap(), serde_json::json!({ "resolution": "display", "scale": 1.0, "fps": null }));
+        assert_eq!(serde_json::from_str::<Render>("{\"resolution\":\"display\",\"scale\":1,\"fps\":null}").unwrap(), free);
+        assert_eq!(serde_json::from_str::<Render>("{}").unwrap(), free);
+        assert_eq!(serde_json::from_str::<Render>("{\"scale\":2}").unwrap(), r(Resolution::Display, 2.0, None));
+    }
+
+    #[test]
+    fn spec14_frame_time_is_one_frame_at_the_cap() {
+        assert_eq!(Render::default().frame_time(), None);
+        let ft = |f: f64| r(Resolution::Display, 1.0, Some(f)).frame_time().unwrap();
+        let near = |a: Duration, b: Duration| a.abs_diff(b) <= Duration::from_micros(1);
+        assert!(near(ft(30.0), Duration::from_secs_f64(1.0 / 30.0)), "{:?}", ft(30.0));
+        assert!(near(ft(1000.0), Duration::from_millis(1)), "{:?}", ft(1000.0));
+        assert!(near(ft(10.0), Duration::from_millis(100)), "{:?}", ft(10.0));
+    }
+}
