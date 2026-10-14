@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActionButton } from '@satoramoto/zen';
 import { Segmented } from '@satoramoto/zen';
 import { Select } from '@satoramoto/zen';
@@ -51,12 +51,26 @@ export function renderLine(r: output.Render, display: output.Display | null): st
  */
 function RenderSettings({ display }: { display: output.Display | null }) {
   const [r, setR] = useState<output.Render>(output.RENDER_DEFAULT);
+  // The last choice wins: a reply to a request a later one has superseded is ignored
+  // (the first read included, once a choice has been made).
+  const latest = useRef(0);
   useEffect(() => {
-    output.render().then(setR, () => {});
+    output.render().then(
+      (kept) => {
+        if (latest.current === 0) setR(kept);
+      },
+      () => {},
+    );
   }, []);
   const change = (next: output.Render) => {
+    const ask = ++latest.current;
     setR(next);
-    output.setRender(next).then(setR, () => {});
+    output.setRender(next).then(
+      (kept) => {
+        if (ask === latest.current) setR(kept);
+      },
+      () => {},
+    );
   };
   const res = RESOLUTIONS.findIndex((x) => JSON.stringify(x.size) === JSON.stringify(r.resolution));
   return (
