@@ -29,7 +29,7 @@ const RESIZE_SETTLE_MS = 150;
  * (a drag recomputes the whole library's dots once, not on every pixel); the default 4:3 box
  * until measured, and always without a ResizeObserver.
  */
-function usePlotShape(room: RefObject<HTMLDivElement | null>): Box {
+export function usePlotShape(room: RefObject<HTMLDivElement | null>): Box {
   const [shape, setShape] = useState<Box>(BOX);
   useEffect(() => {
     const plot = room.current?.querySelector<HTMLElement>('.vs-field-plot');

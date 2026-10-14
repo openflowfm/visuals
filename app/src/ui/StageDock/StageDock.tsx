@@ -33,7 +33,7 @@ export const STAGE_DOCK_FORMS: Forms<StageDockForm> = [
  * the picture's top left; the dice and star at the foot's right end (`footStar`), ◀ ring ▶ dead
  * centre, no audio input (it is in the header, as Home's).
  */
-function useTransport(live: LiveState): TransportBarProps {
+export function useTransport(live: LiveState): TransportBarProps {
   const deck = live.deck;
   const position = useElapsed(live.since, live.current !== null, deck ? presetLength({ ...deck, hold: live.held }) : null);
   const name = live.current ? nameOf(live.current) : null;
