@@ -39,10 +39,18 @@ export function focusables(root: HTMLElement): HTMLElement[] {
  */
 const traps: object[] = [];
 
-/** Put `trap` on top of the stack. */
+/**
+ * Put `trap` on top of the stack, but under any trap inside it: a trap nested in
+ * one that mounts in the same render mounts first (React runs a child's effects
+ * before its parent's), and it is still the one on top.
+ */
 export function pushTrap(trap: object): void {
   removeTrap(trap);
-  traps.push(trap);
+  // Any object can be a trap; only elements say what they contain.
+  const isNode = (t: object): t is Node => typeof (t as Partial<Node>).contains === 'function';
+  const inner = isNode(trap) ? traps.findIndex((t) => t !== trap && isNode(t) && trap.contains(t)) : -1;
+  if (inner >= 0) traps.splice(inner, 0, trap);
+  else traps.push(trap);
 }
 
 /** Take `trap` off the stack, wherever it is in it. */

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActionButton } from '@satoramoto/zen';
 import { Segmented } from '@satoramoto/zen';
 import { Select } from '@satoramoto/zen';
@@ -22,9 +22,10 @@ const displayName = (d: output.Display) => `${d.index + 1}. ${d.name} (${d.width
  */
 export function fitLine(status: output.Status): string {
   const shown = status.display;
-  if (!shown) return 'The whole picture, with black bars where the display is a different shape; a display turned on its side is filled.';
   const size = status.size;
-  if (!size || (size[0] === shown.width && size[1] === shown.height)) return shown.height > shown.width ? `Fills ${shown.name}, drawn tall to match it.` : `Fills ${shown.name}.`;
+  // Without both the display and the picture's size, whether it fills can't be known: the general line.
+  if (!shown || !size) return 'The whole picture, with black bars where the display is a different shape; a display turned on its side is filled.';
+  if (size[0] === shown.width && size[1] === shown.height) return shown.height > shown.width ? `Fills ${shown.name}, drawn tall to match it.` : `Fills ${shown.name}.`;
   const bars = size[0] < shown.width ? 'at the sides' : 'above and below';
   return `The whole picture, ${size[0]}×${size[1]} on ${shown.name}, with black bars ${bars}.`;
 }
@@ -51,12 +52,26 @@ export function renderLine(r: output.Render, display: output.Display | null): st
  */
 function RenderSettings({ display }: { display: output.Display | null }) {
   const [r, setR] = useState<output.Render>(output.RENDER_DEFAULT);
+  // The last choice wins: a reply to a request a later one has superseded is ignored
+  // (the first read included, once a choice has been made).
+  const latest = useRef(0);
   useEffect(() => {
-    output.render().then(setR, () => {});
+    output.render().then(
+      (kept) => {
+        if (latest.current === 0) setR(kept);
+      },
+      () => {},
+    );
   }, []);
   const change = (next: output.Render) => {
+    const ask = ++latest.current;
     setR(next);
-    output.setRender(next).then(setR, () => {});
+    output.setRender(next).then(
+      (kept) => {
+        if (ask === latest.current) setR(kept);
+      },
+      () => {},
+    );
   };
   const res = RESOLUTIONS.findIndex((x) => JSON.stringify(x.size) === JSON.stringify(r.resolution));
   return (

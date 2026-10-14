@@ -17,7 +17,9 @@
 # with a local zen, zen's Storybook on `ZEN_STORYBOOK_PORT` (6022) is reused when a
 # Storybook already answers `/index.json` there, and otherwise zen's launcher will
 # start it (its app on `ZEN_PREVIEW_PORT`, 4191); it exits 1 when one of those is
-# taken by something else. This repo's Storybook goes on `STORYBOOK_PORT` (6006, or
+# taken by something else. A run that finds another starting zen's launcher on
+# the same port (a lock in $TMPDIR) waits for that Storybook and reuses it. This
+# repo's Storybook goes on `STORYBOOK_PORT` (6006, or
 # a free port when that one is taken or is one of the others, `PORT` among them).
 #
 # `start_storybooks` (with `set -m` on and `stop_storybooks` in the caller's
@@ -83,18 +85,77 @@ link_zen() {
 start_zen=
 zen_launcher=
 storybook=
+zen_lock=
+
+# Another run may be starting zen's launcher on the same port, its Storybook not
+# answering yet: a lock (a symlink naming the starting run's pid, so taking it is
+# one atomic step) makes the later run wait for that Storybook and reuse it,
+# instead of starting a second launcher that finds the ports occupied. A lock
+# whose run is gone is stale and taken over. Returns with the lock held, or once
+# a Storybook answers; exits 1 after two minutes of neither.
+zen_take_lock() {
+	local lock owner waited=0 blocked=0
+	lock="${TMPDIR:-/tmp}/visuals-zen-storybook-$ZEN_STORYBOOK_PORT.lock"
+	while :; do
+		if ln -s "$$" "$lock" 2>/dev/null; then
+			zen_lock=$lock
+			return 0
+		fi
+		owner=$(readlink "$lock" 2>/dev/null) || continue
+		if ! kill -0 "$owner" 2>/dev/null; then
+			# A stale lock is cleared by one run at a time (`mkdir` is atomic), and only
+			# while it still names the dead run: another run racing to clear it may
+			# already have cleared it and taken the lock, which must stay.
+			if mkdir "$lock.clearing" 2>/dev/null; then
+				[ "$(readlink "$lock" 2>/dev/null)" = "$owner" ] && rm -f "$lock"
+				rmdir "$lock.clearing"
+				blocked=0
+			else
+				blocked=$((blocked + 1))
+				if [ "$blocked" -ge 100 ]; then
+					echo "$ZEN_ME: $lock.clearing has stood for ten seconds (a run killed while clearing the lock?); remove it and run again" >&2
+					exit 1
+				fi
+				sleep 0.1
+			fi
+			continue
+		fi
+		zen_is_storybook "$ZEN_STORYBOOK_PORT" && return 0
+		if [ "$waited" = 0 ]; then
+			echo "$ZEN_ME: another run (pid $owner) is starting zen's Storybook on $ZEN_STORYBOOK_PORT; waiting for it"
+		fi
+		if [ "$waited" -ge 120 ]; then
+			echo "$ZEN_ME: zen's Storybook on $ZEN_STORYBOOK_PORT didn't answer within two minutes of another run (pid $owner) starting it; stop that run or pick another ZEN_STORYBOOK_PORT" >&2
+			exit 1
+		fi
+		sleep 1
+		waited=$((waited + 1))
+	done
+}
+# Lets the lock go, when this run holds it.
+zen_release_lock() {
+	[ -n "$zen_lock" ] || return 0
+	[ "$(readlink "$zen_lock" 2>/dev/null)" = "$$" ] && rm -f "$zen_lock"
+	zen_lock=
+	return 0
+}
+
 plan_storybooks() {
 	if [ -n "${ZEN_SOURCE:-}" ]; then
 		ZEN_STORYBOOK_PORT=${ZEN_STORYBOOK_PORT:-6022}
 		ZEN_PREVIEW_PORT=${ZEN_PREVIEW_PORT:-4191}
 		zen_need_port ZEN_STORYBOOK_PORT "$ZEN_STORYBOOK_PORT"
 		zen_need_port ZEN_PREVIEW_PORT "$ZEN_PREVIEW_PORT"
+		zen_take_lock
 		if zen_is_storybook "$ZEN_STORYBOOK_PORT"; then
+			zen_release_lock
 			echo "$ZEN_ME: a Storybook already answers on $ZEN_STORYBOOK_PORT; composing it in as zen's"
 		elif zen_port_taken "$ZEN_STORYBOOK_PORT"; then
+			zen_release_lock
 			echo "$ZEN_ME: port $ZEN_STORYBOOK_PORT (ZEN_STORYBOOK_PORT) is taken by something that isn't a Storybook; free it or pick another" >&2
 			exit 1
 		elif zen_port_taken "$ZEN_PREVIEW_PORT"; then
+			zen_release_lock
 			echo "$ZEN_ME: port $ZEN_PREVIEW_PORT (ZEN_PREVIEW_PORT) is taken; free it or pick another" >&2
 			exit 1
 		else
@@ -136,6 +197,7 @@ stop_group() {
 stop_storybooks() {
 	stop_group "$storybook"
 	stop_group "$zen_launcher"
+	zen_release_lock
 }
 
 check_storybooks() {
@@ -150,6 +212,7 @@ check_storybooks() {
 		wait "$zen_launcher"
 		echo "$ZEN_ME: zen's launcher ended (exit $?; see above); the rest keeps running, without zen's stories" >&2
 		zen_launcher=
+		zen_release_lock
 	fi
 }
 
