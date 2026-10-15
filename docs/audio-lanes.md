@@ -13,7 +13,9 @@ Existing `audio.json` choices become Main. Microphone starts Off. The additional
 `audio-lanes.json` saves Main Off and the microphone choice. An input device in
 either lane is never swapped for another one: when it disconnects, or doesn't open
 at startup, the lane goes quiet, says which device and why (`problem` in the lane's
-status), and opens that exact device again when it comes back. An app that quits
+status), and opens that exact device again when it comes back. A device that is
+there but won't open (still waking, say) is tried on a few polls, then waits to be
+picked again, so a stuck one never blocks every poll. An app that quits
 still falls back to the whole Mac when this Mac can tap it. New device selections
 use Core Audio's stable device ID, with name/channel matching retained for old
 saved choices.

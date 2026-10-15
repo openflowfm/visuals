@@ -70,8 +70,6 @@ pub fn open_input(device: &cpal::Device, channels: (usize, usize), ring: Ring) -
 pub fn open_input_sink(device: &cpal::Device, channels: (usize, usize), sink: Sink) -> Result<Input, String> {
     open_input_sink_with_progress(device, channels, sink, |_| Ok(()))
 }
-/// Progress checks let an owning application retire an acquisition before starting
-/// capture after a slow hardware call returns. No callback runs on the audio thread.
 /// The format to open `device` in: the one it runs at now (its own channels,
 /// whatever their count, at its current rate), so opening never asks it to
 /// change; when it can't say, the best one it supports: its current rate, else
@@ -96,6 +94,8 @@ pub fn input_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig
     }
 }
 
+/// Progress checks let an owning application retire an acquisition before starting
+/// capture after a slow hardware call returns. No callback runs on the audio thread.
 pub fn open_input_sink_with_progress(device: &cpal::Device, (left, right): (usize, usize), sink: Sink, mut progress: impl FnMut(&'static str) -> Result<(), String>) -> Result<Input, String> {
     progress("reading the input format")?;
     let config = input_config(device)?;
