@@ -406,14 +406,26 @@ export function useDismiss(side: RefObject<HTMLElement | null>, insp: RefObject<
   }, [on, key, side, insp]);
 }
 
+/** A rounded rect as a path, clockwise from its top left corner's end, in px. */
+const roundRect = (l: number, t: number, w: number, h: number, r: number) => {
+  const k = Math.max(0, Math.min(r, w / 2, h / 2));
+  const R = l + w;
+  const B = t + h;
+  return `M${l + k},${t} H${R - k} A${k},${k} 0 0 1 ${R},${t + k} V${B - k} A${k},${k} 0 0 1 ${R - k},${B} H${l + k} A${k},${k} 0 0 1 ${l},${B - k} V${t + k} A${k},${k} 0 0 1 ${l + k},${t} Z`;
+};
+const px = (n: number) => Math.round(n * 100) / 100;
+
 /**
- * The one refinement Home makes to the screen's scroll-behind look (Assembly.css): the preview's
- * picture is shorter than the hero's slot, so the pane's slot is clipped and faded from the
- * preview's real bottom edge (the picture, `HERO_PIC`, with the card's words when it has them),
- * not the slot's. Measured in the pane slot's own box (it reaches up behind the hero) and set on
- * it as the assembly's knob `--lib-under-edge` (unitless px), with `data-hole` on the column
- * while there is a preview. Followed as the column or the hero resizes; in layout px (a scaled
- * story frame's transform taken out).
+ * The one refinement Home makes to the screen's scroll-behind look (Assembly.css): what scrolls
+ * behind the pinned hero shows everywhere in its room (beside the preview, in the gap under it,
+ * all under the grid's glass, Home.css) except over the preview itself. The assembly would cut
+ * the pane's slot straight across at the hero's edge; Home cuts out only the picture (`HERO_PIC`,
+ * at its own corners, and the card's words when it has them), as an even-odd clip path on the
+ * slot, and keeps the assembly's fade to a short ramp at the slot's top (`--lib-under-edge` 0,
+ * `--lib-fade-t` a step). The clip takes presses with it, so the picture keeps them. Measured in
+ * the pane slot's own box (it reaches up behind the hero), with `data-hole` on the column while
+ * there is a preview; followed as the column or the hero resizes, in layout px (a scaled story
+ * frame's transform taken out).
  */
 function useHoleClip(main: RefObject<HTMLElement | null>, hero: RefObject<HTMLElement | null>, on: boolean) {
   useLayoutEffect(() => {
@@ -424,17 +436,30 @@ function useHoleClip(main: RefObject<HTMLElement | null>, hero: RefObject<HTMLEl
     const clear = () => {
       delete node.dataset.hole;
       col.style.removeProperty('--lib-under-edge');
+      col.style.removeProperty('--lib-fade-t');
+      col.style.removeProperty('clip-path');
     };
     if (!on || !slot) return clear();
     const read = () => {
       // The picture, and the card's words beside or under it when it has them (its later siblings).
-      const parts = [...slot.querySelectorAll<HTMLElement>(`.${HERO_PIC}, .${HERO_PIC} ~ *`)].map((el) => el.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+      // Even-odd: a part inside the picture (the floating controls) would cut a second hole and fill the first back in, so it is left out.
+      const pic = slot.querySelector<HTMLElement>(`.${HERO_PIC}`)?.getBoundingClientRect();
+      const inPic = (r: DOMRect) => !!pic && r.left >= pic.left - 0.5 && r.right <= pic.right + 0.5 && r.top >= pic.top - 0.5 && r.bottom <= pic.bottom + 0.5;
+      const els = [...slot.querySelectorAll<HTMLElement>(`.${HERO_PIC}, .${HERO_PIC} ~ *`)].filter((el) => {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && (el.classList.contains(HERO_PIC) || !inPic(r));
+      });
       const box = col.getBoundingClientRect();
-      if (!parts.length || !col.offsetWidth || !box.width) return clear();
+      if (!els.length || !col.offsetWidth || !box.width) return clear();
       const s = box.width / col.offsetWidth;
-      const bottom = (Math.max(...parts.map((p) => p.bottom)) - box.top) / s;
-      if (bottom <= 0) return clear();
-      col.style.setProperty('--lib-under-edge', String(Math.round(bottom * 100) / 100));
+      const holes = els.map((el) => {
+        const r = el.getBoundingClientRect();
+        const radius = el.classList.contains(HERO_PIC) ? parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0 : 0;
+        return roundRect(px((r.left - box.left) / s), px((r.top - box.top) / s), px(r.width / s), px(r.height / s), radius);
+      });
+      col.style.setProperty('clip-path', `path(evenodd, "M0,0 H${col.offsetWidth} V${col.offsetHeight} H0 Z ${holes.join(' ')}")`);
+      col.style.setProperty('--lib-under-edge', '0');
+      col.style.setProperty('--lib-fade-t', 'var(--space-6)');
       node.dataset.hole = '';
     };
     read();
