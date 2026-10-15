@@ -3,14 +3,22 @@
 The Audio controls select two independent inputs. Main keeps the existing app,
 whole-Mac, and interface choices. Microphone adds an optional input device. Both
 feed the visualizer analysis; neither is played through the speakers. Each lane
-has its own channel pair and an explicit Off choice. A mono input feeds both sides.
+has its own channel pair and an explicit Off choice. Any input can be either lane,
+whatever its channel count: a device opens in the format it runs at now (its own
+channels and current rate; `engine::live::input_config`), or, when it can't report
+one, the best of its supported formats. A mono input feeds both sides.
 The same hardware input cannot be selected in both lanes.
 
 Existing `audio.json` choices become Main. Microphone starts Off. The additional
-`audio-lanes.json` saves Main Off and the microphone choice. Disconnecting the mic
-silences that lane and waits for that exact device; it never opens a different mic.
-Main retains its existing fallback behavior. New device selections use Core Audio's
-stable device ID, with name/channel matching retained for old saved choices.
+`audio-lanes.json` saves Main Off and the microphone choice. An input device in
+either lane is never swapped for another one: when it disconnects, or doesn't open
+at startup, the lane goes quiet, says which device and why (`problem` in the lane's
+status), and opens that exact device again when it comes back. A device that is
+there but won't open (still waking, say) is tried on a few polls, then waits to be
+picked again, so a stuck one never blocks every poll. An app that quits
+still falls back to the whole Mac when this Mac can tap it. New device selections
+use Core Audio's stable device ID, with name/channel matching retained for old
+saved choices.
 
 Device and process-tap callbacks write independent bounded queues with nonblocking
 locks. One mixer clock linearly resamples each queue to 48 kHz, adds corresponding
@@ -30,9 +38,11 @@ macOS permission, and simultaneous live-input acceptance require a user session.
 
 ## Connection stalls
 
-A native acquisition has a 20-second deadline across source lookup, input-format
-query, Core Audio stream construction and stream start. On expiry the command
-returns an error naming its last phase, releases the routing transaction, and
+A native acquisition has a deadline across source lookup, input-format query,
+Core Audio stream construction and stream start: 20 seconds for a process tap,
+15 for an input device (a webcam's or an iPhone's microphone can take seconds to
+wake). On expiry the command returns an error naming the source and its last
+phase, releases the routing transaction, and
 leaves the previous main/microphone choices running. A late stream is disposed on
 the acquisition worker; it cannot replace the selected lane. Cancellation is
 checked between native stages, including before starting a newly built stream.

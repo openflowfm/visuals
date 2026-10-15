@@ -13,8 +13,9 @@ use std::time::Duration;
 /// for other apps' sound.
 pub(super) const TAP_DEADLINE: Duration = Duration::from_secs(20);
 /// How long an input device may take, once the microphone permission is settled
-/// (`listen_access`): a working one opens in well under a second.
-pub(super) const DEVICE_DEADLINE: Duration = Duration::from_secs(5);
+/// (`listen_access`): most open in well under a second, but a webcam's or an
+/// iPhone's (Continuity) microphone can take several seconds to wake.
+pub(super) const DEVICE_DEADLINE: Duration = Duration::from_secs(15);
 /// One admission per source, so a source stuck in the driver never blocks another.
 static CONNECTORS: LazyLock<Mutex<HashMap<String, Arc<Connector>>>> = LazyLock::new(Default::default);
 #[derive(Default)]
@@ -100,7 +101,7 @@ impl Connector {
         drop(mail);
         let stage = *attempt.stage.lock().unwrap();
         eprintln!("audio connection timed out: {stage}");
-        Err(format!("Audio connection timed out while {stage}. The previous source is unchanged: pick another source, or try this one again."))
+        Err(format!("it timed out after {} s while {stage}", timeout.as_secs()))
     }
 }
 #[cfg(test)]

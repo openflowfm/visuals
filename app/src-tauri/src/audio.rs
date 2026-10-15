@@ -17,7 +17,7 @@ pub enum Lane {
     Mic,
 }
 impl Lane {
-    fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         match self {
             Self::Main => 0,
             Self::Mic => 1,
@@ -32,6 +32,9 @@ pub struct LaneStatus {
     pub channels: usize,
     pub enabled: bool,
     pub unavailable: bool,
+    /// Why the chosen source isn't heard, naming it, while it is unavailable.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
     pub denied: bool,
 }
 #[derive(serde::Serialize)]

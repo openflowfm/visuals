@@ -34,7 +34,7 @@ pub fn inputs() -> Vec<Input> {
     host.input_devices()
         .into_iter()
         .flatten()
-        .map(|d| Input { uid: d.id().ok().map(|id| id.to_string()), name: name_of(&d), channels: d.default_input_config().map(|c| c.channels()).unwrap_or(0) })
+        .map(|d| Input { uid: d.id().ok().map(|id| id.to_string()), name: name_of(&d), channels: engine::live::input_config(&d).map(|c| c.channels()).unwrap_or(0) })
         .collect()
 }
 
@@ -243,6 +243,74 @@ impl From<SavedFile> for Saved {
 /// (an app that quit, an interface unplugged).
 static WANTED: Mutex<Option<Saved>> = Mutex::new(None);
 
+/// Why a lane's source isn't heard, kept per lane and keyed to that source.
+#[derive(Clone)]
+struct Trouble {
+    /// The source it is about (`None`: the system input).
+    source: Option<SourceId>,
+    /// Why, naming the source.
+    why: String,
+    /// It went away, rather than failing to open while here: it opens again when it's back.
+    missing: bool,
+    /// Failed opens of it while here: polls stop trying it at [`RETRIES`]; picking it again starts afresh.
+    failed: u8,
+}
+
+/// How many times polls try a source that is here but won't open (one still waking, say).
+const RETRIES: u8 = 3;
+
+/// Each lane's trouble (main, then microphone). Cleared when its source opens or the lane turns off.
+static TROUBLE: Mutex<[Option<Trouble>; 2]> = Mutex::new([None, None]);
+
+fn trouble(lane: Lane) -> Option<Trouble> {
+    TROUBLE.lock().unwrap()[lane.index()].clone()
+}
+fn set_trouble(lane: Lane, trouble: Option<Trouble>) {
+    TROUBLE.lock().unwrap()[lane.index()] = trouble;
+}
+fn trouble_about(lane: Lane, source: Option<&SourceId>) -> Option<Trouble> {
+    trouble(lane).filter(|t| t.source.as_ref() == source)
+}
+
+/// `source` went away: say so, and open it again once it's back.
+fn mark_missing(lane: Lane, source: &SourceId) {
+    let missing = if matches!(source, SourceId::App { .. }) { "isn't running" } else { "is disconnected" };
+    set_trouble(lane, Some(Trouble { source: Some(source.clone()), why: format!("{} {missing}", source_name(Some(source))), missing: true, failed: 0 }));
+}
+
+/// Whether a poll may try opening `source` (here) again: not one that keeps failing.
+fn may_retry(lane: Lane, source: &SourceId) -> bool {
+    trouble_about(lane, Some(source)).is_none_or(|t| t.failed < RETRIES)
+}
+
+/// The page's words for a lane's trouble.
+fn problem(t: Trouble) -> String {
+    if t.missing { format!("{}; waiting for it to come back.", t.why) } else { format!("{}. Pick it again to retry.", t.why.trim_end_matches('.')) }
+}
+
+/// A source as the page names it, for saying which one failed.
+fn source_name(source: Option<&SourceId>) -> String {
+    match source {
+        None => "the system input".into(),
+        Some(SourceId::System) => EVERYTHING.into(),
+        Some(SourceId::App { bundle }) => app_name(bundle, None),
+        Some(SourceId::Device { name, .. }) => name.clone(),
+    }
+}
+
+/// Open `source` for `lane`, an error naming the source and why it failed.
+fn open_named(world: &dyn World, lane: Lane, source: Option<&SourceId>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
+    let opened = world.open(source, channels, ring).map_err(|e| format!("Couldn't open {}: {e}", source_name(source)));
+    match &opened {
+        Ok(_) => set_trouble(lane, None),
+        Err(why) => {
+            let failed = trouble_about(lane, source).map_or(0, |t| t.failed).saturating_add(1);
+            set_trouble(lane, Some(Trouble { source: source.cloned(), why: why.clone(), missing: false, failed }));
+        }
+    }
+    opened
+}
+
 /// Listen to `source`, or else to the input `name` (the system input when
 /// absent), channels `left` and `right` counted from 1. Returns the source's name.
 /// Runs off the main thread: opening the first tap can wait on macOS's
@@ -269,6 +337,11 @@ pub fn listen_to(name: Option<String>, size: Option<usize>, left: Option<usize>,
 fn choose(world: &dyn World, app: &App, source: Option<SourceId>, left: Option<usize>, right: Option<usize>) -> Result<(String, Saved), String> {
     let mut slot = app.listening.lock().unwrap();
     let before = WANTED.lock().unwrap().clone();
+    let troubled = trouble(Lane::Main);
+    // Picking a source again starts its retries afresh.
+    if trouble_about(Lane::Main, source.as_ref()).is_some() {
+        set_trouble(Lane::Main, None);
+    }
     if let Some(s) = &source {
         *WANTED.lock().unwrap() = Some(Saved { source: s.clone(), left: left.unwrap_or(1), right: right.unwrap_or(2) });
     }
@@ -279,6 +352,11 @@ fn choose(world: &dyn World, app: &App, source: Option<SourceId>, left: Option<u
             Ok((choice.name, saved))
         }
         Err(e) => {
+            // The choice stays what it was, and so does what the lane says about it;
+            // this failure is the command's answer.
+            if before.as_ref().map(|b| &b.source) != source.as_ref() {
+                set_trouble(Lane::Main, troubled);
+            }
             *WANTED.lock().unwrap() = before;
             Err(e)
         }
@@ -390,7 +468,7 @@ fn listen_on(world: &dyn World, app: &App, slot: &mut Option<Listening>, source:
         return Err("This input is already selected as the microphone".into());
     }
     let (port, sink) = app.audio.prepare();
-    let l = world.open(source, channels, sink)?;
+    let l = open_named(world, Lane::Main, source, channels, sink)?;
     if app.audio.mic.lock().unwrap().as_ref().is_some_and(|mic| mic.source == l.source) {
         return Err("This input is already selected as the microphone".into());
     }
@@ -404,7 +482,8 @@ fn listen_on(world: &dyn World, app: &App, slot: &mut Option<Listening>, source:
 }
 
 /// What to listen to when `gone` goes away: the whole Mac for an app (when this
-/// Mac can tap it), the system input otherwise.
+/// Mac can tap it). Nothing for an input device: another device is never swapped
+/// in for it.
 fn fallback(gone: &SourceId, taps: bool) -> Option<SourceId> {
     match gone {
         SourceId::App { .. } if taps => Some(SourceId::System),
@@ -412,15 +491,27 @@ fn fallback(gone: &SourceId, taps: bool) -> Option<SourceId> {
     }
 }
 
-/// Listen to what stands in for `gone`, keeping its channels; the system input
-/// when that fails too.
-fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &SourceId, left: usize, right: usize) -> Result<Choice, String> {
-    let instead = fallback(gone, world.taps_allowed());
-    eprintln!("{gone:?} is gone; listening to {} instead", instead.as_ref().map_or("the system input", |_| EVERYTHING));
-    if let Some(Ok((c, _))) = instead.map(|s| listen_on(world, app, slot, Some(&s), Some(left), Some(right))) {
-        return Ok(c);
+/// Listen to what stands in for `gone`, keeping its channels. With no stand-in
+/// (an input device), or when it fails too, the main lane goes quiet and waits
+/// for `gone` itself ([`follow`] opens it again when it's back), saying why:
+/// that it went away when `missing`, else its own failed open.
+fn fall_back(world: &dyn World, app: &App, slot: &mut Option<Listening>, gone: &SourceId, left: usize, right: usize, missing: bool) -> Result<Choice, String> {
+    if let Some(instead) = fallback(gone, world.taps_allowed()) {
+        eprintln!("{gone:?} is gone; listening to {EVERYTHING} instead");
+        if let Ok((c, _)) = listen_on(world, app, slot, Some(&instead), Some(left), Some(right)) {
+            return Ok(c);
+        }
     }
-    listen_on(world, app, slot, None, None, None).map(|(c, _)| c)
+    if slot.as_ref().is_some_and(|l| &l.source == gone) {
+        *slot = None;
+        app.audio.clear(Lane::Main, &app.ring);
+    }
+    if missing || trouble_about(Lane::Main, Some(gone)).is_none() {
+        mark_missing(Lane::Main, gone);
+    }
+    let why = trouble(Lane::Main).map_or_else(String::new, |t| t.why);
+    eprintln!("{why}; waiting for it");
+    Err(why)
 }
 
 const START_MAIN: u8 = 1;
@@ -501,7 +592,7 @@ fn resume_with(world: &dyn World, app: &App, saved: Option<Saved>, first_run: bo
         }
         return;
     };
-    let heard = listen_on(world, app, &mut slot, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(world, app, &mut slot, &s.source, s.left, s.right));
+    let heard = listen_on(world, app, &mut slot, Some(&s.source), Some(s.left), Some(s.right)).map(|(c, _)| c).or_else(|_| fall_back(world, app, &mut slot, &s.source, s.left, s.right, false));
     if let Err(e) = heard {
         eprintln!("no audio input: {e}");
     }
@@ -527,18 +618,30 @@ fn follow(world: &dyn World, app: &App, first_run: impl Fn() -> bool) {
         let _ = listen_on(world, app, &mut slot, None, None, None);
         return;
     }
-    let Some((source, tapped, main, left, right)) = slot.as_ref().map(|l| (l.source.clone(), l.tapped().0.to_vec(), l.tapped().1, l.left + 1, l.right + 1)) else { return };
+    let Some((source, tapped, main, left, right)) = slot.as_ref().map(|l| (l.source.clone(), l.tapped().0.to_vec(), l.tapped().1, l.left + 1, l.right + 1)) else {
+        // Nothing heard: the chosen source went away or didn't open. While it's
+        // away, wait; once here, try it a few times (it may still be waking), then
+        // leave it to the user to pick again rather than stall every poll.
+        if let Some(w) = wanted {
+            if world.gone(&w.source) {
+                mark_missing(Lane::Main, &w.source);
+            } else if may_retry(Lane::Main, &w.source) {
+                let _ = listen_on(world, app, &mut slot, Some(&w.source), Some(w.left), Some(w.right));
+            }
+        }
+        return;
+    };
     if let Some(w) = wanted {
         let changed = match &w.source {
             SourceId::App { bundle } if w.source == source => retap(&world.processes(), bundle, std::process::id() as i32, &tapped, main),
             _ => w.source != source,
         };
-        if changed && !world.gone(&w.source) && listen_on(world, app, &mut slot, Some(&w.source), Some(w.left), Some(w.right)).is_ok() {
+        if changed && !world.gone(&w.source) && may_retry(Lane::Main, &w.source) && listen_on(world, app, &mut slot, Some(&w.source), Some(w.left), Some(w.right)).is_ok() {
             return;
         }
     }
     if world.gone(&source) {
-        let _ = fall_back(world, app, &mut slot, &source, left, right);
+        let _ = fall_back(world, app, &mut slot, &source, left, right, true);
     }
 }
 
@@ -588,7 +691,7 @@ fn listen_device(input: Option<&str>, size: Option<usize>, uid: Option<&str>, ch
         match input {
             Some(want) => {
                 let named: Vec<cpal::Device> = host.input_devices().map_err(|e| e.to_string())?.filter(|d| name_of(d) == want).collect();
-                let channels_of = |d: &cpal::Device| d.default_input_config().map(|c| c.channels() as usize).unwrap_or(0);
+                let channels_of = |d: &cpal::Device| engine::live::input_config(d).map(|c| c.channels() as usize).unwrap_or(0);
                 let at = if size.is_some_and(|n| n > 0) { named.iter().position(|d| Some(channels_of(d)) == size).ok_or("selected input is disconnected")? } else { 0 };
                 named.into_iter().nth(at).ok_or_else(|| format!("no input called {want}"))?
             }
@@ -1051,7 +1154,7 @@ mod tests {
     }
 
     #[test]
-    fn a_gone_app_falls_back_to_the_whole_mac_and_anything_else_to_the_system_input() {
+    fn a_gone_app_falls_back_to_the_whole_mac_and_a_device_to_nothing() {
         let daw = SourceId::App { bundle: "com.ableton.live".into() };
         assert_eq!(fallback(&daw, true), Some(SourceId::System));
         assert_eq!(fallback(&daw, false), None);
@@ -1073,12 +1176,15 @@ mod tests {
     }
 }
 
-fn lane_status(l: Option<&Listening>, selected: Option<SourceId>, enabled: bool) -> LaneStatus {
+fn lane_status(lane: Lane, l: Option<&Listening>, selected: Option<SourceId>, enabled: bool) -> LaneStatus {
+    let unavailable = enabled && (l.is_none() || selected.as_ref().is_some_and(|s| l.is_some_and(|l| &l.source != s)));
     LaneStatus {
         source: l.map(|l| l.source.clone()),
         choice: l.map(Listening::choice),
         channels: l.map_or(0, |l| l.channels),
-        unavailable: enabled && (l.is_none() || selected.as_ref().is_some_and(|s| l.is_some_and(|l| &l.source != s))),
+        unavailable,
+        // Only while the choice isn't heard: a failed switch keeps the working source, and says so itself.
+        problem: if unavailable { trouble(lane).map(problem) } else { None },
         selected,
         enabled,
         denied: l.is_some_and(Listening::is_tap) && tap::permission() == Permission::Denied,
@@ -1090,8 +1196,8 @@ fn snapshot(app: &App) -> Status {
     let mic = app.audio.mic.lock().unwrap();
     let selected = WANTED.lock().unwrap().as_ref().map(|s| s.source.clone()).or_else(|| main.as_ref().map(|l| l.source.clone()));
     Status {
-        main: lane_status(main.as_ref(), if prefs.main_off { None } else { selected }, !prefs.main_off),
-        mic: lane_status(mic.as_ref(), prefs.mic.as_ref().map(|s| s.source.clone()), prefs.mic.is_some()),
+        main: lane_status(Lane::Main, main.as_ref(), if prefs.main_off { None } else { selected }, !prefs.main_off),
+        mic: lane_status(Lane::Mic, mic.as_ref(), prefs.mic.as_ref().map(|s| s.source.clone()), prefs.mic.is_some()),
     }
 }
 pub fn status(app: &App) -> Status {
@@ -1111,7 +1217,7 @@ fn mic_on(world: &dyn World, app: &App, saved: &Saved) -> Result<Listening, Stri
         return Err("This input is already selected as the main source".into());
     }
     let (port, sink) = app.audio.prepare();
-    let l = world.open(Some(&saved.source), (saved.left.max(1) - 1, saved.right.max(1) - 1), sink)?;
+    let l = open_named(world, Lane::Mic, Some(&saved.source), (saved.left.max(1) - 1, saved.right.max(1) - 1), sink)?;
     if app.listening.lock().unwrap().as_ref().is_some_and(|main| main.source == l.source) {
         return Err("This input is already selected as the main source".into());
     }
@@ -1133,9 +1239,14 @@ fn follow_mic(world: &dyn World, app: &App) {
         *slot = None;
         app.audio.clear(Lane::Mic, &app.ring);
     }
-    if slot.is_none() && !world.gone(&wanted.source) {
-        if let Ok(l) = mic_on(world, app, &wanted) {
-            *slot = Some(l);
+    // As for main: wait while it's away; once here, a few tries, then it waits to be picked again.
+    if slot.is_none() {
+        if world.gone(&wanted.source) {
+            mark_missing(Lane::Mic, &wanted.source);
+        } else if may_retry(Lane::Mic, &wanted.source) {
+            if let Ok(l) = mic_on(world, app, &wanted) {
+                *slot = Some(l);
+            }
         }
     }
 }
@@ -1152,12 +1263,24 @@ fn choose_lane_with(world: &dyn World, app: &App, lane: Lane, source: Option<Sou
                 *app.listening.lock().unwrap() = None;
                 app.audio.preferences.lock().unwrap().main_off = true;
                 app.audio.clear(Lane::Main, &app.ring);
+                set_trouble(Lane::Main, None);
             }
         }
         Lane::Mic => {
             if let Some(source) = source {
                 let mut saved = Saved { source, left: left.unwrap_or(1), right: right.unwrap_or(2) };
-                let l = mic_on(world, app, &saved)?;
+                // As for main: picking again starts afresh; a failed pick of another
+                // source leaves what the lane says about its own choice.
+                let troubled = trouble(Lane::Mic);
+                if trouble_about(Lane::Mic, Some(&saved.source)).is_some() {
+                    set_trouble(Lane::Mic, None);
+                }
+                let selected = app.audio.preferences.lock().unwrap().mic.as_ref().map(|s| s.source.clone());
+                let l = mic_on(world, app, &saved).inspect_err(|_| {
+                    if selected.as_ref() != Some(&saved.source) {
+                        set_trouble(Lane::Mic, troubled);
+                    }
+                })?;
                 saved.left = l.left + 1;
                 saved.right = l.right + 1;
                 saved.source = l.source.clone();
@@ -1167,6 +1290,7 @@ fn choose_lane_with(world: &dyn World, app: &App, lane: Lane, source: Option<Sou
                 *app.audio.mic.lock().unwrap() = None;
                 app.audio.preferences.lock().unwrap().mic = None;
                 app.audio.clear(Lane::Mic, &app.ring);
+                set_trouble(Lane::Mic, None);
             }
         }
     }
