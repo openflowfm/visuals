@@ -30,7 +30,8 @@
     "dev:lab": "VITE_LAB=1 app/dev.sh --features lab",
     "dev:app": "VISUALS_DEV_APP=1 app/run.sh",
     "dev:app:lab": "VITE_LAB=1 VISUALS_DEV_APP=1 app/run.sh --features lab",
-    "check:no-dev-code": "node app/no-dev-code.mjs"
+    "check:no-dev-code": "node app/no-dev-code.mjs",
+    "prepare": "simple-git-hooks"
   },
   "dependencies": {
     "@satoramoto/zen": "github:satoramoto/zen#c365bc46cc16223555c04925d0f56b6108f9dd40",
@@ -57,8 +58,10 @@
     "@vitest/coverage-v8": "^5.0.3",
     "happy-dom": "^20.14.6",
     "jsdom": "^30.1.2",
+    "lint-staged": "^17.6.0",
     "playwright": "^1.64.0",
     "prettier": "3.9.9",
+    "simple-git-hooks": "^2.14.0",
     "storybook": "^10.6.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.4",
@@ -76,5 +79,12 @@
     "@satoramoto/zen@0.1.0": true,
     "fsevents@2.3.3": true,
     "esbuild@0.28.2": true
+  },
+  "simple-git-hooks": {
+    "pre-commit": "if [ -x node_modules/.bin/lint-staged ]; then node_modules/.bin/lint-staged; else echo 'pre-commit: lint-staged is not installed in this checkout (npm install); skipping'; fi"
+  },
+  "lint-staged": {
+    "app/src/**/*": "prettier --write --ignore-unknown",
+    "*.rs": "rustfmt --edition 2024"
   }
 }
