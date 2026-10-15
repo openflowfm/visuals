@@ -936,7 +936,7 @@ pub mod view {
     use super::Layer;
     use objc2::rc::Retained;
     use objc2::{class, msg_send, MainThreadMarker};
-    use objc2_app_kit::{NSView, NSWindow, NSWindowOrderingMode};
+    use objc2_app_kit::{NSAutoresizingMaskOptions, NSView, NSWindow, NSWindowOrderingMode};
     use objc2_foundation::{NSPoint, NSRect, NSSize};
     use raw_window_handle::{AppKitDisplayHandle, AppKitWindowHandle, RawDisplayHandle, RawWindowHandle};
     use std::cell::RefCell;
@@ -1166,6 +1166,11 @@ pub mod view {
             let left = area.origin.x + x;
             let bottom = if parent.isFlipped() { area.origin.y + y } else { area.origin.y + area.size.height - y - height };
             view.setFrame(NSRect::new(NSPoint::new(left, bottom), NSSize::new(width, height)));
+            // Pinned to the window's top, as the page's rect is: an unflipped content view keeps
+            // a subview's distance from its bottom by default, so a resize from the bottom edge
+            // would carry the picture up or down out of its slot while the page's rect (and so
+            // this call) stays the same. The bottom margin is the flexible one.
+            view.setAutoresizingMask(if parent.isFlipped() { NSAutoresizingMaskOptions::ViewMaxYMargin } else { NSAutoresizingMaskOptions::ViewMinYMargin });
             let radius = super::corner_radius((x, y, width, height), (area.size.width, area.size.height), radius);
             if let Some(layer) = view.layer().filter(|l| l.cornerRadius() != radius) {
                 // At once: Core Animation would otherwise ease the corners in or out over a quarter second, going live or back.
