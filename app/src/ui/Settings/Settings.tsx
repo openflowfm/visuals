@@ -373,13 +373,13 @@ function PresetsSection() {
 }
 
 /** The sections, in the order the sheet shows them. */
-export const SECTIONS = ['Sound', 'Presets', 'Output', 'Link', 'Effects', Say('render quality'), 'Accessibility', 'Privacy', 'Updates'] as const;
+export const SECTIONS = ['Sound', 'Presets', 'Output', 'Ableton Link', 'Effects', Say('render quality'), 'Accessibility', 'Privacy', 'Updates'] as const;
 
 /**
  * **Job.** ⚙ Settings (#98), a sheet over any view: opened with `openSheet('settings')` from
  * Views, mounted by the app. Sound (what the app listens to, and its left and right channels),
  * Presets (how many, getting the full library, adding a folder, the credits), Output (display and
- * fit), Link (on or off and the bar start), Effects (strobe, fade to black, fine brightness and
+ * fit), Ableton Link (on or off and the bar start), Effects (strobe, fade to black, fine brightness and
  * sensitivity), the picture quality, Accessibility (reduce flashing) and Privacy (crash reports,
  * off unless turned on; no usage tracking at all).
  *
