@@ -29,6 +29,9 @@ Applications.
 It updates itself: it checks on launch, and **visual[flow] › Check for Updates…** checks
 now. Nothing installs until you say so.
 
+visual[flow] 1.0 is dark only: it keeps its dark look whether macOS is set to Light or
+Dark. An Appearance setting comes in 1.1.
+
 ### First run
 
 The first time it opens, a short welcome walks through:
@@ -75,7 +78,8 @@ permission, Link, BlackHole for older macOS, and what to do when the meter doesn
 The app joins your Ableton Link session and **only follows it**: tempo, beat and transport
 are never set from here. It can change the preset every beat, every 2 beats, or every 1 to
 32 bars, landing exactly on the bar line. Bars count from *the one*, which you can set,
-nudge or reset in live mode's Link panel.
+nudge or reset in live mode's Link panel. Turn Link off in Settings › Ableton Link and it
+stays off at the next launch until you turn it on again.
 
 ### Live mode
 
@@ -177,7 +181,8 @@ whatever started it goes away, so nothing is left running.
 Everything lives in `~/.openflow/visuals`: the presets folder (`presets/`, where the full
 library downloads), the playlists (`playlists.json`), your library data (`library.json`),
 and the small files the app remembers its choices in (the audio source, the output
-display, the tempo, whether the welcome has run). The 250 starter presets are bundled
+display, the tempo, the effects' settings and brightness, whether Link is on, whether
+the welcome has run). The 250 starter presets are bundled
 inside the app. The variables below move each of these; `OPENFLOW_HOME` moves the
 library data and the small files, not the presets or the playlists.
 
@@ -189,7 +194,7 @@ library data and the small files, not the presets or the playlists.
 | `VISUALS_LIVE=1` | start in live mode with the output window full screen on a display (when another one can take it; going live in the app never opens it by itself) |
 | `VISUALS_VIEW=<view>` | start in `home`, `library` (the home on its library pane), `live` (as `VISUALS_LIVE=1`) or `live-windowed` (live in the main window, no output, as going live from the home does); wins over `VISUALS_LIVE` |
 | `VISUALS_DISPLAY=<n>` | the display for the output window, from 0 (otherwise the one chosen last) |
-| `VISUALS_LINK=0` | start with Link off |
+| `VISUALS_LINK=0` | start with Link off (any other value starts it on); without it, Link is on or off as it was left |
 | `VISUALS_LINK_EVERY=<bars>` | start with preset changes on the bar on, every that many bars |
 | `VISUALS_LINK_LOG=1` | print Link's frame every second, and each change's beat |
 | `VISUALS_HEADLESS=1` | keep off the screen: no Dock icon or menu bar, never the active app, and the windows (main and output) drawn beyond every display; with a capture, quit once it is written |

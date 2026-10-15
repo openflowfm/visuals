@@ -6,8 +6,8 @@
 //! and the bench's render thread reads it every refresh: [`Fx::speed_now`] for the
 //! scale on the preset clock, [`Fx::master`] for the engine's master pass. Everything
 //! that moves over time (a fade, a punch decaying, the strobe's phase) is worked
-//! out from timestamps, so it is the same whenever it is asked for. Only the tempo
-//! is kept across restarts.
+//! out from timestamps, so it is the same whenever it is asked for. The tempo and
+//! the effects' settings ([`Kept`]) are kept across restarts.
 
 pub use engine::fx::Mirror;
 use engine::fx::Master;
@@ -464,11 +464,15 @@ impl Fx {
         }
     }
 
-    /// With the tempo kept from last time, if there is one.
+    /// With the tempo and the effects' settings ([`Kept`]) kept from last time, if there are any.
     pub fn restored() -> Fx {
-        let mut fx = Fx::new(Instant::now());
+        let now = Instant::now();
+        let mut fx = Fx::new(now);
         if let Some(bpm) = settings::load::<serde_json::Value>(TEMPO_FILE).and_then(|v| v["bpm"].as_f64()) {
             fx.bpm = bpm.clamp(TEMPO_MIN, TEMPO_MAX);
+        }
+        if let Some(kept) = settings::load::<Kept>(EFFECTS_FILE) {
+            fx.keep(kept, now);
         }
         fx.timing.reduced = crate::access::reduced();
         fx
@@ -856,6 +860,36 @@ impl Fx {
         if trails <= 0.0 { 0.0 } else { (0.75 + 0.23 * trails) as f32 }
     }
 
+    /// The settings kept between runs, as they are now.
+    pub fn kept(&self) -> Kept {
+        let s = &self.settings;
+        Kept {
+            strobe_rate: s.strobe_rate,
+            strobe_intensity: s.strobe_intensity,
+            strobe_style: s.strobe_style,
+            sync: s.sync,
+            blackout_fade: s.blackout_fade,
+            brightness: s.brightness,
+            sensitivity: s.sensitivity,
+        }
+    }
+
+    /// Set the settings `kept` from last time, each within its limits as its action would.
+    fn keep(&mut self, kept: Kept, now: Instant) {
+        let actions = [
+            FxAction::StrobeRate { rate: kept.strobe_rate },
+            FxAction::StrobeIntensity { value: kept.strobe_intensity },
+            FxAction::StrobeStyle { style: kept.strobe_style },
+            FxAction::Sync { source: kept.sync },
+            FxAction::BlackoutFade { seconds: kept.blackout_fade },
+            FxAction::Brightness { value: kept.brightness },
+            FxAction::Sensitivity { value: kept.sensitivity },
+        ];
+        for action in actions {
+            let _ = self.apply(&action, now);
+        }
+    }
+
     pub fn view(&self, hold: bool, bars: u32) -> View {
         View { settings: self.settings.clone(), bpm: self.bpm, linked: self.linked, hold, bars }
     }
@@ -867,6 +901,37 @@ const TEMPO_FILE: &str = "tempo.json";
 /// Keep the tempo for next time. Failing to is not worth stopping the show for.
 pub fn save_tempo(bpm: f64) {
     settings::save(TEMPO_FILE, tempo_text(bpm));
+}
+
+/// The effects' settings file in [`settings::dir`].
+const EFFECTS_FILE: &str = "effects.json";
+
+/// The effects' settings kept between runs: how the performer set them up in
+/// Settings (the strobe's rate, level, style and sync, the blackout fade, the
+/// brightness and the sensitivity). The rest (the playlist's transition, speed,
+/// trails and hue, and what is switched on live) starts afresh each run. A field
+/// missing from the file reads as its default.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq)]
+#[serde(default)]
+pub struct Kept {
+    pub strobe_rate: f64,
+    pub strobe_intensity: f64,
+    pub strobe_style: StrobeStyle,
+    pub sync: Sync,
+    pub blackout_fade: f64,
+    pub brightness: f64,
+    pub sensitivity: f64,
+}
+
+impl Default for Kept {
+    fn default() -> Self {
+        Fx::new(Instant::now()).kept()
+    }
+}
+
+/// Keep the effects' settings for next time. Failing to is not worth stopping the show for.
+pub fn save_kept(kept: &Kept) {
+    settings::save_json(EFFECTS_FILE, kept);
 }
 
 /// The tempo file's bytes, written by hand so they stay `{"bpm": 120.00}`.

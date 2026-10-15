@@ -876,12 +876,18 @@ pub fn advance(handle: &AppHandle) -> Result<(), String> {
 fn dispatch_past(handle: &AppHandle, action: Action, failed: Vec<(PathBuf, String)>) -> Result<(), String> {
     let deck = handle.state::<Deck>();
     if let Action::Fx(fx) = &action {
-        let tempo = {
+        let (tempo, kept) = {
             let mut state = deck.fx.lock().unwrap();
-            state.apply(fx, Instant::now())?.then_some(state.bpm)
+            let before = state.kept();
+            let tempo = state.apply(fx, Instant::now())?.then_some(state.bpm);
+            let after = state.kept();
+            (tempo, (after != before).then_some(after))
         };
         if let Some(bpm) = tempo {
             crate::fx::save_tempo(bpm);
+        }
+        if let Some(kept) = kept {
+            crate::fx::save_kept(&kept);
         }
         // `live` too: an effect a playlist sets may now differ from it.
         return emit_deck(handle, &deck);
