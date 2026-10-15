@@ -72,9 +72,33 @@ pub fn open_input_sink(device: &cpal::Device, channels: (usize, usize), sink: Si
 }
 /// Progress checks let an owning application retire an acquisition before starting
 /// capture after a slow hardware call returns. No callback runs on the audio thread.
+/// The format to open `device` in: the one it runs at now (its own channels,
+/// whatever their count, at its current rate), so opening never asks it to
+/// change; when it can't say, the best one it supports: its current rate, else
+/// 48 kHz, else the nearest, preferring float samples. A mono input is one
+/// channel, heard on both sides (`left` and `right` both kept within it).
+pub fn input_config(device: &cpal::Device) -> Result<cpal::SupportedStreamConfig, String> {
+    let current = device.default_input_config();
+    if let Ok(config) = &current {
+        if config.channels() > 0 {
+            return Ok(config.clone());
+        }
+    }
+    let wanted = current.as_ref().map_or(48_000, |c| c.sample_rate());
+    let ranges: Vec<_> = device.supported_input_configs().map_err(|e| format!("couldn't read its formats: {e}"))?.filter(|r| r.channels() > 0).collect();
+    let rate_in = |r: &cpal::SupportedStreamConfigRange| wanted.clamp(r.min_sample_rate(), r.max_sample_rate());
+    match ranges.into_iter().min_by_key(|r| (rate_in(r).abs_diff(wanted), r.sample_format() != cpal::SampleFormat::F32)) {
+        Some(range) => {
+            let rate = rate_in(&range);
+            Ok(range.with_sample_rate(rate))
+        }
+        None => Err(current.err().map_or("it has no input channels".into(), |e| e.to_string())),
+    }
+}
+
 pub fn open_input_sink_with_progress(device: &cpal::Device, (left, right): (usize, usize), sink: Sink, mut progress: impl FnMut(&'static str) -> Result<(), String>) -> Result<Input, String> {
     progress("reading the input format")?;
-    let config = device.default_input_config().map_err(|e| e.to_string())?;
+    let config = input_config(device)?;
     let channels = config.channels() as usize;
     if channels == 0 {
         return Err("input has no channels".into());

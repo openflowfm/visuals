@@ -8,6 +8,8 @@ export interface AudioLaneStatus extends Heard {
   selected: SourceId | null;
   enabled: boolean;
   unavailable: boolean;
+  /** While unavailable: why the selected source isn't heard, naming it. */
+  problem?: string;
 }
 export interface AudioStatus {
   main: AudioLaneStatus;

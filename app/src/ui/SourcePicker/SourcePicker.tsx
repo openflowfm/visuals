@@ -303,7 +303,11 @@ export function SourcePicker({
         {denied && <span className="vs-warning vs-audio-note">{denied}</span>}
         {heard.unavailable && (
           <span className="vs-warning vs-audio-note" role="status">
-            {lane === 'mic' ? 'Microphone unavailable; waiting for the selected input.' : 'Selected main source unavailable.'}
+            {heard.problem
+              ? `${heard.problem.replace(/\.$/, '')}. Pick it again to retry.`
+              : lane === 'mic'
+                ? 'Microphone unavailable; waiting for the selected input.'
+                : 'Selected main source unavailable.'}
           </span>
         )}
         {fallback && (
