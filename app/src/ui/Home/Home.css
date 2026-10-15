@@ -77,8 +77,9 @@
 }
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary))::before {
   --vs-glass-feather: var(--space-4);
-  /* From the picture's foot (the pane starts the hero's room below the slot's top). */
-  --vs-glass-top: calc((var(--lib-under-edge, var(--lib-under, 0)) - var(--lib-under, 0)) * 1px);
+  /* From the slot's top (the pane starts the hero's room below it); the assembly's clip cuts it at
+     the picture's foot. */
+  --vs-glass-top: calc(var(--lib-under, 0) * -1px);
   content: '';
   position: absolute;
   z-index: 1;
