@@ -206,20 +206,27 @@ export function keepStep(step: Step | null, page: () => StepStorage | undefined 
  * **Changed.** A layout `Screen` ("Setup"): the steps along its fixed header, Back in its fixed
  * footer, the step in its grid. The header paints nothing and has no rule (near borderless): the
  * step you're on is underlined in the accent, as a switch's chosen word is; done steps are in the
- * caption grey. The steps are type on the frost, except the listen step's words, an opaque `base`
- * layer beside the preview (a measured `Hole` via Views' `Preview`), since nothing translucent may
- * sit by the native picture. The one thing to do next is a core `ActionButton` filled in the
+ * caption grey. The steps are type on the frost, except the listen step: there the preview (a
+ * measured `Hole` via Views' `Preview`) fills the whole window edge to edge, under the header and
+ * footer too, as Live's StageLayout picture does (`vs-onboarding--full` on the Screen); the words
+ * float over it at the left, vertically centred, as a rounded card on an opaque `base` layer
+ * (nothing translucent may sit by the native picture), and the header and footer sit on scrims of
+ * the window's tint so their type stays readable. The old 16:9 frame and its painted surround are
+ * gone. The test sound plays real music through the speakers and into the visuals, and its
+ * tooltip and hint say so. The one thing to do next is a core `ActionButton` filled in the
  * contract's `--action` (the suite's green was the signal's colour, and colour has one meaning
  * here). Vibes are `raised` tiles. The app's `SwitchRow` is the core `Switch` (labelled), the
  * widgets' Select the core `Select`, Tauri's `listen` the bridge's (`model/ipc`).
  *
  * **Kept.** The whole flow and its order, the kept step, the focus moving to the step on each
- * change, every export, all copy, names and tooltips.
+ * change, every export, all copy, names and tooltips but the test sound's.
  *
  * **Tuning knobs.** `--vs-onboarding-main-min`: the main button's least width
  * (`calc(var(--space-5) * 5)`, the original's 120px); `--vs-onboarding-step-width`: a step's
  * widest (`calc(var(--space-4) * 35)`, onboarding.css's 560px); `--vs-onboarding-text-width`: the
- * listen step's words' column at its widest (`calc(var(--space-1) * 115)`, onboarding.css's 460px).
+ * listen step's words' card at its widest (`calc(var(--space-1) * 115)`, onboarding.css's 460px);
+ * `--vs-onboarding-scrim`: how much of the window's tint the listen step's header and footer scrims
+ * start with (85%, StageLayout's `--vs-stagelayout-scrim`).
  */
 export function Onboarding({ onDone: done, start, store = kept }: { onDone(ending: Ending): void; start?: Step; store?: WarningStore }) {
   const [step, setStep] = useState<Step>(() => start ?? keptStep());
@@ -269,7 +276,7 @@ export function Onboarding({ onDone: done, start, store = kept }: { onDone(endin
   return (
     <Screen
       name="Setup"
-      className="vs-onboarding"
+      className={step === 'listen' ? 'vs-onboarding vs-onboarding--full' : 'vs-onboarding'}
       header={
         <Text as="header" className="vs-onboarding-head" data-tauri-drag-region>
           <Mark />
@@ -460,8 +467,8 @@ function Listen({ onNext }: { onNext(): void }) {
             <Main onPress={onNext}>Continue</Main>
             <ActionButton
               onPress={() => test(!testing)}
-              title="Play a test beat straight into the visuals, without sound, to see them move"
-              hint="a test beat straight into the visuals: no sound comes out"
+              title="Play a short piece of music through your speakers and into the visuals, to hear and see them move"
+              hint="music through your speakers and into the visuals"
             >
               {testing ? '■ Stop test sound' : '▶ Test sound'}
             </ActionButton>
@@ -469,9 +476,7 @@ function Listen({ onNext }: { onNext(): void }) {
           <NoticeBanner className="vs-onboarding-problem" notice={problem} onDismiss={() => setProblem(null)} />
         </Layer>
       </Opaque>
-      <div className="vs-onboarding-stage">
-        <Preview className="vs-onboarding-preview" />
-      </div>
+      <Preview className="vs-onboarding-preview" />
     </section>
   );
 }
