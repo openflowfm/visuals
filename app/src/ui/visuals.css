@@ -95,23 +95,27 @@
      (popovers, menus, a dragged tile), the sheets and the toasts four.
    - tint: raised keeps a floor of its solid tone (`--vs-glass-raised-floor`), so secondary type
      and icons on it hold their contrast whatever is behind the glass; the float layer is a
-     lighter, cleaner tone than the window (its solid lifted toward the ink), takes none of the
-     picture's colour (held dark, the picture's colour read as a murky olive slab) and has a lit
-     top edge. Over the native preview no backdrop reaches the picture, so there the tint is all
-     of it.
-   Reduce transparency and the Opaque scope (HomeLayout.css, zen's `lib-opaque`) still put the
-   solids back, on the elements under the root. */
-.vs-root {
-  --vs-glass-blur: 8px;
-  --vs-glass-raised-floor: 62%;
-  --vs-glass-float-lift: 12%;
-  --vs-glass-float-tint: 62%;
-  --layer-raised-fill: color-mix(in oklab, var(--layer-raised-solid) var(--vs-glass-raised-floor), transparent);
-  --layer-raised-backdrop: blur(calc(var(--vs-glass-blur) * 2)) saturate(1.2);
-  --layer-float-fill: color-mix(in oklab, color-mix(in oklab, var(--layer-float-solid), var(--text-1) var(--vs-glass-float-lift)) var(--vs-glass-float-tint), transparent);
-  --layer-float-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
-  --layer-float-ambient-fill: 0%;
-  --layer-float-edge: inset 0 1px 0 color-mix(in oklab, var(--text-1) 30%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--text-1) 8%, transparent);
-  --layer-overlay-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
-  --layer-top-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+     lighter, cleaner tone than the window (its solid lifted toward the light, the white key, which
+     is light in both modes), takes none of the picture's colour (held dark, the picture's colour
+     read as a murky olive slab) and has a lit top edge. Over the native preview no backdrop
+     reaches the picture, so there the tint is all of it.
+   Only while transparency is allowed: under Reduce transparency (macOS's setting, which access.ts
+   marks on the document, or the media query) and More contrast none of this applies, so zen's
+   solids (its `.lib-scope > *` rules) stand everywhere, popovers, sheets and toasts included. The
+   Opaque scope (zen's `lib-opaque`, under the root) still draws its solids too. */
+@media not ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
+  :root:not([data-transparency='reduced']) .vs-root {
+    --vs-glass-blur: 8px;
+    --vs-glass-raised-floor: 62%;
+    --vs-glass-float-lift: 12%;
+    --vs-glass-float-tint: 62%;
+    --layer-raised-fill: color-mix(in oklab, var(--layer-raised-solid) var(--vs-glass-raised-floor), transparent);
+    --layer-raised-backdrop: blur(calc(var(--vs-glass-blur) * 2)) saturate(1.2);
+    --layer-float-fill: color-mix(in oklab, color-mix(in oklab, var(--layer-float-solid), var(--key-white) var(--vs-glass-float-lift)) var(--vs-glass-float-tint), transparent);
+    --layer-float-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+    --layer-float-ambient-fill: 0%;
+    --layer-float-edge: inset 0 1px 0 color-mix(in oklab, var(--key-white) 30%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--text-1) 8%, transparent);
+    --layer-overlay-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+    --layer-top-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+  }
 }

@@ -71,7 +71,8 @@
    feathered so no box shows). They read as passing under the preview and the head, diffused,
    rather than cut at the picture's foot or showing crisp through the head's words. The assembly
    still clips them at the picture's real bottom (`--lib-under-edge`), so nothing paints over the
-   native preview. Above the head's words (drawn after it), below the grid. */
+   native preview. It paints above the grid and below the head (`.vs-libhead`, drawn after it at
+   the same z-index), so the head's words stay crisp on it. */
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
   position: relative;
 }
