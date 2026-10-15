@@ -31,12 +31,12 @@
   scroll-padding-top: var(--space-6);
 }
 
-/* A quiet note: what a setting decides, who decides it, or why a change failed. Captions on the
-   overlay take the raised step, so they stay at 4.5:1 there. A caption Text (--vs-text-label) on
+/* A quiet note: what a setting decides, who decides it, or why a change failed. Captions take the
+   overlay's own step (zen's layer text). A caption Text (--vs-text-label) on
    a roomier line. */
 .vs-sheet .vs-settings-line {
   margin: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-leading: 1.45;
 }
 .vs-sheet .vs-settings-problem {

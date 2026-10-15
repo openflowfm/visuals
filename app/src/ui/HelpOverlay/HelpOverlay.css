@@ -64,12 +64,12 @@
 }
 .vs-help-hint {
   margin-left: auto;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   white-space: nowrap;
 }
 .vs-help-close {
   margin-right: calc(var(--space-1) * -1);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-help-close:hover {
   color: var(--text-1);
@@ -86,7 +86,7 @@
 }
 .vs-help-group h3 {
   margin: 0 0 var(--space-1);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-text-annot);
 }
 .vs-help-group dl {
@@ -121,7 +121,7 @@
 }
 .vs-help-row .vs-help-does {
   grid-area: does;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-leading: 1.45;
 }
 .vs-help kbd {

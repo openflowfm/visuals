@@ -278,8 +278,10 @@
   line-height: inherit;
 }
 .vs-onboarding-reduce-setting .vs-onboarding-note {
+  /* zen's lifted step (the raised layer's text step), as before: the ground's own reads dimmer. */
+  --text-3: var(--layer-raised-text-3);
   padding: 0 var(--space-4);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-text-label);
 }
 
@@ -308,6 +310,8 @@
   list-style: none;
 }
 .vs-onboarding-vibe {
+  /* A raised tile but no Surface: its captions read the raised layer's text step. */
+  --text-3: var(--layer-raised-text-3);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -331,7 +335,7 @@
   line-height: inherit;
 }
 .vs-onboarding-vibe-says {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   line-height: inherit;
 }
 .vs-onboarding-vibe:hover:not(:disabled) {

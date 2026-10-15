@@ -13,7 +13,7 @@
   /* The tip's place across, 0–1 (set inline from the dot). */
   --vs-field-at: 0.5;
   /* model/field.ts's bandColour names the grey band `var(--caption)`: the raised caption here. */
-  --caption: var(--vs-caption-raised);
+  --caption: var(--text-3);
   /* The tip's widest (field.css's 200px), a measure the scale has no step for. */
   --vs-field-tip-width: calc(var(--space-2) * 25);
   position: relative;
@@ -71,7 +71,7 @@
 .vs-field-axis {
   position: absolute;
   left: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   /* A body Text on a tight line, in capitals (Field.tsx's Axis): an engraved scale's words, the
      one place the source sets type in capitals. */
   --text-size: var(--vs-text-annot);
@@ -203,7 +203,7 @@
   pointer-events: none;
 }
 .vs-field-tip-note {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 
 /* Said to a screen reader, not shown. */

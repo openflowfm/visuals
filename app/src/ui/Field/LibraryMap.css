@@ -19,7 +19,7 @@
   --text-weight: 500;
 }
 .vs-map > .lib-group__head .lib-group__label {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-map > .lib-group__head {
   min-width: 0;
@@ -30,7 +30,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 /* No overflow clip here: the colour picker's list opens from the aside. The count ellipsizes itself. */
 .vs-map > .lib-group__head .lib-group__aside {
@@ -49,6 +49,6 @@
 /* Nothing playing: what the dots are, under the heading. */
 .vs-map-help {
   margin: var(--space-2) 0 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-leading: 1.45;
 }

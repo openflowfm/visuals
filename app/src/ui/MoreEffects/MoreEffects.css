@@ -92,7 +92,7 @@
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-more-fx-hits .vs-effects-hit[data-on] .vs-effects-hit-key {
   color: var(--text-1);
@@ -100,7 +100,7 @@
 
 /* Reset: a quiet word, type until pointed at. */
 .vs-more-fx-reset .lib-action-button-face {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 
 /* Narrow: one column, Punch the width of the drawer between the switches and Reset. */

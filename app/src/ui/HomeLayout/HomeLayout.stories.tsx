@@ -100,7 +100,7 @@ function Composed({ width, prefs: start }: Args) {
           <div style={{ padding: '20px 18px' }}>
             <p style={{ margin: '0 0 6px', color: 'var(--text-4)', fontSize: 11 }}>About the preset</p>
             <h2 style={{ margin: 0, fontSize: 17, color: 'var(--text-1)' }}>{NOW.preset?.title}</h2>
-            <p style={{ margin: '6px 0 0', color: 'var(--vs-caption-raised)', fontSize: 12 }}>The inspector's own story (Layout/Inspector) shows what goes here.</p>
+            <p style={{ margin: '6px 0 0', color: 'var(--text-3)', fontSize: 12 }}>The inspector's own story (Layout/Inspector) shows what goes here.</p>
           </div>
         }
       >

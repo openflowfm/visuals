@@ -418,8 +418,6 @@
   color: var(--text-1);
 }
 .vs-library-home .vs-library-name-input {
-  /* A raised tint: the caption a step lighter on it. */
-  --vs-library-caption: var(--vs-caption-raised);
   flex: 0 1 calc(var(--space-6) * 8 + var(--space-1));
   padding: var(--space-1) var(--space-2);
   color: var(--text-1);
@@ -535,9 +533,10 @@
 }
 
 /* The filter's popover: the groups, the open group's values, what is picked and the count, Clear
-   and Save. It is glass: its captions take the lighter step. */
+   and Save. Its caption is re-read here, under the float layer's own text step (the toolbar's is
+   the unlayered one). */
 .vs-library-toolbar .vs-library-filter-panel {
-  --vs-library-caption: var(--vs-caption-raised);
+  --vs-library-caption: var(--text-3);
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
@@ -548,7 +547,7 @@
 .vs-library-toolbar .vs-library-filter-panel :is(.vs-library-chips, .vs-library-picked) {
   padding: 0;
 }
-/* The popover is the sidebar's material (visuals.css, "Glass layers"), so its type keeps the
+/* The popover is the sidebar's material (zen's raised, which popovers take), so its type keeps the
    sidebar's steps rather than the faint one: names (the groups, the sub-values) in the controls'
    ink, as a sidebar row's, and the marks (the ✕, the links) in the raised caption, as the
    sidebar's headings and icons. Open, picked and hovered still lift to the ink. */
@@ -557,7 +556,7 @@
   color: var(--text-2);
 }
 .vs-library-toolbar .vs-library-filter-panel :is(.vs-library-chip-picked .vs-library-x, .vs-library-link):not(:hover) {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-library-toolbar .vs-library-filter-panel .vs-library-values {
   margin: 0;

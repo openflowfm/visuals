@@ -1,5 +1,5 @@
 /* The inset sidebar's content (InsetSidebar.tsx), from the original's inset-sidebar.css, inside
-   HomeLayout's panel (the raised layer, so captions take the raised step). The app's source
+   HomeLayout's panel (the raised layer, whose captions are zen's raised text step). The app's source
    list: quiet sentence-case headings that fold with a chevron, rows of --vs-lay-row, the row
    picked a soft pill of --radius-control in the ink, heavier, the playlist playing its green
    dot. No lines: areas told apart by space and tone (decision 68). Nothing animates. */
@@ -55,7 +55,7 @@
   border: 0;
   border-radius: var(--radius-control);
   background: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   cursor: pointer;
 }
 .vs-isb-help:hover,
@@ -79,7 +79,7 @@
   border: 0;
   border-radius: var(--radius-control);
   background: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -113,7 +113,7 @@
   border: 0;
   border-radius: var(--radius-control);
   background: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -163,7 +163,7 @@
    came and went with whatever was behind it. */
 .vs-isb-icon {
   flex: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 /* Hover: the name and icon lift to the ink over the faintest tint. */
 .vs-isb-row:hover {
@@ -211,14 +211,14 @@
   flex: none;
   margin-left: auto;
   padding-left: calc(var(--space-1) * 1.5); /* 6px */
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   font-family: var(--font-readout);
   font-style: normal;
   --text-size: var(--vs-isb-small);
 }
 .vs-isb-empty {
   padding: var(--space-1) var(--vs-isb-gutter);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-isb-small);
 }
 
@@ -252,7 +252,7 @@
   border: 0;
   border-radius: var(--vs-isb-key-radius);
   background: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   font: inherit;
   cursor: pointer;
 }
@@ -299,7 +299,7 @@
   color: var(--text-1);
 }
 .vs-isb-play:disabled {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   cursor: default;
 }
 .vs-isb-item[data-live]:hover :is(.vs-isb-play, .vs-isb-more),
@@ -396,6 +396,6 @@
   color: var(--danger);
 }
 .vs-isb-menu [role='menuitem']:disabled {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   cursor: default;
 }

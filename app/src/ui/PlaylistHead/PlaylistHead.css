@@ -53,6 +53,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The pane variant sits on no layered Surface: its captions read zen's lifted step (the raised
+   layer's text step). */
+.vs-playlisthead[data-variant='pane'] {
+  --text-3: var(--layer-raised-text-3);
+}
 .vs-playlisthead[data-variant='pane'] .vs-playlisthead-name {
   line-height: inherit;
 }
@@ -177,7 +182,7 @@
   display: inline-flex;
   align-items: center;
   gap: calc(var(--space-1) * 1.5);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   /* A caption Text, for its words and the fields in it. */
   line-height: inherit;
 }

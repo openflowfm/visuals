@@ -8,8 +8,6 @@
 
 .vs-live-map {
   --vs-live-map-pad: calc(var(--space-4) + var(--space-1)); /* 20px */
-  /* Raised: captions take the raised step. */
-  --text-3: var(--vs-caption-raised);
   --lib-surface-backdrop: none;
   display: flex;
   flex: 0 1 auto;

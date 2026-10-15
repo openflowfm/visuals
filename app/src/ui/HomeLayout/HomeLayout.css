@@ -150,9 +150,10 @@
   width: calc(var(--vs-lay-insp) + 2 * var(--lib-panel-inset));
 }
 
-/* The inset panels: a raised layer over the window's tint, a hint of glass at the top edge (the
-   float layer's edge). Raised, so captions take the raised step (4.5:1 there). In the Opaque
-   scope (laid over the column) the raised layer draws its solid. */
+/* The inset panels: a raised Surface over the window's tint, zen's raised material (its fill,
+   backdrop and text steps). Docked, its lift (the float's edge and cast) is the assembled
+   screen's, as for every `panel` region (Assembly.css). In the Opaque scope (laid over the
+   column) the raised layer draws its solid. */
 .vs-lay-panel {
   position: relative;
   display: flex;
@@ -162,55 +163,15 @@
   min-height: 0;
   margin: 0;
   border-radius: var(--vs-lay-side-radius);
-  /* A raised Surface (its fill, texture and the picture's ambient light) and the raised layer's
-     backdrop, a sheet of glass over the window (visuals.css, "Glass layers"): it never sits over
-     the native preview docked, and laid over the column the Opaque scope draws it solid with no
-     backdrop. Docked, its lift (the float's edge and cast) is the assembled screen's, as for
-     every `panel` region (Assembly.css). */
-  --lib-surface-backdrop: var(--layer-raised-backdrop);
   overflow: hidden;
   outline: none;
   color: var(--text-2);
 }
-/* Reduce transparency, or more contrast: Home's layers draw their solids with no backdrop (the
-   Opaque scope's, zen's `lib-opaque`, over the whole layout), so the panels and the bar paint
-   opaque. WKWebView doesn't answer the media query, so access.ts marks the document from macOS's
-   own setting (data-transparency="reduced"); the queries stay for a WebKit that does. */
-:root[data-transparency='reduced'] :is(.vs-lay, .vs-lay-panel) {
-  --layer-ground-fill: var(--layer-ground-solid);
-  --layer-base-fill: var(--layer-base-solid);
-  --layer-raised-fill: var(--layer-raised-solid);
-  --layer-float-fill: var(--layer-float-solid);
-  --layer-overlay-fill: var(--layer-overlay-solid);
-  --layer-top-fill: var(--layer-top-solid);
-  --layer-ground-backdrop: none;
-  --layer-base-backdrop: none;
-  --layer-raised-backdrop: none;
-  --layer-float-backdrop: none;
-  --layer-overlay-backdrop: none;
-  --layer-top-backdrop: none;
-}
-@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  .vs-lay,
-  .vs-lay-panel {
-    --layer-ground-fill: var(--layer-ground-solid);
-    --layer-base-fill: var(--layer-base-solid);
-    --layer-raised-fill: var(--layer-raised-solid);
-    --layer-float-fill: var(--layer-float-solid);
-    --layer-overlay-fill: var(--layer-overlay-solid);
-    --layer-top-fill: var(--layer-top-solid);
-    --layer-ground-backdrop: none;
-    --layer-base-backdrop: none;
-    --layer-raised-backdrop: none;
-    --layer-float-backdrop: none;
-    --layer-overlay-backdrop: none;
-    --layer-top-backdrop: none;
-  }
-}
-/* More contrast: the panels' captions take the full ink, as the original's inspector did. */
+/* More contrast: the panels' captions take the full ink, as the original's inspector did (zen's
+   raised text steps stay as they are under more contrast). */
 @media (prefers-contrast: more) {
   .vs-lay-panel {
-    --vs-caption-raised: var(--text-1);
+    --layer-raised-text-3: var(--text-1);
   }
 }
 
