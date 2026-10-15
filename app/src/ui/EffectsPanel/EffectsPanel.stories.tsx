@@ -27,7 +27,7 @@ function Window() {
 
 /**
  * **Live's effects panel** (design C): Home's side-panel material at the Stage's left. The held
- * effects as pads ("Hold · ⇧ to latch": Strobe S, Blackout B, Freeze F, Punch P), Intensity,
+ * effects as pads ("Hold · ⇧ to latch · Blackout toggles": Strobe S, Blackout B, Freeze F, Punch P), Intensity,
  * Speed, Colour and Trails as slider rows, Mirror and Invert, and Back to normal (0) at its foot.
  */
 const meta = {
@@ -46,7 +46,7 @@ export const AtRest: Story = {
   play: async ({ canvas }) => {
     const panel = await canvas.findByRole('complementary', { name: 'Effects' });
     const p = within(panel);
-    await expect(p.getByText('Hold · ⇧ to latch')).toBeVisible();
+    await expect(p.getByText('Hold · ⇧ to latch · Blackout toggles')).toBeVisible();
     for (const name of ['intensity', 'speed', 'hue', 'trails']) await expect(await p.findByRole('slider', { name })).toBeVisible();
     const blackout = p.getByRole('button', { name: 'Blackout (B)' });
     await userEvent.click(blackout);

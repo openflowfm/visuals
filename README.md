@@ -92,7 +92,7 @@ let you hide the photograph while recognizable edges shed trails. Edge steadines
 and curve smoothing reduce jitter. The existing music input, preset library and
 fullscreen output keep working. Camera starts off, asks for video permission only
 when enabled, and processes images locally. Closing the panel keeps it running;
-**Stop camera** releases capture. See [the camera guide](docs/camera-player.md).
+turning **Enable camera** off releases capture. See [the camera guide](docs/camera-player.md).
 
 ### Privacy
 

@@ -416,6 +416,9 @@ export function handler(w: World) {
         const p = w.lists.playlists.find((x) => x.id === args.id);
         return { file_name: `${p?.name ?? 'playlist'}.json`, text: JSON.stringify(p ?? {}) };
       }
+      case 'save_file':
+        // The save panel, answered at once: saved.
+        return true;
       case 'playlist_import': {
         // As `Store::import` names it: the file's name, or the first free one after it, said so.
         let wanted = 'Shared';

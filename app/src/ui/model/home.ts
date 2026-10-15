@@ -1,6 +1,7 @@
 import type { LibraryQuery } from './api';
 import * as pl from './playlists';
 import type { Playlist, PlaylistSettings } from './playlists';
+import { invoke } from './ipc';
 import { facet, type Prepared } from './librarySearch';
 import { say } from './words';
 
@@ -432,14 +433,8 @@ export function pickTiles(picked: readonly string[], keys: readonly string[], in
 
 const clamp = (v: number, lo: number, hi: number) => (Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : lo);
 
-/** A file to save in the page: a link to it, clicked. */
-export function saveFile(name: string, text: string) {
-  const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+/**
+ * A file to save: the app's save panel, `name` suggested (the webview cancels a download link's
+ * downloads). True when it was saved, false when the user cancelled.
+ */
+export const saveFile = (name: string, text: string) => invoke<boolean>('save_file', { name, text });
