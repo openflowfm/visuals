@@ -1,6 +1,7 @@
 //! The small files the app keeps its choices in between runs (the audio input,
-//! the output's display, the tempo, whether the first run is done, where the
-//! show was), in `~/.openflow/visuals` (under `OPENFLOW_HOME`).
+//! the output's display, the tempo, the effects' settings, whether Link is on,
+//! whether the first run is done, where the show was), in `~/.openflow/visuals`
+//! (under `OPENFLOW_HOME`).
 //!
 //! Each file carries a `"version"` ([`SPECS`]): a file from before versions
 //! (version 0) or an older one is moved up to the current version as it is read,
@@ -58,6 +59,8 @@ const SPECS: &[Spec] = &[
     Spec { name: "output.json", version: 1, what: "output display setting", wrapped: false, migrate: nothing },
     Spec { name: "render.json", version: 1, what: "output render setting", wrapped: false, migrate: nothing },
     Spec { name: "tempo.json", version: 1, what: "tempo", wrapped: false, migrate: nothing },
+    Spec { name: "effects.json", version: 1, what: "effects settings", wrapped: false, migrate: nothing },
+    Spec { name: "link.json", version: 1, what: "Ableton Link setting", wrapped: false, migrate: nothing },
     Spec { name: FIRST_RUN, version: 1, what: "first-run setting", wrapped: false, migrate: nothing },
     Spec { name: "played.json", version: 1, what: "recently played list", wrapped: true, migrate: nothing },
     Spec { name: "resume.json", version: 1, what: "place in the show", wrapped: false, migrate: nothing },

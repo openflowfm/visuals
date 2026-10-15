@@ -312,10 +312,27 @@ impl Link {
     }
 }
 
-/// Join Link (unless `VISUALS_LINK=0`), and start the 10 Hz `link` event and the
-/// scheduler that changes the preset on the beat.
+/// Where whether Link is on is kept, in [`crate::settings::dir`]: `{"enabled": false}`.
+const FILE: &str = "link.json";
+
+#[derive(Serialize, Deserialize)]
+struct Kept {
+    enabled: bool,
+}
+
+/// Whether to join Link at launch: `VISUALS_LINK` when set (`0` is off), otherwise
+/// on or off as it was left ([`link_enable`] keeps it), on until it has been turned off.
+fn enabled_at_launch(env: Option<String>, kept: Option<bool>) -> bool {
+    match env {
+        Some(v) => v != "0",
+        None => kept.unwrap_or(true),
+    }
+}
+
+/// Join Link (as it was left, or as `VISUALS_LINK` says), and start the 10 Hz `link`
+/// event and the scheduler that changes the preset on the beat.
 pub fn start(handle: AppHandle) {
-    let enabled = std::env::var("VISUALS_LINK").map_or(true, |v| v != "0");
+    let enabled = enabled_at_launch(std::env::var("VISUALS_LINK").ok(), crate::settings::load::<Kept>(FILE).map(|k| k.enabled));
     handle.manage(Link::new(enabled));
     // `VISUALS_LINK_EVERY=<bars>` starts with changes on, like the panel's "every N
     // bars" — so only once Link is managed, which the deck's schedule reaches.
@@ -360,10 +377,11 @@ pub fn link_state(link: State<Link>) -> Frame {
     link.frame()
 }
 
-/// Join or leave the Link session. Off, the clock runs on at the last tempo.
+/// Join or leave the Link session, kept for the next launch. Off, the clock runs on at the last tempo.
 #[tauri::command]
 pub fn link_enable(on: bool, link: State<Link>) -> Frame {
     link.link.enable(on);
+    crate::settings::save_json(FILE, &Kept { enabled: on });
     link.frame()
 }
 
