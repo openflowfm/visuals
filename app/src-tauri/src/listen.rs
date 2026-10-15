@@ -7,6 +7,8 @@ use crate::tap::{self, Permission, Process, Target};
 use crate::{bench, App};
 use cpal::traits::{DeviceTrait, HostTrait};
 use engine::live::{peaks, Sink};
+#[path = "listen_access.rs"]
+mod access;
 #[path = "listen_connect.rs"]
 mod connect;
 use crate::audio::{Lane, LaneStatus, Status};
@@ -309,7 +311,18 @@ impl World for Mac {
     fn open(&self, source: Option<&SourceId>, channels: (usize, usize), ring: Sink) -> Result<Listening, String> {
         physical_audio_allowed()?;
         let source = source.cloned();
-        connect::run(move |attempt| {
+        // An input device: settle macOS's microphone permission first, so the open
+        // never waits on its prompt inside the driver, and a slow device fails fast.
+        let (key, device) = match source.as_ref() {
+            None => ("input:system".to_owned(), true),
+            Some(SourceId::Device { name, size, uid }) => (format!("input:{}", uid.clone().unwrap_or_else(|| format!("{name}/{size}"))), true),
+            Some(SourceId::System) => ("tap:system".to_owned(), false),
+            Some(SourceId::App { bundle }) => (format!("tap:{bundle}"), false),
+        };
+        if device {
+            access::microphone_allowed()?;
+        }
+        connect::run(key, if device { connect::DEVICE_DEADLINE } else { connect::TAP_DEADLINE }, move |attempt| {
             attempt.stage("finding the audio source")?;
             let opened = match source.as_ref() {
                 None => listen_device(None, None, None, channels, ring, &attempt),

@@ -45,7 +45,25 @@ export const Welcome: Story = {
   },
 };
 
-/** The flow's warning step: the warning, the reduce-flashing switch, and I understand. */
+/**
+ * Listen to: the preview fills the window behind the words' card. Test sound plays music through
+ * the speakers and into the visuals; while it plays the button stops it, and a note says the
+ * picker waits for that.
+ */
+export const ListenStep: Story = {
+  args: { start: 'listen' },
+  play: async () => {
+    await expect(await screen.findByRole('heading', { level: 1 })).toBeVisible();
+    await userEvent.click(screen.getByRole('button', { name: /▶ Test sound/ }));
+    const stop = await screen.findByRole('button', { name: /■ Stop test sound/ });
+    await expect(screen.getByText(/Stop the test sound to choose what to/)).toBeVisible();
+    await userEvent.click(stop);
+    await expect(await screen.findByRole('button', { name: /▶ Test sound/ })).toBeVisible();
+    await waitFor(() => expect(screen.queryByText(/Stop the test sound to choose what to/)).toBeNull());
+  },
+};
+
+/** The flow's warning step:the warning, the reduce-flashing switch, and I understand. */
 export const WarningStep: Story = {
   args: { start: 'warning' },
   play: async () => {

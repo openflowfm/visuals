@@ -1,14 +1,22 @@
 //! Bound acquisition, not just its UI. A timed-out worker cannot install a late
 //! stream. Core Audio calls cannot be forcibly interrupted; while one is still
-//! inside the driver, reject retries rather than accumulate blocked workers.
+//! inside the driver, reject retries of that source rather than accumulate
+//! blocked workers; another source can still be chosen meanwhile.
+use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Condvar, LazyLock, Mutex,
 };
 use std::time::Duration;
 
-const DEADLINE: Duration = Duration::from_secs(20);
-static CONNECTOR: LazyLock<Connector> = LazyLock::new(Connector::default);
+/// How long a process tap may take: its first open can wait on macOS's prompt
+/// for other apps' sound.
+pub(super) const TAP_DEADLINE: Duration = Duration::from_secs(20);
+/// How long an input device may take, once the microphone permission is settled
+/// (`listen_access`): a working one opens in well under a second.
+pub(super) const DEVICE_DEADLINE: Duration = Duration::from_secs(5);
+/// One admission per source, so a source stuck in the driver never blocks another.
+static CONNECTORS: LazyLock<Mutex<HashMap<String, Arc<Connector>>>> = LazyLock::new(Default::default);
 #[derive(Default)]
 pub(super) struct Connector {
     busy: Arc<AtomicBool>,
@@ -43,8 +51,10 @@ impl Drop for Busy {
         self.0.store(false, Ordering::Release);
     }
 }
-pub(super) fn run<T: Send + 'static>(open: impl FnOnce(Attempt) -> Result<T, String> + Send + 'static) -> Result<T, String> {
-    CONNECTOR.run(DEADLINE, open)
+/// Open the source named `source` within `deadline`.
+pub(super) fn run<T: Send + 'static>(source: String, deadline: Duration, open: impl FnOnce(Attempt) -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    let connector = CONNECTORS.lock().unwrap().entry(source).or_default().clone();
+    connector.run(deadline, open)
 }
 impl Connector {
     #[cfg(test)]
@@ -54,7 +64,7 @@ impl Connector {
     pub(super) fn run<T: Send + 'static>(&self, timeout: Duration, open: impl FnOnce(Attempt) -> Result<T, String> + Send + 'static) -> Result<T, String> {
         self.busy
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .map_err(|_| "The previous audio connection is still waiting on macOS. Finish any permission prompt and retry. If it remains stuck, restart visual[flow].".to_string())?;
+            .map_err(|_| "This source is still waiting on macOS from the last try. Pick another source; if this one stays stuck, restart visual[flow].".to_string())?;
         let permit = Busy(self.busy.clone());
         let attempt = Attempt { cancelled: Arc::new(AtomicBool::new(false)), stage: Arc::new(Mutex::new("finding the audio source")) };
         let worker = attempt.clone();
@@ -90,7 +100,7 @@ impl Connector {
         drop(mail);
         let stage = *attempt.stage.lock().unwrap();
         eprintln!("audio connection timed out: {stage}");
-        Err(format!("Audio connection timed out while {stage}. The previous source is unchanged. Finish any macOS permission prompt and retry."))
+        Err(format!("Audio connection timed out while {stage}. The previous source is unchanged: pick another source, or try this one again."))
     }
 }
 #[cfg(test)]
