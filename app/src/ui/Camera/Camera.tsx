@@ -27,16 +27,19 @@ function useCamera() {
   const state = useSyncExternalStore(controller?.subscribe ?? noSubscribe, controller?.snapshot ?? offSnapshot);
   return { controller, ...state };
 }
-/** Mounted once by App. Closing sheets, changing views and presets keep capture alive. */
+/**
+ * Mounted once by App. Closing sheets, changing views and presets keep capture alive.
+ * It never lists cameras: WebKit lists capture devices on the app's main thread, asking
+ * Core Audio too, which can stall the whole window while an audio device is starting
+ * (a launch froze ~14 s that way), so only the open camera sheet lists them (`CameraPanel`).
+ */
 export function CameraProvider({ children, controller }: { children: ReactNode; controller?: CameraController }) {
   useEffect(() => {
     if (!controller) return;
-    const unwatch = controller.watchDevices();
     const stop = () => controller.stop();
     window.addEventListener('pagehide', stop);
     return () => {
       window.removeEventListener('pagehide', stop);
-      unwatch();
       controller.stop();
     };
   }, [controller]);
@@ -107,6 +110,8 @@ const SLIDERS: {
 ];
 export function CameraPanel({ open, onClose }: { open: boolean; onClose(): void }) {
   const { controller, status, message, settings, deviceId, devices, deviceMessage } = useCamera();
+  // The camera list is read, and kept current, only while the sheet is open (see `CameraProvider`).
+  useEffect(() => (open && controller ? controller.watchDevices() : undefined), [open, controller]);
   if (!open) return null;
   const on = status === 'active' || status === 'starting';
   const choices = [
