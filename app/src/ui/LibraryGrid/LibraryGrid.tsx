@@ -1,4 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import type { FocusEvent, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
 import { ActionButtonFace as ButtonFace } from '@satoramoto/zen';
 import { Text } from '@satoramoto/zen';
@@ -229,6 +230,8 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
   const look = useMemo(() => (size.home ? homeLook(size.pad, size.bar, size.under, size.over) : LAB_LOOK), [size.home, size.pad, size.bar, size.under, size.over]);
   const lay = layout(size.width, rows.length, tileMin, look);
   const { first, last } = windowOf(topRow * lay.rowHeight, size.height, lay.rowHeight, lay.rows);
+  // The measure below, for a render that changes the tile size in the same commit as the grid's width.
+  const remeasure = useRef<(() => void) | null>(null);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -255,11 +258,23 @@ export function LibraryGrid({ rows, active, selected, current, into, onMove, onP
       );
     };
     measure();
+    remeasure.current = measure;
     if (typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(measure);
+    // A resize lays the tiles out again before the frame paints (an observer runs after layout,
+    // before paint, and flushSync commits there), so a sidebar closing never paints a frame of
+    // the old width's layout: with the pane's new tile size on the old width the window held
+    // fewer tiles, the rest unmounted, and they came back a frame later with their thumbnails
+    // still loading, which read as the grid blinking out and back.
+    const ro = new ResizeObserver(() => flushSync(measure));
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      remeasure.current = null;
+      ro.disconnect();
+    };
   }, []);
+  // The pane's tile size changes in the same commit as the width the screen gives it (the sidebar
+  // closing): measure the new width now, before paint, rather than lay the new size on the old.
+  useLayoutEffect(() => remeasure.current?.(), [tileMin]);
 
   const onScroll = () => {
     const el = ref.current;
