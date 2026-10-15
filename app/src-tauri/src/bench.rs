@@ -71,6 +71,9 @@ pub enum Cmd {
     Snapshot(bool, Sender<Option<Picture>>),
     /// Draw at this render scale and mesh size from now on (`quality.rs`).
     Quality(engine::quality::Quality),
+    /// Esc is held to leave live (true), or was let go before leaving (false):
+    /// the output fades toward black, or back ([`crate::leaving`]).
+    Leaving(bool),
 }
 
 /// A picture: its width and height in pixels, and its RGBA rows top to bottom.
@@ -356,6 +359,7 @@ pub fn start(instance: wgpu::Instance, surface: wgpu::Surface<'static>, size: (u
         previews: previews.clone(),
         fx,
         output: None,
+        leaving: crate::leaving::Leaving::default(),
         bench_shown: true,
         logged: now,
         audio: Audio::default(),
@@ -407,6 +411,10 @@ struct Loop {
     /// paces the loop; the bench presents without waiting, so the show is the
     /// smooth one.
     output: Option<Output>,
+    /// Esc held to leave live: how far the output has faded toward black. Put
+    /// back whenever the output opens or closes, so leaving (which closes it)
+    /// leaves nothing dimmed for next time.
+    leaving: crate::leaving::Leaving,
     bench_shown: bool,
     /// When the log line was last written.
     logged: Instant,
@@ -661,6 +669,7 @@ impl Loop {
             Cmd::Output(next, done) => {
                 // The old output's surface goes first: its window closes after the reply.
                 self.output = None;
+                self.leaving = crate::leaving::Leaving::default();
                 let drawn = next.as_ref().map(|(_, _, drawn)| *drawn);
                 if let Some((s, size, _)) = next {
                     let mut c = configuration(&self.adapter, &s, size);
@@ -707,6 +716,7 @@ impl Loop {
             }
             Cmd::SampleRate(rate) => self.audio.set_sample_rate(rate),
             Cmd::Quality(quality) => self.renderer.set_quality(quality),
+            Cmd::Leaving(on) => self.leaving.set(on, Instant::now()),
             Cmd::Set(owner, key, value, reply) => {
                 let _ = reply.send(self.renderer.set_value(owner, &key, value));
             }
@@ -829,6 +839,14 @@ impl Loop {
             show(&mut self.renderer, &self.surface, &self.config);
         }
         if let Some(output) = &self.output {
+            // Esc held to leave live: the output fades toward black over the hold (never with motion reduced); the
+            // main window's picture fades under the page's own veil instead.
+            if !crate::access::reduced() {
+                let now = Instant::now();
+                if self.leaving.level(now) > 0.0 {
+                    self.renderer.set_master(engine::fx::Master { black: self.leaving.over(master.black, now), ..master });
+                }
+            }
             show(&mut self.renderer, &output.surface, &output.config);
         }
         // How often the display refreshes: the time round this loop, smoothed.

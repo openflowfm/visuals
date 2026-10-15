@@ -3,7 +3,8 @@
 //! a Metal layer the bench's render thread presents the same finished picture
 //! to, scaled to fit the display with the render resolution's aspect kept, black
 //! around it ([`place`]). Esc held on it for 3 s leaves live mode, as Esc held in
-//! the main window does (the `output-escape` event, told on Esc down and up).
+//! the main window does (the `output-escape` event, told on Esc down and up),
+//! the picture fading toward black over the hold ([`crate::leaving`]).
 //!
 //! How it is drawn — the resolution, a render scale on it and a frame-rate cap
 //! ([`Render`]) — is set in the Output panel and remembered
@@ -403,6 +404,14 @@ pub fn output_close(handle: AppHandle) -> Result<Status, String> {
         let _ = handle;
         Ok(Status::default())
     }
+}
+
+/// Esc is held to leave live (`on`), or was let go before leaving: the output
+/// fades toward black over the hold, or back quickly ([`crate::leaving`]). The
+/// fade is put back when the output closes, so leaving needs no word of its own.
+#[tauri::command]
+pub fn output_leaving(on: bool, app: tauri::State<crate::App>) {
+    app.send(crate::bench::Cmd::Leaving(on));
 }
 
 #[tauri::command]

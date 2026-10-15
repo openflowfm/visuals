@@ -1,5 +1,5 @@
 import type { Decorator, Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { withLibraryTheme, withStoryFrame } from '@satoramoto/zen/storybook';
 import { Lights } from '../HomeLayout/HomeLayout';
 import { FX_BUSY, LISTS, PLAYING_DECK, WARM_UP } from '../fixtures/fixtures';
@@ -8,6 +8,7 @@ import { DEFAULT_AXES } from '../model/field';
 import { setMapAxes } from '../model/mapPrefs';
 import { resetTrail } from '../model/trail';
 import { resetLiveMapScope } from '../LiveMap/scope';
+import { HOME } from '../Views/Views';
 import { Live } from './Live';
 
 /**
@@ -199,6 +200,41 @@ export const PinnedNarrow: Story = {
     await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
     await userEvent.keyboard('\\');
     await waitFor(() => expect(root(canvasElement).dataset.pinned).toBe(''));
+  },
+};
+
+/**
+ * Esc held to leave live: "Hold Esc to leave live" with a ring filling over 3 s, the window fading
+ * toward black under it (the output too, drawn by the app). Let go early, it goes back quickly
+ * and the show carries on; held the whole 3 s, live is left as ever.
+ */
+const leftFor = fn();
+export const EscHold: Story = {
+  name: 'Esc held, let go, held',
+  args: { onMode: leftFor },
+  play: async ({ canvas, canvasElement }) => {
+    leftFor.mockClear();
+    await waitFor(() => expect(root(canvasElement)).toBeInTheDocument());
+    (document.activeElement as HTMLElement | null)?.blur();
+    const veil = () => canvasElement.querySelector('.vs-stagelayout-veil');
+    // The hint while it is a status (the header has quiet statuses of its own).
+    const hint = () => canvas.queryAllByRole('status').find((s) => s.textContent?.includes('Hold Esc to leave live')) ?? null;
+    const user = userEvent.setup();
+    // Held: the hint after a beat, the fade under it.
+    await user.keyboard('{Escape>}');
+    await waitFor(() => expect(hint()).toBeVisible());
+    await expect(veil()).toHaveAttribute('data-holding');
+    // Let go early: no longer a status at once, the fade turning back, the card gone soon after, and still live.
+    await user.keyboard('{/Escape}');
+    await waitFor(() => expect(hint()).toBeNull());
+    await expect(veil()).not.toHaveAttribute('data-holding');
+    await waitFor(() => expect(canvas.queryByText('Hold Esc to leave live')).toBeNull());
+    await expect(leftFor).not.toHaveBeenCalled();
+    // Held the whole hold: leaves live for the home, as ever.
+    await user.keyboard('{Escape>}');
+    await waitFor(() => expect(leftFor).toHaveBeenCalledTimes(1), { timeout: 4500 });
+    await expect(leftFor.mock.calls[0][0]).toBe(HOME);
+    await user.keyboard('{/Escape}');
   },
 };
 

@@ -93,7 +93,8 @@ describe('Esc held: leaving live', () => {
     expect(t.editor).not.toHaveBeenCalled();
     vi.advanceTimersByTime(1);
     expect(t.editor).toHaveBeenCalledTimes(1);
-    expect(holding).toHaveBeenLastCalledWith(false);
+    // Over by leaving, so the output's fade isn't turned back on the way out.
+    expect(holding).toHaveBeenLastCalledWith(false, true);
     expect(keys.holding).toBe(false);
     vi.advanceTimersByTime(LEAVE_HOLD_MS * 2);
     expect(t.editor).toHaveBeenCalledTimes(1);
@@ -133,7 +134,8 @@ describe('Esc held: leaving live', () => {
     sheet = true;
     vi.advanceTimersByTime(LEAVE_HOLD_MS);
     expect(t.editor).not.toHaveBeenCalled();
-    expect(holding).toHaveBeenLastCalledWith(false);
+    // Over without leaving: the output's fade turns back.
+    expect(holding).toHaveBeenLastCalledWith(false, false);
   });
 
   it('a sheet already open takes Esc: no hold starts', () => {

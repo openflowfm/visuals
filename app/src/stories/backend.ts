@@ -452,6 +452,9 @@ export function handler(w: World) {
         return w.link;
       case 'output_status':
         return w.output;
+      // Esc held to leave live: the app fades its output; there is none here to fade.
+      case 'output_leaving':
+        return null;
       case 'output_open':
         w.output = { display: w.displays.find((d) => d.id === args.id) ?? w.displays[w.displays.length - 1], size: [1920, 1080] };
         void emit('output', w.output);

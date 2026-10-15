@@ -16,6 +16,7 @@ mod dev;
 #[cfg(feature = "lab")]
 mod editor;
 mod fx;
+mod leaving;
 mod library;
 mod link;
 mod listen;
@@ -93,6 +94,7 @@ macro_rules! commands {
             output::output_open,
             output::output_close,
             output::output_status,
+            output::output_leaving,
             output::output_render,
             output::output_set_render,
             link::link_state,
