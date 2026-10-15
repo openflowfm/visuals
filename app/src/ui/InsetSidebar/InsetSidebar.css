@@ -159,9 +159,11 @@
   cursor: pointer;
   user-select: none;
 }
+/* The raised layer's secondary step (its caption), not the faint one: on glass, the faint step
+   came and went with whatever was behind it. */
 .vs-isb-icon {
   flex: none;
-  color: var(--text-4);
+  color: var(--vs-caption-raised);
 }
 /* Hover: the name and icon lift to the ink over the faintest tint. */
 .vs-isb-row:hover {
