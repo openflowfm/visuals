@@ -35,7 +35,7 @@
   },
   "dependencies": {
     "@satoramoto/zen": "github:satoramoto/zen#c365bc46cc16223555c04925d0f56b6108f9dd40",
-    "@tauri-apps/api": "^2.12.1",
+    "@tauri-apps/api": "^2.12.3",
     "@tauri-apps/plugin-opener": "^2.7.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
