@@ -214,7 +214,7 @@ export function useLiveKeys(to: LiveKeyTargets): EscapeFeed {
       effects: () => latest.current.effects?.(),
       map: () => latest.current.map?.(),
       escape: () => latest.current.escape?.() === true,
-      holding: (on, left) => latest.current.holding?.(on, left),
+      holding: (...args) => latest.current.holding?.(...args),
     });
     live.current = keys;
     const keydown = (e: KeyboardEvent) => keys.keydown(e);
