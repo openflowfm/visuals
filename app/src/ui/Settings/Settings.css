@@ -83,6 +83,11 @@
 .vs-root [aria-activedescendant]:focus-visible {
   outline: none;
 }
+/* zen's SearchField rings the whole field (its :focus-within); its inner input draws none of its own.
+   As specific as the rule above, and after it, so it wins. */
+.vs-root .yh-search-field .yh-search-field__input:focus-visible {
+  outline: none;
+}
 /* A dialog or sheet focused as a whole (on open) is announced, not ringed. */
 .vs-root [tabindex='-1']:focus {
   outline: none;
