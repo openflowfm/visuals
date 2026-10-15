@@ -92,12 +92,11 @@
    the pack's layers as a ramp (zen's frost materials are where it belongs; until then the app
    says it here, on the scope's own variables, so every Surface of a layer follows):
    - blur: one step (`--vs-glass-blur`) per sheet above the window: raised two steps, the floats
-     (popovers, menus, a dragged tile), the sheets and the toasts four.
+     (popovers, menus, a dragged tile) three, the sheets and the toasts four.
    - tint: raised keeps a floor of its solid tone (`--vs-glass-raised-floor`), so secondary type
-     and icons on it hold their contrast whatever is behind the glass; the float layer is a
-     lighter, cleaner tone than the window (its solid lifted toward the light, the white key, which
-     is light in both modes), takes none of the picture's colour (held dark, the picture's colour
-     read as a murky olive slab) and has a lit top edge. Over the native preview no backdrop
+     and icons on it hold their contrast whatever is behind the glass; the floats are the same
+     material as raised, with no border, set apart only by a soft shadow, and their type keeps the
+     sidebar's steps (Library.css, the filter's popover). Over the native preview no backdrop
      reaches the picture, so there the tint is all of it.
    Only while transparency is allowed: under Reduce transparency (macOS's setting, which access.ts
    marks on the document, or the media query) and More contrast none of this applies, so zen's
@@ -107,14 +106,19 @@
   :root:not([data-transparency='reduced']) .vs-root {
     --vs-glass-blur: 8px;
     --vs-glass-raised-floor: 62%;
-    --vs-glass-float-lift: 12%;
-    --vs-glass-float-tint: 62%;
     --layer-raised-fill: color-mix(in oklab, var(--layer-raised-solid) var(--vs-glass-raised-floor), transparent);
     --layer-raised-backdrop: blur(calc(var(--vs-glass-blur) * 2)) saturate(1.2);
-    --layer-float-fill: color-mix(in oklab, color-mix(in oklab, var(--layer-float-solid), var(--key-white) var(--vs-glass-float-lift)) var(--vs-glass-float-tint), transparent);
-    --layer-float-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
-    --layer-float-ambient-fill: 0%;
-    --layer-float-edge: inset 0 1px 0 color-mix(in oklab, var(--key-white) 30%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--text-1) 8%, transparent);
+    /* The floats (popovers, menus) are the sidebars' material popping over them: the raised
+       layer's own fill, texture and share of the picture's colour, read from its variables, the
+       same blur recipe one step stronger, and no border (no lit edge, no hairline). Only
+       elevation says "above": a soft two-part shadow. The docked panels take the float's edge
+       and cast (the assembled screen's), so they lose their edge too and share the shadow. */
+    --layer-float-fill: var(--layer-raised-fill);
+    --layer-float-texture: var(--layer-raised-texture);
+    --layer-float-ambient-fill: var(--layer-raised-ambient-fill);
+    --layer-float-backdrop: blur(calc(var(--vs-glass-blur) * 3)) saturate(1.2);
+    --layer-float-edge: 0 0 0 0 transparent;
+    --layer-float-cast: 0 18px 40px -12px color-mix(in oklab, var(--key-black) 45%, transparent), 0 2px 8px color-mix(in oklab, var(--key-black) 18%, transparent);
     --layer-overlay-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
     --layer-top-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
   }

@@ -65,34 +65,52 @@
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
   --vs-grid-head: var(--vs-libhead-h);
 }
-/* Clear glass over the tiles' way out: from the preview's picture down to the head's foot, the
-   tiles slip under a pane of the float layer's glass (its backdrop, the blur, and a faint share of
-   its tint), as zen's `glass` region draws it (`.lib-assembled__glass`: 30% of the float fill,
-   feathered so no box shows). They read as passing under the preview and the head, diffused,
-   rather than cut at the picture's foot or showing crisp through the head's words. The assembly
-   still clips them at the picture's real bottom (`--lib-under-edge`), so nothing paints over the
-   native preview. It paints above the grid and below the head (`.vs-libhead`, drawn after it at
-   the same z-index), so the head's words stay crisp on it. */
+/* Clear glass over the hero's room: the whole room the grid scrolls up into (beside the preview,
+   the gap under it and the head's band) is a pane of the float layer's glass (its backdrop, the
+   blur, and a faint share of its tint), as zen's `glass` region draws it
+   (`.lib-assembled__glass`: 30% of the float fill). The tiles read as passing under the preview
+   and the head, diffused, rather than cut at the picture's foot or showing crisp through the
+   head's words. HomeLayout's `useHoleClip` cuts the slot only at the picture itself, so nothing
+   paints over the native preview. No box shows: the glass fades in over the pane's side padding
+   (the tiles start inside it) and out below the head over a long, eased ramp, so the tiles clear
+   gradually as they come down. It paints above the grid and below the head (`.vs-libhead`, drawn
+   after it at the same z-index), so the head's words stay crisp on it. */
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
   position: relative;
 }
 .vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary))::before {
-  --vs-glass-feather: var(--space-4);
-  /* From the slot's top (the pane starts the hero's room below it); the assembly's clip cuts it at
-     the picture's foot. */
+  /* The ramp out under the head: three of the widest steps, 96px, from the head's middle. */
+  --vs-glass-ramp: calc(var(--space-6) * 3);
+  --vs-glass-side: var(--vs-home-pad);
+  /* From the slot's top (the pane starts the hero's room below it). */
   --vs-glass-top: calc(var(--lib-under, 0) * -1px);
+  /* Eased out: most of the glass goes early, the last of it lingers; and in over the sides. The
+     masks' black is alpha only. */
+  --vs-glass-fade:
+    linear-gradient(
+      to bottom,
+      var(--key-black) calc(100% - var(--vs-glass-ramp)),
+      color-mix(in oklab, var(--key-black) 70%, transparent) calc(100% - var(--vs-glass-ramp) * 0.75),
+      color-mix(in oklab, var(--key-black) 38%, transparent) calc(100% - var(--vs-glass-ramp) * 0.5),
+      color-mix(in oklab, var(--key-black) 14%, transparent) calc(100% - var(--vs-glass-ramp) * 0.25),
+      transparent
+    ),
+    linear-gradient(to right, transparent, var(--key-black) var(--vs-glass-side), var(--key-black) calc(100% - var(--vs-glass-side)), transparent);
   content: '';
   position: absolute;
   z-index: 1;
   top: var(--vs-glass-top);
   left: 0;
   right: 0;
-  height: calc(var(--vs-grid-head) - var(--vs-glass-top) + var(--vs-glass-feather));
+  height: calc(var(--vs-grid-head) / 2 - var(--vs-glass-top) + var(--vs-glass-ramp));
   pointer-events: none;
   background: color-mix(in oklab, var(--layer-float-fill) 30%, transparent);
   -webkit-backdrop-filter: var(--layer-float-backdrop);
   backdrop-filter: var(--layer-float-backdrop);
-  mask-image: linear-gradient(to bottom, var(--key-black) calc(100% - var(--vs-glass-feather)), transparent);
+  -webkit-mask-image: var(--vs-glass-fade);
+  -webkit-mask-composite: source-in;
+  mask-image: var(--vs-glass-fade);
+  mask-composite: intersect;
 }
 /* The pane also ends above the pinned transport bar (HomeLayout's `over: 'bar'`): the grid's
    scroller always reaches down into the bar's room (`--vs-grid-reach-down`, unitless px: the
