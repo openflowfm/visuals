@@ -177,7 +177,7 @@
   display: inline-flex;
   align-items: center;
   gap: calc(var(--space-1) * 1.5);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   /* A caption Text, for its words and the fields in it. */
   line-height: inherit;
 }

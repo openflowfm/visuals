@@ -8,8 +8,6 @@
 
 .vs-effects-panel {
   --vs-effects-panel-pad: calc(var(--space-6) + var(--space-5)); /* 56px */
-  /* Raised: captions take the raised step. */
-  --text-3: var(--vs-caption-raised);
   --lib-surface-backdrop: none;
   display: flex;
   flex-direction: column;

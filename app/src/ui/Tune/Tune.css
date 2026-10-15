@@ -18,7 +18,7 @@
   --text-weight: 500;
 }
 .vs-tune > .lib-group__head .lib-group__label {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 
 .vs-tune-reset {
@@ -27,7 +27,7 @@
   border: 0;
   border-radius: var(--radius-control);
   background: none;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   cursor: pointer;
 }
 .vs-tune-reset:hover {
@@ -41,7 +41,7 @@
 }
 /* "Mixed" reads quieter, in italics. */
 .vs-tune-slider[data-mixed] [data-part='readout'] {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   font-style: italic;
 }
 

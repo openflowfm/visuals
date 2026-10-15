@@ -16,7 +16,7 @@
 /* The heading: a sentence-case caption, a step lighter on glass (a strong body Text, no case). */
 .vs-output-head {
   margin: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-text-annot);
 }
 
@@ -50,7 +50,7 @@
 .vs-output-note {
   max-width: calc(var(--space-5) * 15);
   margin: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-output-settings .vs-output-note {
   color: var(--text-3);

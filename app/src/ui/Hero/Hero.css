@@ -72,7 +72,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   user-select: none;
 }
 
@@ -103,7 +103,7 @@
   overflow-wrap: anywhere;
 }
 .vs-hero .vs-hero-name[data-none] {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-weight: var(--weight-body);
 }
 .vs-hero .vs-hero-by,
@@ -112,7 +112,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-hero .vs-hero-by {
   color: var(--text-2);
@@ -150,7 +150,7 @@
   fill: currentColor;
 }
 .vs-hero .vs-hero-act:disabled {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   cursor: default;
   opacity: 0.6;
 }

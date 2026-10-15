@@ -279,7 +279,7 @@
 }
 .vs-onboarding-reduce-setting .vs-onboarding-note {
   padding: 0 var(--space-4);
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-text-label);
 }
 
@@ -331,7 +331,7 @@
   line-height: inherit;
 }
 .vs-onboarding-vibe-says {
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   line-height: inherit;
 }
 .vs-onboarding-vibe:hover:not(:disabled) {

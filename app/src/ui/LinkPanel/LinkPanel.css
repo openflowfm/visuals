@@ -19,7 +19,7 @@
 /* The heading: a sentence-case caption, a step lighter on glass. */
 .vs-link-title {
   margin: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
   --text-size: var(--vs-text-annot);
 }
 /* link.css's 96px. */
@@ -88,7 +88,7 @@
 }
 .vs-link-quiet {
   margin: 0;
-  color: var(--vs-caption-raised);
+  color: var(--text-3);
 }
 .vs-link-whose {
   display: flex;

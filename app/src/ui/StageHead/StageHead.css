@@ -175,10 +175,8 @@
   visibility: hidden;
 }
 
-/* The lights' panels' contents: the popover's float layer is opaque in the Stage's scope, so its
-   captions take the raised step. */
+/* The lights' panels' contents, in the popover's own layer and text steps. */
 .vs-stagehead-pop {
-  --text-3: var(--vs-caption-raised);
   display: grid;
   gap: var(--space-3);
   min-width: calc(var(--space-6) * 8 + var(--space-5)); /* 280px */

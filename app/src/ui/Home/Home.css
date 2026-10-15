@@ -403,10 +403,9 @@
 }
 
 /* The preset being dragged, following the pointer: a float (the theme's glass and lift), dimmed
-   until it is over a place it can land. Its caption takes the raised step for 4.5:1 on glass;
+   until it is over a place it can land. Its caption is the float layer's text step;
    its name is a caption-size Text. */
 .vs-home-ghost {
-  --text-3: var(--vs-caption-raised);
   position: fixed;
   top: 0;
   left: 0;
