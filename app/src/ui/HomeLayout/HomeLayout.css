@@ -162,10 +162,12 @@
   min-height: 0;
   margin: 0;
   border-radius: var(--vs-lay-side-radius);
-  /* A raised Surface (its fill, texture and the picture's ambient light) and no backdrop: the
-     native preview under it can't be blurred. Docked, its lift (the float's edge and cast) is the
-     assembled screen's, as for every `panel` region (Assembly.css). */
-  --lib-surface-backdrop: none;
+  /* A raised Surface (its fill, texture and the picture's ambient light) and the raised layer's
+     backdrop, a sheet of glass over the window (visuals.css, "Glass layers"): it never sits over
+     the native preview docked, and laid over the column the Opaque scope draws it solid with no
+     backdrop. Docked, its lift (the float's edge and cast) is the assembled screen's, as for
+     every `panel` region (Assembly.css). */
+  --lib-surface-backdrop: var(--layer-raised-backdrop);
   overflow: hidden;
   outline: none;
   color: var(--text-2);

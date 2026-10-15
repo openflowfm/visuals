@@ -84,3 +84,34 @@
   font-family: var(--font-readout);
   word-spacing: var(--vs-sep-space);
 }
+
+/* Glass layers: each layer up the stack is another sheet of glass over the one under it, so it
+   blurs more, takes more of its own tone and sits nearer the light. Zen's frost pack draws raised
+   nearly clear (3.5% of the ink) with no backdrop and every glass layer above at one blur, so a
+   sidebar over a light desktop lost its icons and a popover read as a dark slab; these restate
+   the pack's layers as a ramp (zen's frost materials are where it belongs; until then the app
+   says it here, on the scope's own variables, so every Surface of a layer follows):
+   - blur: one step (`--vs-glass-blur`) per sheet above the window: raised two steps, the floats
+     (popovers, menus, a dragged tile), the sheets and the toasts four.
+   - tint: raised keeps a floor of its solid tone (`--vs-glass-raised-floor`), so secondary type
+     and icons on it hold their contrast whatever is behind the glass; the float layer is a
+     lighter, cleaner tone than the window (its solid lifted toward the ink), takes none of the
+     picture's colour (held dark, the picture's colour read as a murky olive slab) and has a lit
+     top edge. Over the native preview no backdrop reaches the picture, so there the tint is all
+     of it.
+   Reduce transparency and the Opaque scope (HomeLayout.css, zen's `lib-opaque`) still put the
+   solids back, on the elements under the root. */
+.vs-root {
+  --vs-glass-blur: 8px;
+  --vs-glass-raised-floor: 62%;
+  --vs-glass-float-lift: 12%;
+  --vs-glass-float-tint: 62%;
+  --layer-raised-fill: color-mix(in oklab, var(--layer-raised-solid) var(--vs-glass-raised-floor), transparent);
+  --layer-raised-backdrop: blur(calc(var(--vs-glass-blur) * 2)) saturate(1.2);
+  --layer-float-fill: color-mix(in oklab, color-mix(in oklab, var(--layer-float-solid), var(--text-1) var(--vs-glass-float-lift)) var(--vs-glass-float-tint), transparent);
+  --layer-float-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+  --layer-float-ambient-fill: 0%;
+  --layer-float-edge: inset 0 1px 0 color-mix(in oklab, var(--text-1) 30%, transparent), inset 0 0 0 1px color-mix(in oklab, var(--text-1) 8%, transparent);
+  --layer-overlay-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+  --layer-top-backdrop: blur(calc(var(--vs-glass-blur) * 4)) saturate(1.5);
+}
