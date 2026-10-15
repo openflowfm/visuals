@@ -1198,6 +1198,22 @@ pub fn playlist_export(id: String, deck: State<Deck>) -> Result<Exported, String
     deck.store.lock().unwrap().export(&id)
 }
 
+/// Save `text` to a file the user picks in the save panel, `name` suggested.
+/// False when they cancel. The page can't save through a download link: the
+/// webview cancels downloads. Async, so the panel never waits on the main thread.
+#[tauri::command]
+pub async fn save_file(name: String, text: String, handle: AppHandle) -> Result<bool, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut dialog = handle.dialog().file().set_file_name(&name);
+    if let Some(window) = handle.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    let Some(path) = dialog.blocking_save_file() else { return Ok(false) };
+    let path = path.into_path().map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(true)
+}
+
 /// A playlist file added ([`playlist_import`]): the playlists after it, the new
 /// playlist's id and name, and, when its name was taken, what to tell the user.
 #[derive(Serialize)]

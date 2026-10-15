@@ -82,7 +82,11 @@ export function PlaylistHead({ list, lists, tiles, total, onLists, onDeleted, on
   };
   const play = () => run(pl.act({ kind: 'load', playlist: playlists.indexOf(list), index: null }), `play ${list.name}`);
   const stop = () => run(pl.act({ kind: 'unload' }), 'stop the playlist');
-  const exportIt = () => pl.exportList(list.id).then((f) => saveFile(f.file_name, f.text), onError(`save ${list.name} to a file`));
+  const exportIt = () =>
+    pl
+      .exportList(list.id)
+      .then((f) => saveFile(f.file_name, f.text))
+      .catch(onError(`save ${list.name} to a file`));
   const shuffled = list.settings.order === 'shuffle';
   // Its timing changed live (the Link panel's, say): the summary says what is in effect, and Put back undoes it.
   const changedLive = pl.timingChangedLive(deck, list.id);

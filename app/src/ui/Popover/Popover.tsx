@@ -25,6 +25,8 @@ export interface PopoverProps {
   title?: string;
   /** The button's and the panel's accessible name. */
   name: string;
+  /** The button's accessible name when it says more than the panel's (Filter's picked count); `name` otherwise. */
+  buttonName?: string;
   /** Placed on the wrapper, for the caller's styles. */
   className?: string;
   role?: 'dialog' | 'menu';
@@ -63,7 +65,7 @@ export interface PopoverProps {
  * left-hung panel would run past the window, the focus handling, and the look: type with no box,
  * underlined in the accent when open or pressed; menu items as whole-width rows.
  */
-export function Popover({ label, title, name, className, role = 'dialog', align = 'left', pressed, across, children }: PopoverProps) {
+export function Popover({ label, title, name, buttonName, className, role = 'dialog', align = 'left', pressed, across, children }: PopoverProps) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const id = useId();
@@ -79,7 +81,7 @@ export function Popover({ label, title, name, className, role = 'dialog', align 
         ref={button}
         type="button"
         className="vs-popover-button"
-        aria-label={name}
+        aria-label={buttonName ?? name}
         aria-expanded={open}
         aria-haspopup={role}
         aria-controls={open ? id : undefined}
@@ -143,11 +145,16 @@ function Panel({
   useEffect(() => {
     window.addEventListener('resize', hang);
     document.addEventListener('scroll', hang, true);
+    // Content that arrives after opening (the Beat popover's Link reading) widens the panel: hang it again from its new width.
+    const box = document.getElementById(id)?.parentElement;
+    const grown = box && typeof ResizeObserver !== 'undefined' ? new ResizeObserver(hang) : null;
+    if (box) grown?.observe(box);
     return () => {
       window.removeEventListener('resize', hang);
       document.removeEventListener('scroll', hang, true);
+      grown?.disconnect();
     };
-  }, [hang]);
+  }, [hang, id]);
   return (
     <ZenPopover anchor={anchor} onDismiss={onDismiss} role={role} label={name} id={id} className={across ? 'vs-popover-panel vs-popover-panel--across' : 'vs-popover-panel'}>
       {children}

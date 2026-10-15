@@ -542,7 +542,9 @@ export function Home({
     onRename: (id, name) => run(pl.rename(id, name), 'rename the playlist'),
     onExport: (id) => {
       const name = playlists.find((p) => p.id === id)?.name ?? 'the playlist';
-      pl.exportList(id).then((f) => saveFile(f.file_name, f.text), fail(`Couldn't save ${name} to a file.`));
+      pl.exportList(id)
+        .then((f) => saveFile(f.file_name, f.text))
+        .catch(fail(`Couldn't save ${name} to a file.`));
     },
     onDelete: (id) => {
       if (shown?.kind === 'list' && shown.id === id) pick({ kind: 'library' });

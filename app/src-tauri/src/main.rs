@@ -73,6 +73,7 @@ macro_rules! commands {
             actions::playlist_set_query,
             actions::smart_playlist_save,
             actions::playlist_export,
+            actions::save_file,
             actions::playlist_import,
             actions::deck_items,
             actions::recently_played,
@@ -165,7 +166,7 @@ fn main() {
     let deck = actions::Deck::new(playlists::Store::open(playlists::default_file(), library.clone()));
     #[cfg(target_os = "macos")]
     let headless = dev::headless();
-    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init());
+    let builder = tauri::Builder::default().plugin(tauri_plugin_opener::init()).plugin(tauri_plugin_dialog::init());
     // Headless (`VISUALS_HEADLESS`): never take focus from the app in front.
     #[cfg(target_os = "macos")]
     let builder = builder.activate_ignoring_other_apps(!headless);
@@ -246,5 +247,23 @@ fn main() {
     if headless {
         app.set_activation_policy(tauri::ActivationPolicy::Prohibited);
     }
-    app.run(|_, _| {});
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+    app.run(|app, event| match event {
+        // ⌘W hides the window instead of closing it (the bench draws in it), and the Dock brings it back.
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::CloseRequested { api, .. }, .. } if label == "main" => {
+            api.prevent_close();
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.hide();
+            }
+        }
+        #[cfg(target_os = "macos")]
+        tauri::RunEvent::Reopen { .. } => {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }
+        _ => {}
+    });
 }

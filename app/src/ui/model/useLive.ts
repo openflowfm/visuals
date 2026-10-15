@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as api from './api';
 import * as fx from './fx';
 import { useNotice, useTauriEvent } from './hooks';
@@ -62,6 +62,17 @@ export function useLive({ start, windowed }: { start: string | null; windowed?: 
   }, [show, fail, windowed]);
   useTauriEvent(output.onStatus, setStatus);
   useTauriEvent(fx.onFx, setEffects);
+  // A display plugged in or out: the list is read again when the window comes to the front and when the output moves or closes, as the Output panel's is.
+  const shownId = status.display?.id ?? null;
+  const read = useRef(false);
+  useEffect(() => {
+    const refresh = () => void output.displays().then(setDisplays, () => {});
+    // The first read is going live's, above.
+    if (read.current) refresh();
+    read.current = true;
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [shownId]);
 
   // The user's library data, for the moods and the favourite star; the index, for a preset's key.
   useEffect(() => {

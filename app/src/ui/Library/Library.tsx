@@ -780,6 +780,7 @@ export function Library({ entries, loaded, search, onSearch, current, into, onLo
             <Popover
               className="vs-library-filter-pop"
               name={say('facets')}
+              buttonName={pickedCount ? `${say('facets')}, ${pickedCount} picked` : undefined}
               align="right"
               pressed={pickedCount > 0}
               title="Filter by style, author, colour, speed, intensity, star or your tags"

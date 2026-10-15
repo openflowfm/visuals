@@ -42,6 +42,8 @@ flate2 = "1"
 tar = "0.4"
 notify = "8"
 tauri-plugin-opener = "2"
+# The save panel for "Save to a file" (`actions::save_file`): the webview cancels a page's downloads.
+tauri-plugin-dialog = "2"
 # The dev bridge's frames of the bench (`dev-bridge` only).
 webp = { version = "0.3", default-features = false, optional = true }
 

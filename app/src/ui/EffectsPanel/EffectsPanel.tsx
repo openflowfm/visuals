@@ -60,8 +60,8 @@ function Amount({ name, param, value, onChange, display, title }: { name: string
 /**
  * **Job.** Live's effects panel (design C): docked at the Stage's left under the header, the
  * picture still showing beside it, in the material of Home's side panels (a `raised` Surface, its
- * light from the picture's left). In order: the held effects as four pads ("Hold · ⇧ to latch":
- * Strobe S, Blackout B, Freeze F, Punch P), the amounts as slider rows (Intensity, Speed, Colour,
+ * light from the picture's left). In order: the hits as four pads ("Hold · ⇧ to latch · Blackout
+ * toggles": Strobe S, Blackout B, Freeze F, Punch P), the amounts as slider rows (Intensity, Speed, Colour,
  * Trails), Mirror and Invert, and "Back to normal" (0) at its foot. ✕ (or E, or Esc) closes it.
  * Not a dialog: live's keys keep working while it is open (only a slider's or a switch's own
  * arrows stay theirs).
@@ -95,9 +95,10 @@ export function EffectsPanel({ live, onClose, focusOnOpen = false }: { live: Liv
           <Icon name="close" size={14} />
         </ButtonFace>
       </Text>
-      <section className="vs-effects-panel-hold" aria-label="Hold">
+      <section className="vs-effects-panel-hold" aria-label="Pads">
+        {/* B only toggles Blackout: the caption says so rather than listing it under Hold. */}
         <Text role="caption" leading="normal" className="vs-effects-panel-caption">
-          Hold · ⇧ to latch
+          Hold · ⇧ to latch · Blackout toggles
         </Text>
         <div className="vs-effects-panel-pads">
           {PADS.map((p) => (
