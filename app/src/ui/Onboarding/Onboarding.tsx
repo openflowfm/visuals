@@ -497,7 +497,8 @@ function KeepTime({ onNext }: { onNext(): void }) {
     <section className="vs-onboarding-step">
       <Title>{Say('Ableton Link')}</Title>
       <Lead>
-        {frame ? `Ableton is on the network: ${plural(frame.peers, 'app')} at ${frame.tempo.toFixed(0)} bpm.` : 'Ableton is on the network.'} The visuals follow its tempo over Ableton Link; they never change it. Turn it on or off any time in Settings, under Ableton Link.
+        {frame ? `Ableton is on the network: ${plural(frame.peers, 'app')} at ${frame.tempo.toFixed(0)} bpm.` : 'Ableton is on the network.'} The visuals follow its tempo over Ableton Link; they never
+        change it. Turn it on or off any time in Settings, under Ableton Link.
       </Lead>
       <Text as="div" className="vs-onboarding-row">
         <span>Change the preset</span>
