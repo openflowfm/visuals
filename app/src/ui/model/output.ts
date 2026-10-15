@@ -51,6 +51,12 @@ export const displays = () => invoke<Display[]>('displays');
 export const open = (id: number | null) => invoke<Status>('output_open', { id });
 export const close = () => invoke<Status>('output_close');
 export const status = () => invoke<Status>('output_status');
+/**
+ * Esc is held to leave live (true), or was let go before leaving (false): the
+ * output fades toward black over the hold, or back quickly (none with motion
+ * reduced). Leaving itself needs no word: the output closing puts the fade back.
+ */
+export const leaving = (on: boolean) => invoke<void>('output_leaving', { on });
 /** The output opened, moved, resized or closed (its display went away, say). */
 export const onStatus = (f: (s: Status) => void): Promise<UnlistenFn> => listen<Status>('output', (e) => f(e.payload));
 /** Esc off the page going down or coming up: on the output, or with no window of the app's key (after a click on the output). */

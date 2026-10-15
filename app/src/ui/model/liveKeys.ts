@@ -37,8 +37,11 @@ export interface LiveKeyTargets {
   map?: () => void;
   /** Esc pressed: shows the Stage's hidden panels or puts a laid-over crate away; true when it was used. Only Esc held leaves. */
   escape?: () => boolean;
-  /** Esc went down and is being held toward leaving (true), or the hold ended: let go, cancelled or done (false). */
-  holding?: (on: boolean) => void;
+  /**
+   * Esc went down and is being held toward leaving (true), or the hold ended: let go, cancelled or done (false). `left`
+   * says it ended by leaving (`editor` is called next), not by being let go or cancelled.
+   */
+  holding?: (on: boolean, left?: boolean) => void;
 }
 
 /** Whether `target` is inside a dialog, which answers its own Esc. */
@@ -77,9 +80,10 @@ export function liveKeys(to: LiveKeyTargets, holdMs = LEAVE_HOLD_MS) {
     to.holding?.(true);
     timer = setTimeout(() => {
       timer = null;
-      to.holding?.(false);
       // A sheet or modal that opened mid-hold (⌘, opens Settings) takes the hold: never leave live under it.
-      if (to.sheetOpen?.()) return;
+      const blocked = to.sheetOpen?.() === true;
+      to.holding?.(false, !blocked);
+      if (blocked) return;
       to.editor();
     }, holdMs);
   };
@@ -210,7 +214,7 @@ export function useLiveKeys(to: LiveKeyTargets): EscapeFeed {
       effects: () => latest.current.effects?.(),
       map: () => latest.current.map?.(),
       escape: () => latest.current.escape?.() === true,
-      holding: (on) => latest.current.holding?.(on),
+      holding: (...args) => latest.current.holding?.(...args),
     });
     live.current = keys;
     const keydown = (e: KeyboardEvent) => keys.keydown(e);

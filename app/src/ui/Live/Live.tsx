@@ -52,7 +52,8 @@ function useThumbnail(key: string | null): string | null {
  * `\` pins the controls shown (hovered or not) and lets them go again. Esc held for 3 s
  * (`LEAVE_HOLD_MS`) leaves live, here or on the output (which tells the page of Esc down and up,
  * `output.onEscape`), the Stage showing the hold's progress in this window and never on the
- * output. ✕ and ⌘⇧L leave at once, as they are deliberate. Leaving puts the effects back
+ * output; both pictures fade toward black over the hold (`output.leaving` for the output), and
+ * back quickly when Esc is let go early. ✕ and ⌘⇧L leave at once, as they are deliberate. Leaving puts the effects back
  * (`useLive`'s unmount), so nothing is left inverted or frozen. With the flashing warning owed,
  * `App` doesn't mount live at all until it is understood.
  *
@@ -136,9 +137,16 @@ export function Live({
   const leaveLive = useCallback(() => onMode(HOME, current), [onMode, current]);
   const onView = useCallback((next: View) => next !== 'live' && onMode(next, current), [onMode, current]);
 
+  // The hold shown here (the hint and the window's fade) and told to the app, whose output fades the same way. Over by
+  // leaving, the output is left dark: it closes on the way out, which puts its fade back.
+  const holding = useCallback((on: boolean, left?: boolean) => {
+    setLeaving(on);
+    if (on || !left) output.leaving(on).catch(() => {});
+  }, []);
+
   const escapes = useLiveKeys({
     editor: leaveLive,
-    holding: setLeaving,
+    holding,
     act: live.act,
     fx: live.actFx,
     rate: live.rate,

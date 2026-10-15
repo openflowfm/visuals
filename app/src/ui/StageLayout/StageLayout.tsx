@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Layer, Opaque } from '@satoramoto/zen';
 import { Screen } from '@satoramoto/zen';
 import { lengthSum, type Form, type Forms, type Length, type RegionSpec, type ScreenSpec, type Units } from '@satoramoto/zen';
@@ -46,7 +46,13 @@ export function stageSpec(): ScreenSpec {
 export const DOCK_LABEL = 'Live controls';
 
 /** What the progress says while Esc is held to leave live. */
-export const LEAVING_TEXT = 'Keep holding Esc to leave live';
+export const LEAVING_TEXT = 'Hold Esc to leave live';
+
+/** How long the hint and the fade take to go when Esc is let go early (ms): quicker than they came. Mirrors StageLayout.css's `--vs-stagelayout-let-go`. */
+export const LET_GO_MS = 250;
+
+/** How long Esc is down before the hint shows (ms), so a short press (putting a panel away) shows nothing. Mirrors StageLayout.css's `--vs-stagelayout-beat`. */
+export const BEAT_MS = 200;
 
 /**
  * The shell's props: the contract's `StageLayoutProps` less the crate, the hidden panels and the
@@ -64,13 +70,47 @@ export type StageProps = Pick<StageLayoutProps, 'warning' | 'inWindow' | 'leavin
 };
 
 /**
- * Esc held toward leaving: a ring filling over `LEAVE_HOLD_MS` from the press,
- * and the line saying to keep holding, in an opaque card over the picture's
- * middle. It shows after a beat (StageLayout.css), so a short press shows nothing.
+ * The hint's life over a hold: shown while Esc is held, and for `LET_GO_MS` after it is let go early (fading out), but only
+ * if it had been held past the beat (a short press never showed it, so it has nothing to fade). `hold` counts the holds, so
+ * each starts its ring afresh.
  */
-function Leaving() {
+function useLeavingHint(leaving: boolean): { shown: boolean; ending: boolean; hold: number } {
+  const holds = useRef(0);
+  const was = useRef(false);
+  const since = useRef(0);
+  if (leaving && !was.current) holds.current += 1;
+  was.current = leaving;
+  const [ending, setEnding] = useState(false);
+  useEffect(() => {
+    if (leaving) {
+      since.current = performance.now();
+      setEnding(false);
+      return;
+    }
+    if (performance.now() - since.current < BEAT_MS) return;
+    setEnding(true);
+    const t = setTimeout(() => setEnding(false), LET_GO_MS);
+    return () => clearTimeout(t);
+  }, [leaving]);
+  return { shown: leaving || ending, ending: !leaving && ending, hold: holds.current };
+}
+
+/**
+ * Esc held toward leaving: a ring filling over `LEAVE_HOLD_MS` from the press,
+ * and the line saying to hold, in an opaque card over the picture's middle. It
+ * shows after a beat (StageLayout.css), so a short press shows nothing. Let go
+ * early (`ending`), the ring stops where it got to and the card fades out in
+ * `LET_GO_MS`; it is no longer a status then.
+ */
+function Leaving({ ending }: { ending: boolean }) {
   return (
-    <div className="vs-stagelayout-leaving" role="status" style={{ '--vs-stagelayout-hold': `${LEAVE_HOLD_MS}ms` } as CSSProperties}>
+    <div
+      className="vs-stagelayout-leaving"
+      role={ending ? undefined : 'status'}
+      aria-hidden={ending || undefined}
+      data-ending={ending ? '' : undefined}
+      style={{ '--vs-stagelayout-hold': `${LEAVE_HOLD_MS}ms` } as CSSProperties}
+    >
       <Layer level="top" className="vs-stagelayout-leaving-card">
         <svg className="vs-stagelayout-ring" viewBox="0 0 40 40" aria-hidden="true">
           <circle className="vs-stagelayout-ring-track" cx="20" cy="20" r="17" />
@@ -98,7 +138,9 @@ function Leaving() {
  * other and three insets leave of the window's width. Tab goes to the panel, then the map, then
  * the header and the controls. With the warning owed the picture is dark (the preview isn't
  * mounted), the controls and both panels inert, the controls dimmed, and `centre` (the warning) centred over the window. While Esc is held to leave live
- * (`leaving`), its progress shows over everything; the output never shows it. The whole Stage is
+ * (`leaving`), its progress shows over everything ("Hold Esc to leave live" and a ring filling over the hold) and the window
+ * fades toward black under it (the output fades too, drawn by the app: `output.leaving`); let go early, both go back in
+ * `LET_GO_MS`. Under reduced motion there is no fade, only the hint and its progress. The whole Stage is
  * an `Ambient` lit by `ambient`, so the float surfaces over it take the picture's colours.
  *
  * **Changed.** No crate and no dock bar: the inset panels are gone, the header is bare type, and
@@ -112,7 +154,8 @@ function Leaving() {
  * controls take their forms from the room they are given. Everything sits in one `Opaque` scope,
  * so each layer over the picture draws its solid and no backdrop.
  *
- * **Kept.** The drag region, the warning's dark window, the Esc hold's progress, the copy.
+ * **Kept.** The drag region, the warning's dark window, the Esc hold's progress, the copy (but for the hold's line, now
+ * "Hold Esc to leave live", with the fade toward black under it).
  *
  * **Tuning knobs** (StageLayout.css), sizes the scale has no step for:
  * - `--vs-stagelayout-titlebar`: the title bar's 52px (layout.css `--lay-titlebar`).
@@ -126,6 +169,9 @@ function Leaving() {
  *   window's right), top and foot (the lowest its content may reach).
  * - `--vs-stagelayout-z-*`: the parts' stacking over the picture.
  * - `--vs-stagelayout-hold`: Esc's hold (`LEAVE_HOLD_MS`), set inline on the progress.
+ * - `--vs-stagelayout-deepest` (0.8, the app's `leaving::DEEPEST`): how far toward black the window gets by the hold's end;
+ *   `--vs-stagelayout-let-go` (`LET_GO_MS`): how quickly the fade and the hint go when Esc is let go early;
+ *   `--vs-stagelayout-beat` (`BEAT_MS`): how long Esc is down before the hint shows.
  * - `--vs-hole-radius`: Views' `Preview` knob, set to 0 here (the picture is square; macOS rounds the window).
  */
 export function StageLayout({ pinned = false, warning = false, inWindow, leaving = false, head, dock, centre, panel, side, ambient, children }: StageProps) {
@@ -133,6 +179,7 @@ export function StageLayout({ pinned = false, warning = false, inWindow, leaving
   const spec = useMemo(() => stageSpec(), []);
   const hasPanel = panel != null && panel !== false;
   const hasSide = side != null && side !== false;
+  const hint = useLeavingHint(leaving);
   return (
     <Ambient
       source={ambient}
@@ -186,7 +233,9 @@ export function StageLayout({ pinned = false, warning = false, inWindow, leaving
 
         {children}
 
-        {leaving && <Leaving />}
+        {/* Esc held: the window fading toward black under the hint (back quickly when let go; none under reduced motion). */}
+        <div className="vs-stagelayout-veil" aria-hidden="true" data-holding={leaving ? '' : undefined} style={{ '--vs-stagelayout-hold': `${LEAVE_HOLD_MS}ms` } as CSSProperties} />
+        {hint.shown && <Leaving key={hint.hold} ending={hint.ending} />}
       </Opaque>
     </Ambient>
   );

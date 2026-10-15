@@ -161,21 +161,27 @@ export const At1000: Story = {
   args: { width: 1000, height: 700, pinned: true, effects: true },
 };
 
-/** Esc held to leave live: a ring filling over 3 s and "Keep holding Esc to leave live" over the picture's middle; let go early, it goes. */
+/** Esc held to leave live: a ring filling over 3 s and "Hold Esc to leave live" over the picture's middle, the window fading toward black under it; let go early, both go quickly. */
 export const EscHeld: Story = {
   args: { leaving: true },
   play: async ({ canvas, canvasElement }) => {
+    const veil = () => canvasElement.querySelector('.vs-stagelayout-veil');
     // It shows after a beat, so a short press shows nothing.
-    await waitFor(() => expect(canvas.getByText('Keep holding Esc to leave live')).toBeVisible());
+    await waitFor(() => expect(canvas.getByText('Hold Esc to leave live')).toBeVisible());
+    await expect(veil()).toHaveAttribute('data-holding');
     // Held from the keyboard (one user, so it knows the key is down): shows, and let go early, goes without leaving.
     const user = userEvent.setup();
     await user.keyboard('{Escape>}');
     await user.keyboard('{/Escape}');
-    await waitFor(() => expect(canvas.queryByText('Keep holding Esc to leave live')).toBeNull());
+    await waitFor(() => expect(canvas.queryByText('Hold Esc to leave live')).toBeNull());
+    await expect(veil()).not.toHaveAttribute('data-holding');
     await user.keyboard('{Escape>}');
     await expect(await canvas.findByRole('status')).toBeInTheDocument();
+    await expect(veil()).toHaveAttribute('data-holding');
     await user.keyboard('{/Escape}');
+    // At once it is no longer a status (the card only fades out), and the window's fade turns back.
     await waitFor(() => expect(canvas.queryByRole('status')).toBeNull());
+    await expect(veil()).not.toHaveAttribute('data-holding');
     await expect(canvasElement.querySelector('[data-left]')).toBeNull();
   },
 };

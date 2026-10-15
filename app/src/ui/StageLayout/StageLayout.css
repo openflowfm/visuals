@@ -1,8 +1,8 @@
 /* Live's Stage (StageLayout.tsx): the picture full-bleed across the main window, and over it one
    overlay (the header and the controls on a scrim) that fades in on hover as Home's preview
    controls do (Hero.css: the same scrim and fade). The effects panel docks at the left in the
-   overlay and the library map at the right (no corner toasts); the warning and Esc's hold over
-   everything.
+   overlay and the library map at the right (no corner toasts); the warning and Esc's hold (its
+   fade toward black and its hint) over everything.
 
    Where the header and the controls sit and how big they are is the solver's (stageSpec in
    StageLayout.tsx): nothing here sizes the screen, and no query decides it.
@@ -223,10 +223,45 @@
   width: max(0px, min(var(--vs-stagelayout-side), 100% - var(--vs-stagelayout-panel-both) - 3 * var(--vs-stagelayout-panel-inset)));
 }
 
-/* Esc held to leave live: over everything in this window (never the output), an opaque card in
-   the picture's middle with a ring filling over the hold and the line to keep holding. It shows
-   after a beat (no fade), so a short Esc flashes nothing; the ring fills from the press all the
-   same. Presses go through to what's under it. */
+/* Esc held to leave live: the window fades toward black over the hold (the veil, over the picture
+   and the controls, under the hint), so leaving is never a sudden cut; let go early, it goes back
+   quickly from wherever it got to (a transition, so it turns mid-way). The output fades the same
+   way, drawn by the app (leaving.rs). No fade under reduced motion: the hint and the ring only. */
+.vs-stagelayout {
+  /* How far toward black by the hold's end (the app's leaving::DEEPEST). */
+  --vs-stagelayout-deepest: 0.8;
+  /* How quickly the fade and the hint go when let go early (LET_GO_MS). */
+  --vs-stagelayout-let-go: 250ms;
+  /* How long Esc is down before the hint shows (BEAT_MS). */
+  --vs-stagelayout-beat: 200ms;
+}
+.vs-stagelayout-veil {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--vs-stagelayout-z-overlay) + 1);
+  background: var(--key-black);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--vs-stagelayout-let-go) ease-out;
+}
+.vs-stagelayout-veil[data-holding] {
+  opacity: var(--vs-stagelayout-deepest);
+  transition: opacity var(--vs-stagelayout-hold, 3s) linear;
+}
+:root[data-reduced-motion] .vs-stagelayout-veil {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-stagelayout-veil {
+    display: none;
+  }
+}
+
+/* The hint: over everything in this window, a small opaque card in the picture's middle with a ring
+   filling over the hold and the line to hold. It shows after a beat (no fade in), so a short Esc
+   flashes nothing; the ring fills from the press all the same. Let go early, the ring stops where
+   it got to and the card fades out with the veil (at once under reduced motion). Presses go
+   through to what's under it. */
 .vs-stagelayout-leaving {
   --vs-stagelayout-hold: 3s; /* set inline: LEAVE_HOLD_MS */
   position: absolute;
@@ -235,32 +270,46 @@
   display: grid;
   place-items: center;
   pointer-events: none;
-  animation: vs-stagelayout-after-a-beat 0s linear 0.2s both;
+  animation: vs-stagelayout-after-a-beat 0s linear var(--vs-stagelayout-beat) both;
+}
+.vs-stagelayout-leaving[data-ending] {
+  animation: vs-stagelayout-let-go var(--vs-stagelayout-let-go) ease-out both;
+}
+.vs-stagelayout-leaving[data-ending] .vs-stagelayout-ring-fill {
+  animation-play-state: paused;
+}
+:root[data-reduced-motion] .vs-stagelayout-leaving[data-ending] {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .vs-stagelayout-leaving[data-ending] {
+    display: none;
+  }
 }
 .vs-stagelayout .lib-layer.vs-stagelayout-leaving-card {
   display: flex;
   align-items: center;
-  gap: calc((var(--space-3) + var(--space-4)) / 2); /* 14px */
-  /* 16px 28px 16px 18px */
-  padding: var(--space-4) calc(var(--space-6) - var(--space-1)) var(--space-4) calc(var(--space-3) * 1.5);
+  gap: var(--space-3); /* 12px */
+  /* 12px 24px 12px 12px: the ring as far from the round end as from the top */
+  padding: var(--space-3) var(--space-5) var(--space-3) var(--space-3);
   border-radius: var(--radius-pill);
   box-shadow: var(--layer-base-edge), var(--layer-float-cast);
 }
 .vs-stagelayout-leaving-line {
-  --text-size: var(--vs-text-heading);
+  --text-size: var(--vs-text-body);
   color: var(--text-1);
   white-space: nowrap;
 }
 .vs-stagelayout-ring {
   flex: none;
-  /* 44px */
-  width: calc(var(--space-6) + var(--space-3));
-  height: calc(var(--space-6) + var(--space-3));
+  /* 24px */
+  width: var(--space-5);
+  height: var(--space-5);
   transform: rotate(-90deg);
 }
 .vs-stagelayout-ring circle {
   fill: none;
-  stroke-width: 4;
+  stroke-width: 5;
 }
 .vs-stagelayout-ring-track {
   stroke: var(--text-3);
@@ -280,6 +329,14 @@
   }
   to {
     visibility: visible;
+  }
+}
+@keyframes vs-stagelayout-let-go {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 @keyframes vs-stagelayout-fill {
