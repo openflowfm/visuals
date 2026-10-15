@@ -9,7 +9,7 @@
   /* home.css --pad: one padding for the main column, so its notes and grid share the hero's edge. */
   --vs-home-pad: var(--mat-plate-inset);
   /* The library's head row's height (LibraryHead): a control and a step above and below. Fixed, so
-     the head row is the same height whatever its source and view. */
+     the grid can reach up behind it by exactly that much (`--vs-grid-head`). */
   --vs-libhead-h: calc(var(--control-h) + 2 * var(--space-2));
 }
 /* With small tiles (the pane's `small` form, HomeLayout's PANE_FORMS) the padding tightens too. */
@@ -44,11 +44,54 @@
   min-height: 0;
   height: 100%;
 }
-/* The pane starts under the pinned preview, the screen's gap below it (HomeLayout's `under: 'hero'`
-   pads it by the slot's --lib-under), with the library's head row (LibraryHead) or a note first.
-   The grid never reaches up past them: its scroller starts under the head (or the notes), so its
-   tiles go out at the head's foot and never show in the gap over the preview or behind the
-   preview itself. */
+/* The pane starts under the pinned preview (HomeLayout's `under: 'hero'`). With no note over the
+   grid, the grid's scroller reaches up into the preview's room (`--vs-grid-reach`, unitless px:
+   the slot's --lib-under), its tiles starting below the preview and scrolling up behind it.
+   A note (a notice, a settings problem, quick add's strip, the library's save or drop line)
+   sits under the preview instead, and the grid starts under it. */
+.vs-home-grid-pane:not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
+  --vs-grid-reach: var(--lib-under, 0);
+}
+/* The library's head row (LibraryHead: the source, its count, Grid | Map), the library's and a
+   playlist's alike, doesn't stop the reach: it stays put under the preview, drawn over the grid
+   (LibraryHead.css), and the grid reaches up behind it too (`--vs-grid-head`, its height), so the
+   tiles start below the head and scroll up behind it and the preview. A length registered as one,
+   so LibraryGrid reads it in px. */
+@property --vs-grid-head {
+  syntax: '<length>';
+  inherits: true;
+  initial-value: 0px;
+}
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
+  --vs-grid-head: var(--vs-libhead-h);
+}
+/* Clear glass over the tiles' way out: from the preview's picture down to the head's foot, the
+   tiles slip under a pane of the float layer's glass (its backdrop, the blur, and a faint share of
+   its tint), as zen's `glass` region draws it (`.lib-assembled__glass`: 30% of the float fill,
+   feathered so no box shows). They read as passing under the preview and the head, diffused,
+   rather than cut at the picture's foot or showing crisp through the head's words. The assembly
+   still clips them at the picture's real bottom (`--lib-under-edge`), so nothing paints over the
+   native preview. Above the head's words (drawn after it), below the grid. */
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary)) {
+  position: relative;
+}
+.vs-home-grid-pane:has(.vs-libhead):not(:has(.vs-home-notice, .vs-home-problem, .vs-home-quickadd, .vs-library-summary))::before {
+  --vs-glass-feather: var(--space-4);
+  /* From the picture's foot (the pane starts the hero's room below the slot's top). */
+  --vs-glass-top: calc((var(--lib-under-edge, var(--lib-under, 0)) - var(--lib-under, 0)) * 1px);
+  content: '';
+  position: absolute;
+  z-index: 1;
+  top: var(--vs-glass-top);
+  left: 0;
+  right: 0;
+  height: calc(var(--vs-grid-head) - var(--vs-glass-top) + var(--vs-glass-feather));
+  pointer-events: none;
+  background: color-mix(in oklab, var(--layer-float-fill) 30%, transparent);
+  -webkit-backdrop-filter: var(--layer-float-backdrop);
+  backdrop-filter: var(--layer-float-backdrop);
+  mask-image: linear-gradient(to bottom, var(--key-black) calc(100% - var(--vs-glass-feather)), transparent);
+}
 /* The pane also ends above the pinned transport bar (HomeLayout's `over: 'bar'`): the grid's
    scroller always reaches down into the bar's room (`--vs-grid-reach-down`, unitless px: the
    slot's --lib-over), its last row coming to rest above the bar and scrolling down behind it.
@@ -56,12 +99,14 @@
 .vs-home-grid-pane {
   --vs-grid-reach-down: var(--lib-over, 0);
 }
-/* A playlist's grid, under the head, reaching down: its last row above the bar at rest, focus
-   scrolled clear of it. */
+/* A playlist's grid, reaching up and down: its first row below the head (and the preview) and its
+   last above the bar at rest, focus scrolled clear of them. */
 .vs-home-grid-pane .vs-home-grid {
+  margin-top: calc(var(--vs-grid-reach, 0) * -1px - var(--vs-grid-head, 0px));
   margin-bottom: calc(var(--vs-grid-reach-down, 0) * -1px);
+  padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px + var(--vs-grid-head, 0px));
   padding-bottom: calc(var(--mat-plate-inset) + var(--vs-grid-reach-down, 0) * 1px);
-  scroll-padding-top: var(--space-2);
+  scroll-padding-top: calc(var(--space-2) + var(--vs-grid-reach, 0) * 1px + var(--vs-grid-head, 0px));
   scroll-padding-bottom: calc(var(--space-2) + var(--vs-grid-reach-down, 0) * 1px);
   /* No scrollbar: it still scrolls by trackpad, wheel and keys. */
   scrollbar-width: none;

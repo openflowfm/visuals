@@ -136,8 +136,8 @@ const ownsArrows = (target: EventTarget | null): boolean => {
  * grid's last tile too: `listPlace`); the inspector leaves its map section out
  * (`inspectorShowsMap`). With no dots the map's place holds a note (`NO_DOTS_NOTE`), or an empty
  * playlist's own note, and the head no colour picker (`mapRoom`). Quick add keeps the grid. The
- * hero keeps its size; the head row stays put under the preview and the grid scrolls under the
- * head, never up into the gap over the preview or behind it (Home.css).
+ * hero keeps its size; the head row stays put under the preview and the grid still reaches up
+ * behind both (Home.css's `--vs-grid-head`).
  *
  * **Kept.** Every piece of state, the optimistic play and its undo, the deck's word and
  * the click's claim, the keys (⌃⌘S, ⌘I, ⌘F, Esc's order, ?, ← → R H with the isTyping and
@@ -149,6 +149,9 @@ const ownsArrows = (target: EventTarget | null): boolean => {
  *   `--space-4` in the pane's small form (HomeLayout's `PANE_FORMS`).
  * - `--vs-home-tile-min`: a playlist grid's narrowest tile, 150px (124px in the small form), on
  *   the scale.
+ * - `--vs-grid-reach` (unitless px): how far the grid's scroller reaches up into the pinned
+ *   preview's room, so its tiles scroll behind it: the pane slot's `--lib-under` while no note
+ *   sits over the grid, else 0. The playlist grid and `LibraryGrid` read it.
  * - `--vs-grid-reach-down` (unitless px): how far the grid's scroller reaches down into the
  *   pinned transport bar's room, so its tiles scroll behind it: the pane slot's `--lib-over`,
  *   always (notes sit at the top). The playlist grid and `LibraryGrid` read it.
