@@ -256,7 +256,8 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * (top-layer glass, the float Layer). ↓ from the search finds the grid by its `listbox` role,
  * not its class (the grid's classes are its own). The pack offer sits in a line of the library's
  * (`vs-library-offer`) rather than the library restyling PackOffer's button. Captions take their
- * layer's own step (zen's `--layer-<name>-text-3`). Every word is a `Text`: titles
+ * layer's own step (zen's `--layer-<name>-text-3`); the popover re-reads `--vs-library-caption`
+ * so it gets the float layer's. Every word is a `Text`: titles
  * in the display role, counts in the numeral role, notes and lines at caption size; a button's
  * words are a Text inside it, and the inputs take their type from the caption Text around them
  * (the app's `font: inherit` reset on controls outranks a Text on the control itself). Bare, the
@@ -268,8 +269,8 @@ function rereadOnData(set: (d: LibraryData) => unknown): () => void {
  * **Kept.** Every export, prop and behaviour (following the grid, the resumed filter, the index
  * re-read, the save as a smart playlist, the dev start), every accessible name, title and string.
  *
- * **Tuning knobs.** `--vs-library-caption` (its small grey text: `--text-3`, the layer's
- * own caption step) and `--vs-library-small` (library.css's
+ * **Tuning knobs.** `--vs-library-caption` (its small grey text: `--text-3`, re-read on the
+ * filter's popover so it resolves under the float layer's text step rather than the toolbar's) and `--vs-library-small` (library.css's
  * 11px counts and ✕, a hairline under the caption; the scale has no 11).
  */
 /** A note or summary line: a caption-size Text at the page's normal leading, a `p` unless told. */

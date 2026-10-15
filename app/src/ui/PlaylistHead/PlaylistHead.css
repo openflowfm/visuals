@@ -53,6 +53,11 @@
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* The pane variant sits on no layered Surface: its captions read zen's lifted step (the raised
+   layer's text step). */
+.vs-playlisthead[data-variant='pane'] {
+  --text-3: var(--layer-raised-text-3);
+}
 .vs-playlisthead[data-variant='pane'] .vs-playlisthead-name {
   line-height: inherit;
 }

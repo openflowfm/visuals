@@ -8,13 +8,14 @@
    680px and up the words and actions sit beside it, along its foot; narrower, under it. Near
    borderless (decision 68): the card is space, not a panel; the actions are type with a glyph,
    the pressed one brighter. A still or thumbnail (stories) has the thumb backing behind it, so the
-   card takes the raised caption. */
+   card's captions read zen's lifted step (the raised layer's text step), though it is no Surface. */
 
 .vs-hero {
   /* The picture's tallest: about two fifths of the window's height, never under 160px or over 440px, so the grid under it keeps its room. */
   --vs-hero-cap: clamp(calc(var(--space-6) * 5), 38vh, calc(var(--space-6) * 14 - var(--space-2)));
   /* The name: 24px, a fifth over the heading. */
   --vs-hero-name-size: calc(var(--size-heading) * 1.2);
+  --text-3: var(--layer-raised-text-3);
   container: vs-hero / inline-size;
   font-family: var(--font-sans);
 }
