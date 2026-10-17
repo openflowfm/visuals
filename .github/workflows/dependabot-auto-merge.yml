@@ -1,0 +1,20 @@
+# Turns auto-merge on for every dependabot PR, so it merges (merge commit) as
+# soon as the "main: CI must pass" ruleset is satisfied. Nothing merges without
+# CI; a failing check leaves the PR open.
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
