@@ -5803,7 +5803,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "visuals-app"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "block2 0.6.2",
  "cpal",
@@ -5844,7 +5844,7 @@ dependencies = [
 
 [[package]]
 name = "visuals-engine"
-version = "0.2.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "bytemuck",
  "cpal",
