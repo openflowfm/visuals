@@ -34,7 +34,7 @@
     "prepare": "simple-git-hooks"
   },
   "dependencies": {
-    "@satoramoto/zen": "github:satoramoto/zen#c365bc46cc16223555c04925d0f56b6108f9dd40",
+    "@satoramoto/zen": "github:satoramoto/zen#246115a6fce350e0b057a5835ec6706d33856144",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-opener": "^2.7.2",
     "react": "^19.0.0",
