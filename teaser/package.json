@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@remotion/cli": "4.0.534",
+    "@remotion/cli": "4.0.539",
     "@remotion/google-fonts": "4.0.534",
     "react": "19.3.0",
     "react-dom": "19.3.0",
