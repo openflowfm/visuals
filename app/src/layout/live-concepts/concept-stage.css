@@ -1,0 +1,355 @@
+/* Concept B, "Stage" (ConceptStage.tsx; stories only): the picture full-bleed
+   across the window, Home's inset panels floating over it. Home's sizes
+   (layout.css's --lay-*: 8px in, 18px corners, the 52px band), tokens and
+   type; areas told apart by space and tone, no lines.
+
+   Who paints what: the picture is the native preview under the page, so the
+   page paints nothing where it shows. Every panel over it paints opaque
+   --surface-corner and no backdrop-filter: a blur never reaches the native
+   view, and anything translucent would show the picture through unblurred.
+   Everything hangs off `.lcs`, the concept's root, which also carries
+   `.app.home.lay` (Home's tokens and the inset sidebar's rules) and `.lc`
+   (the shared parts). */
+
+.app.home.lay.lcs {
+  --lcs-crate: calc(var(--lay-side) + 2 * var(--lay-inset));
+  --lcs-panel: var(--surface-corner);
+  --lcs-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  --lcs-z-panel: 1;
+  --lcs-z-over: 2;
+  display: block;
+  position: relative;
+  /* Stories only: in the app the root paints nothing and the window's corners are macOS's. */
+  background: #000;
+}
+
+/* The picture: the whole window, cover-fitted. With the warning owed, nothing
+   plays: a dark window. */
+.lcs .lcs-picture,
+.lcs .lcs-dark {
+  position: absolute;
+  inset: 0;
+}
+.lcs .lcs-dark {
+  background: color-mix(in srgb, var(--surface-corner) 55%, #000);
+}
+
+/* The crate: Home's inset sidebar (layout.css's .lay-side and InsetSidebar's
+   .isb), opaque, over the picture's left edge. Docked, the header and the dock
+   keep clear of it; laid over (a narrow window), it covers them. */
+.lcs .lcs-crate-cell {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: var(--lcs-z-panel);
+  display: flex;
+  width: var(--lcs-crate);
+  padding: var(--lay-inset);
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.lcs .lcs-crate-cell[data-mode='overlay'] {
+  z-index: var(--lay-z-overlay);
+}
+/* Over layout.css's .app.home.lay .lay-side, whose --surface-2 is a tint for the frost: here it would show the picture through. */
+.app.home.lay.lcs .lcs-crate-cell > .lay-side {
+  pointer-events: auto;
+  background: var(--lcs-panel);
+  box-shadow: var(--glass-edge), var(--lcs-shadow);
+}
+
+/* The header row: two capsules in the title bar's 52px, centred on the window
+   buttons' line (y 28). The lead capsule holds the window buttons when the
+   crate doesn't (their room is its left padding), then the crate's toggle and
+   home|live; the other the beat, the output, help and settings. Opaque, so
+   they read over any picture; the space between them is the picture's, and
+   drags the window. */
+.lcs .lcs-head {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: var(--lcs-z-panel);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  height: var(--lay-titlebar);
+  padding: 10px 12px 0;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.lcs[data-crate='docked'] .lcs-head {
+  left: var(--lcs-crate);
+  padding-left: 0;
+}
+.lcs .lcs-fill {
+  flex: 1;
+}
+.lcs .lcs-island {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 6px;
+  border-radius: 12px;
+  background: var(--lcs-panel);
+  box-shadow: var(--glass-edge), var(--lcs-shadow);
+  pointer-events: auto;
+}
+/* The window buttons' room: they sit at x 24 (12px into this capsule). */
+.lcs:not([data-crate='docked']) .lcs-island-lead {
+  padding-left: 66px;
+}
+.lcs .lcs-island .vf-seg {
+  margin-left: 4px;
+}
+.lcs .lcs-island .lc-light .vf-pop-button {
+  height: 28px;
+}
+
+/* "Go full screen on…": a capsule floating top-centre over what shows of the picture. */
+.lcs .lcs-offer {
+  position: absolute;
+  top: calc(var(--lay-titlebar) + 12px);
+  right: 0;
+  left: 0;
+  z-index: var(--lcs-z-panel);
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.lcs[data-crate='docked'] .lcs-offer {
+  left: var(--lcs-crate);
+}
+.lcs .lcs-offer > .lc-fullscreen {
+  max-width: 560px;
+  padding: 8px 8px 8px 8px;
+  border-radius: 18px;
+  background: var(--lcs-panel);
+  box-shadow: var(--glass-edge), var(--lcs-shadow);
+  pointer-events: auto;
+}
+.lcs .lcs-offer .lc-fullscreen-go {
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  box-shadow: none;
+}
+.lcs .lcs-offer .lc-fullscreen-note {
+  padding-right: 8px;
+}
+
+/* The warning owed: centred where the picture would be. */
+.lcs .lcs-warning {
+  position: absolute;
+  inset: var(--lay-titlebar) 0 140px;
+  z-index: var(--lcs-z-over);
+  display: grid;
+  place-items: center;
+  padding: 0 16px;
+}
+.lcs[data-crate='docked'] .lcs-warning {
+  left: var(--lcs-crate);
+}
+
+/* The dock: Home's transport bar (TransportBar, as Home has it) as an inset
+   panel along the bottom, and under it a second row: the deck's Next, then
+   the effects as keys, Intensity and More effects. */
+.lcs .lcs-dock {
+  position: absolute;
+  right: var(--lay-inset);
+  bottom: var(--lay-inset);
+  left: var(--lay-inset);
+  z-index: var(--lcs-z-panel);
+  container: lcs-dock / inline-size;
+  padding-bottom: 6px;
+  border-radius: var(--lay-side-radius);
+  background: var(--lcs-panel);
+  box-shadow: var(--glass-edge), var(--lcs-shadow);
+}
+.lcs[data-crate='docked'] .lcs-dock {
+  left: var(--lcs-crate);
+}
+.lcs[data-warning] .lcs-dock,
+.lcs[data-warning] .lcs-crate-cell {
+  opacity: 0.4;
+}
+.lcs .lcs-dock .lay-transport {
+  height: 58px;
+}
+.lcs .lcs-notice {
+  margin: 10px var(--lay-pad) 0;
+}
+.lcs .lcs-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  height: 44px;
+  padding: 0 var(--lay-pad);
+}
+.lcs .lcs-next {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.lcs .lcs-next .lc-next {
+  flex: 1;
+  margin: 0;
+}
+.lcs .lcs-fx {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+.lcs .lcs-fx .lc-pads {
+  margin-right: 4px;
+}
+.lcs .lcs-fader {
+  width: 220px;
+}
+.lcs .lcs-fader .lc-fader-value {
+  min-width: 2.6em;
+}
+
+/* A narrower dock: the effect keys keep their glyph and key letter, and the fader shortens. */
+@container lcs-dock (max-width: 940px) {
+  .lcs .lcs-fx .lc-pad-name,
+  .lcs .lcs-fader .lc-fader-name {
+    display: none;
+  }
+  .lcs .lcs-fader {
+    width: 150px;
+  }
+  .lcs .lcs-row {
+    gap: 12px;
+  }
+}
+
+/* The crate's contents (Crate.tsx) in the inset sidebar's look: quiet
+   sentence-case headings, rows of --lay-row, the playlist playing the soft
+   pill with its green dot, moods as soft chips, no lines. */
+.lcs .live-crate {
+  gap: 14px;
+}
+.lcs .live-crate-section {
+  gap: 0;
+  padding: 0;
+  border: 0;
+}
+.lcs .live-crate-section h2 {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  margin: 0;
+  padding: 0 10px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+.lcs .live-crate-list {
+  gap: 0;
+}
+.lcs .live-crate-playlist {
+  gap: 10px;
+  height: var(--lay-row);
+  min-height: 0;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--lay-row-radius);
+  color: var(--ui);
+  font-size: 13px;
+  font-weight: normal;
+  box-shadow: none;
+}
+.lcs .live-crate-playlist .live-crate-name {
+  flex: 0 1 auto;
+}
+.lcs .live-crate-playlist:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+.lcs .live-crate-playlist[data-on] {
+  color: var(--fg);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+  box-shadow: none;
+}
+.lcs .live-crate-playlist[data-on]::after {
+  content: '';
+  flex: none;
+  order: 1;
+  width: 5px;
+  height: 5px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--playing);
+}
+.lcs .live-crate-smart {
+  order: 2;
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 0;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--caption);
+  font-size: 10px;
+  letter-spacing: 0;
+}
+.lcs .live-crate-chips {
+  gap: 6px;
+  padding: 4px 10px 0;
+}
+.lcs .live-crate-chip {
+  min-height: 0;
+  height: 26px;
+  padding: 0 11px;
+  border: 0;
+  background: color-mix(in srgb, var(--fg) 6%, transparent);
+  color: var(--ui);
+  font-size: 12px;
+}
+.lcs .live-crate-chip:hover {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+}
+.lcs .live-crate-chip[data-on] {
+  color: var(--fg);
+  background: var(--lc-on);
+  font-weight: 600;
+}
+.lcs .live-crate-row {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: var(--lay-row-radius);
+  color: var(--ui);
+  font-size: 13px;
+}
+.lcs .live-crate-handle {
+  width: 32px;
+  border-radius: var(--lay-row-radius);
+  background: var(--lcs-panel);
+  font-size: 13px;
+}
+.lcs .live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible),
+.lcs .live-crate-row:has(.live-crate-handle):is(:hover, :focus-visible) .live-crate-handle {
+  background: color-mix(in srgb, var(--fg) 6%, var(--lcs-panel));
+}
+.lcs .live-crate-more {
+  min-height: 28px;
+  padding: 0 10px;
+  color: var(--caption);
+  font-size: 12px;
+}
+.lcs .live-crate-note {
+  padding: 0 10px 4px;
+  color: var(--caption);
+  font-size: 12px;
+}
+.vf-root .lcs :is(.live-crate-playlist, .live-crate-chip, .live-crate-row, .live-crate-more):focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: -2px;
+}

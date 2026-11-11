@@ -1,0 +1,470 @@
+/* Live's parts in Home's language (parts.tsx; the Live view's concepts,
+   stories only). Home's tokens (home.css: --surface-*, --caption, the type
+   tokens) and its rules: areas told apart by space and tone, no lines;
+   controls are a glyph and type; the active one brighter and marked in
+   --line-active; the playing mark --playing. Everything hangs off `.lc`, the
+   concept's root, which also carries Home's `.app.home` for the tokens. */
+
+.lc {
+  --lc-pad-radius: 14px;
+  --lc-on: color-mix(in srgb, var(--primary) 24%, transparent);
+  font-family: var(--font-ui);
+  font-variation-settings: var(--font-ui-axes);
+  color: var(--ui);
+}
+
+/* The preview's stand-in: the still, cover-fitted, nothing over it. */
+.lc .lc-picture {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-thumb);
+}
+.lc .lc-picture img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* A section's caption: Home's sidebar heading (11px, 600, the caption's grey). */
+.lc .lc-label {
+  margin: 0 0 8px;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.lc .lc-num {
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+}
+.lc .lc-quiet {
+  color: var(--caption);
+  font-weight: 400;
+}
+
+/* Now and next. */
+.lc .lc-nownext {
+  min-width: 0;
+}
+.lc .lc-now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+  line-height: 1.25;
+}
+.lc .lc-now b {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lc .lc-star {
+  display: inline-grid;
+  flex: none;
+  color: var(--amber);
+}
+.lc .lc-star .lay-icon {
+  fill: currentColor;
+}
+.lc .lc-rating {
+  flex: none;
+  color: var(--caption);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+.lc .lc-held {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--lc-on);
+  color: var(--fg);
+  font-size: 11px;
+  font-weight: 600;
+}
+.lc .lc-next {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  margin: 6px 0 0;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.lc .lc-next-label {
+  flex: none;
+  color: var(--caption);
+  font-size: 11px;
+  font-weight: 600;
+}
+.lc .lc-next-name,
+.lc .lc-next .lc-quiet {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lc .lc-next-name {
+  color: var(--ui);
+}
+.lc .lc-when {
+  flex: none;
+  color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  font-style: normal;
+}
+.lc .lc-nownext[data-compact] .lc-now {
+  font-size: 14px;
+}
+.lc .lc-nownext[data-compact] .lc-next {
+  margin-top: 2px;
+  font-size: 12px;
+}
+
+/* The pads. `pad`: a raised tile, the glyph over the name, the key in the
+   corner; on, a tint of --primary and the name in --fg. `key`: a glyph and a
+   word with no box, as the transport's keys. */
+.lc .lc-pads {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+.lc .lc-pads[data-variant='key'] {
+  display: flex;
+  gap: 4px;
+}
+.lc .lc-pad {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  min-height: 76px;
+  padding: 14px 14px 12px;
+  border: 0;
+  border-radius: var(--lc-pad-radius);
+  background: var(--surface-2);
+  box-shadow: var(--glass-edge);
+  color: var(--ui);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  user-select: none;
+  touch-action: none;
+}
+.lc .lc-pad:hover {
+  color: var(--fg);
+  background: var(--surface-3);
+}
+.lc .lc-pad:active {
+  background: color-mix(in srgb, var(--fg) 9%, transparent);
+}
+.lc .lc-pad[aria-pressed='true'] {
+  color: var(--fg);
+  background: var(--lc-on);
+}
+.lc .lc-pad[aria-pressed='true'] .lay-icon {
+  color: var(--primary);
+}
+.lc .lc-pad:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.lc .lc-pad-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lc .lc-pad-key {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-size: 11px;
+}
+.lc .lc-pad[data-variant='key'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: none;
+  box-shadow: none;
+}
+.lc .lc-pad[data-variant='key']:hover {
+  background: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+.lc .lc-pad[data-variant='key'][aria-pressed='true'] {
+  background: var(--lc-on);
+}
+.lc .lc-pad[data-variant='key'] .lc-pad-key {
+  position: static;
+}
+
+/* Intensity: the transport's thin track, a round cap, the value after it. */
+.lc .lc-fader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  font-size: 13px;
+}
+.lc .lc-fader-name {
+  flex: none;
+  color: var(--ui);
+  font-weight: 500;
+}
+.lc .lc-fader-value {
+  flex: none;
+  min-width: 3em;
+  color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  text-align: right;
+}
+.lc .lc-fader input {
+  flex: 1;
+  min-width: 60px;
+  height: 20px;
+  margin: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  appearance: none;
+  cursor: pointer;
+}
+.lc .lc-fader input::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background:
+    linear-gradient(var(--ui), var(--ui)) 0 / var(--lc-fill) 100% no-repeat,
+    var(--surface-2);
+}
+.lc .lc-fader input::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -5.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  appearance: none;
+}
+.lc .lc-fader input::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--surface-2);
+}
+.lc .lc-fader input::-moz-range-progress {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--ui);
+}
+.lc .lc-fader input::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fg);
+}
+.lc .lc-fader input:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* A quiet text button with a glyph: "More effects…". */
+.lc .lc-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ui);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.lc .lc-text-button:hover {
+  color: var(--fg);
+}
+.lc .lc-text-button:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+
+/* The lights: Home's popover buttons, a glyph or a dot and a few words. */
+.lc .lc-light .vf-pop-button {
+  gap: 7px;
+  font-size: 12px;
+}
+.lc .lc-light-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--caption);
+  font-family: var(--font-num);
+  font-variation-settings: var(--font-num-axes);
+  font-variant-numeric: tabular-nums;
+}
+.lc .lc-light-text {
+  max-width: 180px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.lc .lc-light-text[data-warn] {
+  color: var(--caution);
+}
+.lc .lc-beat-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--surface-3);
+}
+.lc .lc-beat-dot[data-on] {
+  animation: lc-beat var(--lc-beat, 0.5s) steps(1, end) infinite;
+}
+@keyframes lc-beat {
+  0% {
+    background: var(--playing);
+  }
+  15% {
+    background: color-mix(in srgb, var(--playing) 25%, transparent);
+  }
+}
+:root[data-reduced-motion] .lc .lc-beat-dot[data-on],
+.lc[data-still] .lc-beat-dot[data-on] {
+  animation: none;
+  background: var(--playing);
+}
+.lc .lc-pop {
+  display: grid;
+  gap: 10px;
+  min-width: 260px;
+  padding: 6px;
+}
+.lc .lc-tool .lay-icon {
+  transform: none;
+}
+
+/* Going full screen from the window. */
+.lc .lc-fullscreen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.lc .lc-fullscreen-go {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-corner);
+  box-shadow: var(--glass-edge);
+  color: var(--ui);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.lc .lc-fullscreen-go b {
+  color: var(--fg);
+  font-weight: 600;
+}
+.lc .lc-fullscreen-go:hover {
+  color: var(--fg);
+}
+.lc .lc-fullscreen-go:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 0;
+}
+.lc .lc-fullscreen-note {
+  margin: 0;
+  color: var(--caption);
+  font-size: 12px;
+}
+
+/* The flashing-lights warning, owed: a card where the picture would be,
+   opaque (it can sit over the native view's hole). */
+.lc .lc-warning {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  max-width: 460px;
+  padding: 26px 28px 24px;
+  border-radius: 18px;
+  background: var(--surface-corner);
+  box-shadow:
+    var(--glass-edge),
+    0 18px 48px rgba(0, 0, 0, 0.45);
+  color: var(--ui);
+}
+.lc .lc-warning > .lay-icon {
+  color: var(--caution);
+}
+.lc .lc-warning h2 {
+  margin: 0;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 600;
+}
+.lc .lc-warning p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.lc .lc-warning .lc-warning-hint {
+  color: var(--caption-raised);
+  font-size: 12px;
+}
+.lc .lc-warning-row {
+  margin-top: 4px;
+}
+.lc .lc-warning-go {
+  justify-self: end;
+  height: 32px;
+  margin-top: 6px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--fg);
+  color: #111;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lc .lc-warning-go:focus-visible {
+  outline: 2px solid var(--vf-focus-ring);
+  outline-offset: 2px;
+}
