@@ -43,7 +43,7 @@
   "devDependencies": {
     "@mediapipe/tasks-vision": "1.2.3",
     "@storybook/addon-docs": "^10.6.7",
-    "@storybook/addon-vitest": "^10.6.6",
+    "@storybook/addon-vitest": "^10.6.7",
     "@storybook/react-vite": "^10.6.7",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
