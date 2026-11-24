@@ -44,7 +44,7 @@
     "@mediapipe/tasks-vision": "1.2.3",
     "@storybook/addon-docs": "^10.6.7",
     "@storybook/addon-vitest": "^10.6.8",
-    "@storybook/react-vite": "^10.6.7",
+    "@storybook/react-vite": "^10.6.8",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^8.0.0",
     "@testing-library/react": "^16.3.3",
